@@ -292,10 +292,10 @@ class UsersController extends OCSController {
 		$data['quota'] = $this->fillStorageInfo($userId);
 		$data['email'] = $targetUserObject->getEMailAddress();
 		$data['displayname'] = $targetUserObject->getDisplayName();
-		$data['phone'] = $userAccount[\OC\Accounts\AccountManager::PROPERTY_PHONE]['value'];
-		$data['address'] = $userAccount[\OC\Accounts\AccountManager::PROPERTY_ADDRESS]['value'];
-		$data['webpage'] = $userAccount[\OC\Accounts\AccountManager::PROPERTY_WEBSITE]['value'];
-		$data['twitter'] = $userAccount[\OC\Accounts\AccountManager::PROPERTY_TWITTER]['value'];
+		$data['phone'] = $userAccount[AccountManager::PROPERTY_PHONE]['value'];
+		$data['address'] = $userAccount[AccountManager::PROPERTY_ADDRESS]['value'];
+		$data['webpage'] = $userAccount[AccountManager::PROPERTY_WEBSITE]['value'];
+		$data['twitter'] = $userAccount[AccountManager::PROPERTY_TWITTER]['value'];
 		$data['groups'] = $gids;
 
 		return $data;
@@ -327,8 +327,13 @@ class UsersController extends OCSController {
 		if($userId === $currentLoggedInUser->getUID()) {
 			// Editing self (display, email)
 			$permittedFields[] = 'display';
+			$permittedFields[] = AccountManager::PROPERTY_DISPLAYNAME;
 			$permittedFields[] = 'email';
 			$permittedFields[] = 'password';
+			$permittedFields[] = AccountManager::PROPERTY_PHONE;
+			$permittedFields[] = AccountManager::PROPERTY_ADDRESS;
+			$permittedFields[] = AccountManager::PROPERTY_WEBSITE;
+			$permittedFields[] = AccountManager::PROPERTY_TWITTER;
 			// If admin they can edit their own quota
 			if($this->groupManager->isAdmin($currentLoggedInUser->getUID())) {
 				$permittedFields[] = 'quota';
@@ -340,9 +345,14 @@ class UsersController extends OCSController {
 			|| $this->groupManager->isAdmin($currentLoggedInUser->getUID())) {
 				// They have permissions over the user
 				$permittedFields[] = 'display';
+				$permittedFields[] = AccountManager::PROPERTY_DISPLAYNAME;
 				$permittedFields[] = 'quota';
 				$permittedFields[] = 'password';
 				$permittedFields[] = 'email';
+				$permittedFields[] = AccountManager::PROPERTY_PHONE;
+				$permittedFields[] = AccountManager::PROPERTY_ADDRESS;
+				$permittedFields[] = AccountManager::PROPERTY_WEBSITE;
+				$permittedFields[] = AccountManager::PROPERTY_TWITTER;
 			} else {
 				// No rights
 				throw new OCSException('', \OCP\API::RESPOND_UNAUTHORISED);
@@ -355,6 +365,7 @@ class UsersController extends OCSController {
 		// Process the edit
 		switch($key) {
 			case 'display':
+			case AccountManager::PROPERTY_DISPLAYNAME:
 				$targetUser->setDisplayName($value);
 				break;
 			case 'quota':
@@ -386,6 +397,16 @@ class UsersController extends OCSController {
 					$targetUser->setEMailAddress($value);
 				} else {
 					throw new OCSException('', 102);
+				}
+				break;
+			case AccountManager::PROPERTY_PHONE:
+			case AccountManager::PROPERTY_ADDRESS:
+			case AccountManager::PROPERTY_WEBSITE:
+			case AccountManager::PROPERTY_TWITTER:
+				$userAccount = $this->accountManager->getUser($targetUser);
+				if ($userAccount[$key]['value'] !== $value) {
+					$userAccount[$key]['value'] = $value;
+					$this->accountManager->updateUser($targetUser, $userAccount);
 				}
 				break;
 			default:
