@@ -1,8 +1,14 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -16,7 +22,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -53,9 +59,9 @@ class SessionStorage {
 	 * @return string
 	 * @throws \Exception
 	 */
-	public function getToken() {
+	public function getToken(): string {
 		$token = $this->session->get('requesttoken');
-		if(empty($token)) {
+		if (empty($token)) {
 			throw new \Exception('Session does not contain a requesttoken');
 		}
 
@@ -67,7 +73,7 @@ class SessionStorage {
 	 *
 	 * @param string $value
 	 */
-	public function setToken($value) {
+	public function setToken(string $value) {
 		$this->session->set('requesttoken', $value);
 	}
 
@@ -82,7 +88,7 @@ class SessionStorage {
 	 *
 	 * @return bool
 	 */
-	public function hasToken() {
+	public function hasToken(): bool {
 		return $this->session->exists('requesttoken');
 	}
 }

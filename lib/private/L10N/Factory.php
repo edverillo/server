@@ -4,13 +4,20 @@
  * @copyright 2016 Roeland Jago Douma <roeland@famdouma.nl>
  * @copyright 2016 Lukas Reschke <lukas@statuscode.ch>
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
  * @author Bart Visscher <bartv@thisnet.nl>
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Georg Ehrke <oc.list@georgehrke.com>
+ * @author GretaD <gretadoci@gmail.com>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author John Molakvoæ (skjnldsv) <skjnldsv@protonmail.com>
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Thomas Citharel <nextcloud@tcit.fr>
  *
  * @license AGPL-3.0
  *
@@ -24,7 +31,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -32,8 +39,10 @@ namespace OC\L10N;
 
 use OCP\IConfig;
 use OCP\IRequest;
+use OCP\IUser;
 use OCP\IUserSession;
 use OCP\L10N\IFactory;
+use OCP\L10N\ILanguageIterator;
 
 /**
  * A factory that generates language instances
@@ -55,9 +64,24 @@ class Factory implements IFactory {
 	protected $availableLanguages = [];
 
 	/**
+	 * @var array
+	 */
+	protected $localeCache = [];
+
+	/**
+	 * @var array
+	 */
+	protected $availableLocales = [];
+
+	/**
 	 * @var array Structure: string => callable
 	 */
 	protected $pluralFunctions = [];
+
+	public const COMMON_LANGUAGE_CODES = [
+		'en', 'es', 'fr', 'de', 'de_DE', 'ja', 'ar', 'ru', 'nl', 'it',
+		'pt_BR', 'pt_PT', 'da', 'fi_FI', 'nb_NO', 'sv', 'tr', 'zh_CN', 'ko'
+	];
 
 	/** @var IConfig */
 	protected $config;
@@ -92,25 +116,43 @@ class Factory implements IFactory {
 	 *
 	 * @param string $app
 	 * @param string|null $lang
+	 * @param string|null $locale
 	 * @return \OCP\IL10N
 	 */
-	public function get($app, $lang = null) {
-		$app = \OC_App::cleanAppId($app);
-		if ($lang !== null) {
-			$lang = str_replace(array('\0', '/', '\\', '..'), '', (string) $lang);
-		}
-		if ($lang === null || !$this->languageExists($app, $lang)) {
-			$lang = $this->findLanguage($app);
-		}
+	public function get($app, $lang = null, $locale = null) {
+		return new LazyL10N(function () use ($app, $lang, $locale) {
+			$app = \OC_App::cleanAppId($app);
+			if ($lang !== null) {
+				$lang = str_replace(['\0', '/', '\\', '..'], '', $lang);
+			}
 
-		if (!isset($this->instances[$lang][$app])) {
-			$this->instances[$lang][$app] = new L10N(
-				$this, $app, $lang,
-				$this->getL10nFilesForApp($app, $lang)
-			);
-		}
+			$forceLang = $this->config->getSystemValue('force_language', false);
+			if (is_string($forceLang)) {
+				$lang = $forceLang;
+			}
 
-		return $this->instances[$lang][$app];
+			$forceLocale = $this->config->getSystemValue('force_locale', false);
+			if (is_string($forceLocale)) {
+				$locale = $forceLocale;
+			}
+
+			if ($lang === null || !$this->languageExists($app, $lang)) {
+				$lang = $this->findLanguage($app);
+			}
+
+			if ($locale === null || !$this->localeExists($locale)) {
+				$locale = $this->findLocale($lang);
+			}
+
+			if (!isset($this->instances[$lang][$app])) {
+				$this->instances[$lang][$app] = new L10N(
+					$this, $app, $lang, $locale,
+					$this->getL10nFilesForApp($app, $lang)
+				);
+			}
+
+			return $this->instances[$lang][$app];
+		});
 	}
 
 	/**
@@ -120,20 +162,25 @@ class Factory implements IFactory {
 	 * @return string language If nothing works it returns 'en'
 	 */
 	public function findLanguage($app = null) {
+		$forceLang = $this->config->getSystemValue('force_language', false);
+		if (is_string($forceLang)) {
+			$this->requestLanguage = $forceLang;
+		}
+
 		if ($this->requestLanguage !== '' && $this->languageExists($app, $this->requestLanguage)) {
 			return $this->requestLanguage;
 		}
 
 		/**
-		 * At this point ownCloud might not yet be installed and thus the lookup
+		 * At this point Nextcloud might not yet be installed and thus the lookup
 		 * in the preferences table might fail. For this reason we need to check
 		 * whether the instance has already been installed
 		 *
 		 * @link https://github.com/owncloud/core/issues/21955
 		 */
-		if($this->config->getSystemValue('installed', false)) {
+		if ($this->config->getSystemValue('installed', false)) {
 			$userId = !is_null($this->userSession->getUser()) ? $this->userSession->getUser()->getUID() :  null;
-			if(!is_null($userId)) {
+			if (!is_null($userId)) {
 				$userLang = $this->config->getUserValue($userId, 'core', 'lang', null);
 			} else {
 				$userLang = null;
@@ -167,6 +214,67 @@ class Factory implements IFactory {
 
 		// We could not find any language so fall back to english
 		return 'en';
+	}
+
+	/**
+	 * find the best locale
+	 *
+	 * @param string $lang
+	 * @return null|string
+	 */
+	public function findLocale($lang = null) {
+		$forceLocale = $this->config->getSystemValue('force_locale', false);
+		if (is_string($forceLocale) && $this->localeExists($forceLocale)) {
+			return $forceLocale;
+		}
+
+		if ($this->config->getSystemValue('installed', false)) {
+			$userId = null !== $this->userSession->getUser() ? $this->userSession->getUser()->getUID() :  null;
+			$userLocale = null;
+			if (null !== $userId) {
+				$userLocale = $this->config->getUserValue($userId, 'core', 'locale', null);
+			}
+		} else {
+			$userId = null;
+			$userLocale = null;
+		}
+
+		if ($userLocale && $this->localeExists($userLocale)) {
+			return $userLocale;
+		}
+
+		// Default : use system default locale
+		$defaultLocale = $this->config->getSystemValue('default_locale', false);
+		if ($defaultLocale !== false && $this->localeExists($defaultLocale)) {
+			return $defaultLocale;
+		}
+
+		// If no user locale set, use lang as locale
+		if (null !== $lang && $this->localeExists($lang)) {
+			return $lang;
+		}
+
+		// At last, return USA
+		return 'en_US';
+	}
+
+	/**
+	 * find the matching lang from the locale
+	 *
+	 * @param string $app
+	 * @param string $locale
+	 * @return null|string
+	 */
+	public function findLanguageFromLocale(string $app = 'core', string $locale = null) {
+		if ($this->languageExists($app, $locale)) {
+			return $locale;
+		}
+
+		// Try to split e.g: fr_FR => fr
+		$locale = explode('_', $locale)[0];
+		if ($this->languageExists($app, $locale)) {
+			return $locale;
+		}
 	}
 
 	/**
@@ -221,6 +329,20 @@ class Factory implements IFactory {
 	}
 
 	/**
+	 * @return array|mixed
+	 */
+	public function findAvailableLocales() {
+		if (!empty($this->availableLocales)) {
+			return $this->availableLocales;
+		}
+
+		$localeData = file_get_contents(\OC::$SERVERROOT . '/resources/locales.json');
+		$this->availableLocales = \json_decode($localeData, true);
+
+		return $this->availableLocales;
+	}
+
+	/**
 	 * @param string|null $app App id or null for core
 	 * @param string $lang
 	 * @return bool
@@ -234,6 +356,56 @@ class Factory implements IFactory {
 		return array_search($lang, $languages) !== false;
 	}
 
+	public function getLanguageIterator(IUser $user = null): ILanguageIterator {
+		$user = $user ?? $this->userSession->getUser();
+		if ($user === null) {
+			throw new \RuntimeException('Failed to get an IUser instance');
+		}
+		return new LanguageIterator($user, $this->config);
+	}
+
+	/**
+	 * Return the language to use when sending something to a user
+	 *
+	 * @param IUser|null $user
+	 * @return string
+	 * @since 20.0.0
+	 */
+	public function getUserLanguage(IUser $user = null): string {
+		$language = $this->config->getSystemValue('force_language', false);
+		if ($language !== false) {
+			return $language;
+		}
+
+		if ($user instanceof IUser) {
+			$language = $this->config->getUserValue($user->getUID(), 'core', 'lang', null);
+			if ($language !== null) {
+				return $language;
+			}
+		}
+
+		return $this->config->getSystemValue('default_language', 'en');
+	}
+
+	/**
+	 * @param string $locale
+	 * @return bool
+	 */
+	public function localeExists($locale) {
+		if ($locale === 'en') { //english is always available
+			return true;
+		}
+
+		if ($this->localeCache === []) {
+			$locales = $this->findAvailableLocales();
+			foreach ($locales as $l) {
+				$this->localeCache[$l['code']] = true;
+			}
+		}
+
+		return isset($this->localeCache[$locale]);
+	}
+
 	/**
 	 * @param string|null $app
 	 * @return string
@@ -241,7 +413,7 @@ class Factory implements IFactory {
 	 */
 	private function getLanguageFromRequest($app) {
 		$header = $this->request->getHeader('ACCEPT_LANGUAGE');
-		if ($header) {
+		if ($header !== '') {
 			$available = $this->findAvailableLanguages($app);
 
 			// E.g. make sure that 'de' is before 'de_DE'.
@@ -254,7 +426,7 @@ class Factory implements IFactory {
 
 				foreach ($available as $available_language) {
 					if ($preferred_language === strtolower($available_language)) {
-						return $available_language;
+						return $this->respectDefaultLanguage($app, $available_language);
 					}
 				}
 
@@ -271,21 +443,28 @@ class Factory implements IFactory {
 	}
 
 	/**
-	 * @param string|null $app App id or null for core
+	 * if default language is set to de_DE (formal German) this should be
+	 * preferred to 'de' (non-formal German) if possible
+	 *
+	 * @param string|null $app
+	 * @param string $lang
 	 * @return string
 	 */
-	public function setLanguageFromRequest($app = null) {
+	protected function respectDefaultLanguage($app, $lang) {
+		$result = $lang;
+		$defaultLanguage = $this->config->getSystemValue('default_language', false);
 
-		try {
-			$requestLanguage = $this->getLanguageFromRequest($app);
-		} catch (LanguageNotFoundException $e) {
-			$requestLanguage = 'en';
+		// use formal version of german ("Sie" instead of "Du") if the default
+		// language is set to 'de_DE' if possible
+		if (is_string($defaultLanguage) &&
+			strtolower($lang) === 'de' &&
+			strtolower($defaultLanguage) === 'de_de' &&
+			$this->languageExists($app, 'de_DE')
+		) {
+			$result = 'de_DE';
 		}
 
-		if ($app === null && !$this->requestLanguage) {
-			$this->requestLanguage = $requestLanguage;
-		}
-		return $requestLanguage;
+		return $result;
 	}
 
 	/**
@@ -297,7 +476,7 @@ class Factory implements IFactory {
 	 */
 	private function isSubDirectory($sub, $parent) {
 		// Check whether $sub contains no ".."
-		if(strpos($sub, '..') !== false) {
+		if (strpos($sub, '..') !== false) {
 			return false;
 		}
 
@@ -326,7 +505,6 @@ class Factory implements IFactory {
 
 		if (($this->isSubDirectory($transFile, $this->serverRoot . '/core/l10n/')
 				|| $this->isSubDirectory($transFile, $this->serverRoot . '/lib/l10n/')
-				|| $this->isSubDirectory($transFile, $this->serverRoot . '/settings/l10n/')
 				|| $this->isSubDirectory($transFile, \OC_App::getAppPath($app) . '/l10n/')
 			)
 			&& file_exists($transFile)) {
@@ -353,11 +531,11 @@ class Factory implements IFactory {
 	 * @return string directory
 	 */
 	protected function findL10nDir($app = null) {
-		if (in_array($app, ['core', 'lib', 'settings'])) {
+		if (in_array($app, ['core', 'lib'])) {
 			if (file_exists($this->serverRoot . '/' . $app . '/l10n/')) {
 				return $this->serverRoot . '/' . $app . '/l10n/';
 			}
-		} else if ($app && \OC_App::getAppPath($app) !== false) {
+		} elseif ($app && \OC_App::getAppPath($app) !== false) {
 			// Check if the app is in the app folder
 			return \OC_App::getAppPath($app) . '/l10n/';
 		}
@@ -378,14 +556,14 @@ class Factory implements IFactory {
 			return $this->pluralFunctions[$string];
 		}
 
-		if (preg_match( '/^\s*nplurals\s*=\s*(\d+)\s*;\s*plural=(.*)$/u', $string, $matches)) {
+		if (preg_match('/^\s*nplurals\s*=\s*(\d+)\s*;\s*plural=(.*)$/u', $string, $matches)) {
 			// sanitize
-			$nplurals = preg_replace( '/[^0-9]/', '', $matches[1] );
-			$plural = preg_replace( '#[^n0-9:\(\)\?\|\&=!<>+*/\%-]#', '', $matches[2] );
+			$nplurals = preg_replace('/[^0-9]/', '', $matches[1]);
+			$plural = preg_replace('#[^n0-9:\(\)\?\|\&=!<>+*/\%-]#', '', $matches[2]);
 
 			$body = str_replace(
-				array( 'plural', 'n', '$n$plurals', ),
-				array( '$plural', '$n', '$nplurals', ),
+				[ 'plural', 'n', '$n$plurals', ],
+				[ '$plural', '$n', '$nplurals', ],
 				'nplurals='. $nplurals . '; plural=' . $plural
 			);
 
@@ -394,9 +572,10 @@ class Factory implements IFactory {
 			$body .= ';';
 			$res = '';
 			$p = 0;
-			for($i = 0; $i < strlen($body); $i++) {
+			$length = strlen($body);
+			for ($i = 0; $i < $length; $i++) {
 				$ch = $body[$i];
-				switch ( $ch ) {
+				switch ($ch) {
 					case '?':
 						$res .= ' ? (';
 						$p++;
@@ -405,7 +584,7 @@ class Factory implements IFactory {
 						$res .= ') : (';
 						break;
 					case ';':
-						$res .= str_repeat( ')', $p ) . ';';
+						$res .= str_repeat(')', $p) . ';';
 						$p = 0;
 						break;
 					default:
@@ -426,5 +605,84 @@ class Factory implements IFactory {
 			$this->pluralFunctions[$string] = $function;
 			return $function;
 		}
+	}
+
+	/**
+	 * returns the common language and other languages in an
+	 * associative array
+	 *
+	 * @return array
+	 */
+	public function getLanguages() {
+		$forceLanguage = $this->config->getSystemValue('force_language', false);
+		if ($forceLanguage !== false) {
+			$l = $this->get('lib', $forceLanguage);
+			$potentialName = $l->t('__language_name__');
+
+			return [
+				'commonlanguages' => [[
+					'code' => $forceLanguage,
+					'name' => $potentialName,
+				]],
+				'languages' => [],
+			];
+		}
+
+		$languageCodes = $this->findAvailableLanguages();
+
+		$commonLanguages = [];
+		$languages = [];
+
+		foreach ($languageCodes as $lang) {
+			$l = $this->get('lib', $lang);
+			// TRANSLATORS this is the language name for the language switcher in the personal settings and should be the localized version
+			$potentialName = $l->t('__language_name__');
+			if ($l->getLanguageCode() === $lang && $potentialName[0] !== '_') {//first check if the language name is in the translation file
+				$ln = [
+					'code' => $lang,
+					'name' => $potentialName
+				];
+			} elseif ($lang === 'en') {
+				$ln = [
+					'code' => $lang,
+					'name' => 'English (US)'
+				];
+			} else {//fallback to language code
+				$ln = [
+					'code' => $lang,
+					'name' => $lang
+				];
+			}
+
+			// put appropriate languages into appropriate arrays, to print them sorted
+			// common languages -> divider -> other languages
+			if (in_array($lang, self::COMMON_LANGUAGE_CODES)) {
+				$commonLanguages[array_search($lang, self::COMMON_LANGUAGE_CODES)] = $ln;
+			} else {
+				$languages[] = $ln;
+			}
+		}
+
+		ksort($commonLanguages);
+
+		// sort now by displayed language not the iso-code
+		usort($languages, function ($a, $b) {
+			if ($a['code'] === $a['name'] && $b['code'] !== $b['name']) {
+				// If a doesn't have a name, but b does, list b before a
+				return 1;
+			}
+			if ($a['code'] !== $a['name'] && $b['code'] === $b['name']) {
+				// If a does have a name, but b doesn't, list a before b
+				return -1;
+			}
+			// Otherwise compare the names
+			return strcmp($a['name'], $b['name']);
+		});
+
+		return [
+			// reset indexes
+			'commonlanguages' => array_values($commonLanguages),
+			'languages' => $languages
+		];
 	}
 }

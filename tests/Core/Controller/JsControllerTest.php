@@ -20,9 +20,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
+
 namespace Tests\Core\Controller;
 
 use OC\Core\Controller\JsController;
+use OC\Files\AppData\AppData;
+use OC\Files\AppData\Factory;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\FileDisplayResponse;
 use OCP\AppFramework\Http\NotFoundResponse;
@@ -36,20 +39,27 @@ use Test\TestCase;
 
 class JsControllerTest extends TestCase {
 
-	/** @var IAppData|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var IAppData|\PHPUnit\Framework\MockObject\MockObject */
 	private $appData;
 
 	/** @var JsController */
 	private $controller;
 
-	/** @var IRequest|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var IRequest|\PHPUnit\Framework\MockObject\MockObject */
 	private $request;
 
-	public function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
-		$this->appData = $this->createMock(IAppData::class);
+		/** @var Factory|\PHPUnit\Framework\MockObject\MockObject $factory */
+		$factory = $this->createMock(Factory::class);
+		$this->appData = $this->createMock(AppData::class);
+		$factory->expects($this->once())
+			->method('get')
+			->with('js')
+			->willReturn($this->appData);
 
+		/** @var ITimeFactory|\PHPUnit\Framework\MockObject\MockObject $timeFactory */
 		$timeFactory = $this->createMock(ITimeFactory::class);
 		$timeFactory->method('getTime')
 			->willReturn(1337);
@@ -59,7 +69,7 @@ class JsControllerTest extends TestCase {
 		$this->controller = new JsController(
 			'core',
 			$this->request,
-			$this->appData,
+			$factory,
 			$timeFactory
 		);
 	}
@@ -101,10 +111,10 @@ class JsControllerTest extends TestCase {
 			->willReturn($file);
 
 		$expected = new FileDisplayResponse($file, Http::STATUS_OK, ['Content-Type' => 'application/javascript']);
-		$expected->cacheFor(86400);
+		$expected->addHeader('Cache-Control', 'max-age=31536000, immutable');
 		$expires = new \DateTime();
 		$expires->setTimestamp(1337);
-		$expires->add(new \DateInterval('PT24H'));
+		$expires->add(new \DateInterval('PT31536000S'));
 		$expected->addHeader('Expires', $expires->format(\DateTime::RFC1123));
 		$expected->addHeader('Pragma', 'cache');
 
@@ -129,10 +139,10 @@ class JsControllerTest extends TestCase {
 
 		$expected = new FileDisplayResponse($gzipFile, Http::STATUS_OK, ['Content-Type' => 'application/javascript']);
 		$expected->addHeader('Content-Encoding', 'gzip');
-		$expected->cacheFor(86400);
+		$expected->addHeader('Cache-Control', 'max-age=31536000, immutable');
 		$expires = new \DateTime();
 		$expires->setTimestamp(1337);
-		$expires->add(new \DateInterval('PT24H'));
+		$expires->add(new \DateInterval('PT31536000S'));
 		$expected->addHeader('Expires', $expires->format(\DateTime::RFC1123));
 		$expected->addHeader('Pragma', 'cache');
 
@@ -148,13 +158,13 @@ class JsControllerTest extends TestCase {
 			->willReturn($folder);
 
 		$folder->method('getFile')
-			->will($this->returnCallback(
-				function($fileName) use ($file) {
+			->willReturnCallback(
+				function ($fileName) use ($file) {
 					if ($fileName === 'file.js') {
 						return $file;
 					}
 					throw new NotFoundException();
-				})
+				}
 			);
 
 		$this->request->method('getHeader')
@@ -162,15 +172,14 @@ class JsControllerTest extends TestCase {
 			->willReturn('gzip, deflate');
 
 		$expected = new FileDisplayResponse($file, Http::STATUS_OK, ['Content-Type' => 'application/javascript']);
-		$expected->cacheFor(86400);
+		$expected->addHeader('Cache-Control', 'max-age=31536000, immutable');
 		$expires = new \DateTime();
 		$expires->setTimestamp(1337);
-		$expires->add(new \DateInterval('PT24H'));
+		$expires->add(new \DateInterval('PT31536000S'));
 		$expected->addHeader('Expires', $expires->format(\DateTime::RFC1123));
 		$expected->addHeader('Pragma', 'cache');
 
 		$result = $this->controller->getJs('file.js', 'myapp');
 		$this->assertEquals($expected, $result);
 	}
-
 }

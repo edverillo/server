@@ -4,6 +4,8 @@
  *
  * @author Joas Schilling <coding@schilljs.com>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -18,13 +20,15 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
+
 namespace OCA\DAV\Tests\unit\Upload;
 
-class FutureFileTest extends \Test\TestCase {
+use OCA\DAV\Connector\Sabre\Directory;
 
+class FutureFileTest extends \Test\TestCase {
 	public function testGetContentType() {
 		$f = $this->mockFutureFile();
 		$this->assertEquals('application/octet-stream', $f->getContentType());
@@ -57,7 +61,7 @@ class FutureFileTest extends \Test\TestCase {
 	}
 
 	public function testDelete() {
-		$d = $this->getMockBuilder('OCA\DAV\Connector\Sabre\Directory')
+		$d = $this->getMockBuilder(Directory::class)
 			->disableOriginalConstructor()
 			->setMethods(['delete'])
 			->getMock();
@@ -69,18 +73,18 @@ class FutureFileTest extends \Test\TestCase {
 		$f->delete();
 	}
 
-	/**
-	 * @expectedException Sabre\DAV\Exception\Forbidden
-	 */
+	
 	public function testPut() {
+		$this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+
 		$f = $this->mockFutureFile();
 		$f->put('');
 	}
 
-	/**
-	 * @expectedException Sabre\DAV\Exception\Forbidden
-	 */
+	
 	public function testSetName() {
+		$this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+
 		$f = $this->mockFutureFile();
 		$f->setName('');
 	}
@@ -89,7 +93,7 @@ class FutureFileTest extends \Test\TestCase {
 	 * @return \OCA\DAV\Upload\FutureFile
 	 */
 	private function mockFutureFile() {
-		$d = $this->getMockBuilder('OCA\DAV\Connector\Sabre\Directory')
+		$d = $this->getMockBuilder(Directory::class)
 			->disableOriginalConstructor()
 			->setMethods(['getETag', 'getLastModified', 'getChildren'])
 			->getMock();
@@ -109,4 +113,3 @@ class FutureFileTest extends \Test\TestCase {
 		return new \OCA\DAV\Upload\FutureFile($d, 'foo.txt');
 	}
 }
-

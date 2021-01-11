@@ -3,9 +3,13 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Bernhard Posselt <dev@bernhard-posselt.com>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Clement Wong <git@clement.hk>
+ * @author Joas Schilling <coding@schilljs.com>
  * @author Jörn Friedrich Dreyer <jfd@butonic.de>
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  * @author Thomas Tanghus <thomas@tanghus.net>
  *
@@ -21,7 +25,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -33,6 +37,9 @@
 namespace OCP\AppFramework\Http;
 
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\IConfig;
+use Psr\Log\LoggerInterface;
 
 /**
  * Base class for responses. Also used to just send headers.
@@ -46,16 +53,16 @@ class Response {
 	 * Headers - defaults to ['Cache-Control' => 'no-cache, no-store, must-revalidate']
 	 * @var array
 	 */
-	private $headers = array(
+	private $headers = [
 		'Cache-Control' => 'no-cache, no-store, must-revalidate'
-	);
+	];
 
 
 	/**
 	 * Cookies that will be need to be constructed as header
 	 * @var array
 	 */
-	private $cookies = array();
+	private $cookies = [];
 
 
 	/**
@@ -81,6 +88,19 @@ class Response {
 	/** @var ContentSecurityPolicy|null Used Content-Security-Policy */
 	private $contentSecurityPolicy = null;
 
+	/** @var FeaturePolicy */
+	private $featurePolicy;
+
+	/** @var bool */
+	private $throttled = false;
+	/** @var array */
+	private $throttleMetadata = [];
+
+	/**
+	 * @since 17.0.0
+	 */
+	public function __construct() {
+	}
 
 	/**
 	 * Caches the response
@@ -89,12 +109,22 @@ class Response {
 	 * @return $this
 	 * @since 6.0.0 - return value was added in 7.0.0
 	 */
-	public function cacheFor($cacheSeconds) {
+	public function cacheFor(int $cacheSeconds, bool $public = false) {
+		if ($cacheSeconds > 0) {
+			$pragma = $public ? 'public' : 'private';
+			$this->addHeader('Cache-Control', $pragma . ', max-age=' . $cacheSeconds . ', must-revalidate');
+			$this->addHeader('Pragma', $pragma);
 
-		if($cacheSeconds > 0) {
-			$this->addHeader('Cache-Control', 'max-age=' . $cacheSeconds . ', must-revalidate');
+			// Set expires header
+			$expires = new \DateTime();
+			/** @var ITimeFactory $time */
+			$time = \OC::$server->query(ITimeFactory::class);
+			$expires->setTimestamp($time->getTime());
+			$expires->add(new \DateInterval('PT'.$cacheSeconds.'S'));
+			$this->addHeader('Expires', $expires->format(\DateTime::RFC2822));
 		} else {
 			$this->addHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+			unset($this->headers['Expires'], $this->headers['Pragma']);
 		}
 
 		return $this;
@@ -107,11 +137,12 @@ class Response {
 	 * @param \DateTime|null $expireDate Date on that the cookie should expire, if set
 	 * 									to null cookie will be considered as session
 	 * 									cookie.
+	 * @param string $sameSite The samesite value of the cookie. Defaults to Lax. Other possibilities are Strict or None
 	 * @return $this
 	 * @since 8.0.0
 	 */
-	public function addCookie($name, $value, \DateTime $expireDate = null) {
-		$this->cookies[$name] = array('value' => $value, 'expireDate' => $expireDate);
+	public function addCookie($name, $value, \DateTime $expireDate = null, $sameSite = 'Lax') {
+		$this->cookies[$name] = ['value' => $value, 'expireDate' => $expireDate, 'sameSite' => $sameSite];
 		return $this;
 	}
 
@@ -146,7 +177,7 @@ class Response {
 	 * @since 8.0.0
 	 */
 	public function invalidateCookies(array $cookieNames) {
-		foreach($cookieNames as $cookieName) {
+		foreach ($cookieNames as $cookieName) {
 			$this->invalidateCookie($cookieName);
 		}
 		return $this;
@@ -171,10 +202,22 @@ class Response {
 	 */
 	public function addHeader($name, $value) {
 		$name = trim($name);  // always remove leading and trailing whitespace
-		                      // to be able to reliably check for security
-		                      // headers
+		// to be able to reliably check for security
+		// headers
 
-		if(is_null($value)) {
+		if ($this->status === Http::STATUS_NOT_MODIFIED
+			&& stripos($name, 'x-') === 0) {
+			/** @var IConfig $config */
+			$config = \OC::$server->get(IConfig::class);
+
+			if ($config->getSystemValueBool('debug', false)) {
+				\OC::$server->get(LoggerInterface::class)->error(
+					'Setting a custom header on a 204 or 304 is not supported'
+				);
+			}
+		}
+
+		if (is_null($value)) {
 			unset($this->headers[$name]);
 		} else {
 			$this->headers[$name] = $value;
@@ -205,18 +248,16 @@ class Response {
 	public function getHeaders() {
 		$mergeWith = [];
 
-		if($this->lastModified) {
+		if ($this->lastModified) {
 			$mergeWith['Last-Modified'] =
 				$this->lastModified->format(\DateTime::RFC2822);
 		}
 
-		// Build Content-Security-Policy and use default if none has been specified
-		if(is_null($this->contentSecurityPolicy)) {
-			$this->setContentSecurityPolicy(new ContentSecurityPolicy());
-		}
-		$this->headers['Content-Security-Policy'] = $this->contentSecurityPolicy->buildPolicy();
+		$this->headers['Content-Security-Policy'] = $this->getContentSecurityPolicy()->buildPolicy();
+		$this->headers['Feature-Policy'] = $this->getFeaturePolicy()->buildPolicy();
+		$this->headers['X-Robots-Tag'] = 'none';
 
-		if($this->ETag) {
+		if ($this->ETag) {
 			$mergeWith['ETag'] = '"' . $this->ETag . '"';
 		}
 
@@ -226,11 +267,11 @@ class Response {
 
 	/**
 	 * By default renders no output
-	 * @return null
+	 * @return string
 	 * @since 6.0.0
 	 */
 	public function render() {
-		return null;
+		return '';
 	}
 
 
@@ -264,8 +305,32 @@ class Response {
 	 * @since 8.1.0
 	 */
 	public function getContentSecurityPolicy() {
+		if ($this->contentSecurityPolicy === null) {
+			$this->setContentSecurityPolicy(new EmptyContentSecurityPolicy());
+		}
 		return $this->contentSecurityPolicy;
 	}
+
+
+	/**
+	 * @since 17.0.0
+	 */
+	public function getFeaturePolicy(): EmptyFeaturePolicy {
+		if ($this->featurePolicy === null) {
+			$this->setFeaturePolicy(new EmptyFeaturePolicy());
+		}
+		return $this->featurePolicy;
+	}
+
+	/**
+	 * @since 17.0.0
+	 */
+	public function setFeaturePolicy(EmptyFeaturePolicy $featurePolicy): self {
+		$this->featurePolicy = $featurePolicy;
+
+		return $this;
+	}
+
 
 
 	/**
@@ -322,5 +387,34 @@ class Response {
 		return $this;
 	}
 
+	/**
+	 * Marks the response as to throttle. Will be throttled when the
+	 * @BruteForceProtection annotation is added.
+	 *
+	 * @param array $metadata
+	 * @since 12.0.0
+	 */
+	public function throttle(array $metadata = []) {
+		$this->throttled = true;
+		$this->throttleMetadata = $metadata;
+	}
 
+	/**
+	 * Returns the throttle metadata, defaults to empty array
+	 *
+	 * @return array
+	 * @since 13.0.0
+	 */
+	public function getThrottleMetadata() {
+		return $this->throttleMetadata;
+	}
+
+	/**
+	 * Whether the current response is throttled.
+	 *
+	 * @since 12.0.0
+	 */
+	public function isThrottled() {
+		return $this->throttled;
+	}
 }

@@ -1,8 +1,14 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -16,24 +22,22 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCP\SystemTag;
 
-use Symfony\Component\EventDispatcher\Event;
+use OCP\EventDispatcher\Event;
 
 /**
  * Class MapperEvent
  *
- * @package OCP\SystemTag
  * @since 9.0.0
  */
 class MapperEvent extends Event {
-
-	const EVENT_ASSIGN = 'OCP\SystemTag\ISystemTagObjectMapper::assignTags';
-	const EVENT_UNASSIGN = 'OCP\SystemTag\ISystemTagObjectMapper::unassignTags';
+	public const EVENT_ASSIGN = 'OCP\SystemTag\ISystemTagObjectMapper::assignTags';
+	public const EVENT_UNASSIGN = 'OCP\SystemTag\ISystemTagObjectMapper::unassignTags';
 
 	/** @var string */
 	protected $event;
@@ -53,7 +57,7 @@ class MapperEvent extends Event {
 	 * @param int[] $tags
 	 * @since 9.0.0
 	 */
-	public function __construct($event, $objectType, $objectId, array $tags) {
+	public function __construct(string $event, string $objectType, string $objectId, array $tags) {
 		$this->event = $event;
 		$this->objectType = $objectType;
 		$this->objectId = $objectId;
@@ -64,7 +68,7 @@ class MapperEvent extends Event {
 	 * @return string
 	 * @since 9.0.0
 	 */
-	public function getEvent() {
+	public function getEvent(): string {
 		return $this->event;
 	}
 
@@ -72,7 +76,7 @@ class MapperEvent extends Event {
 	 * @return string
 	 * @since 9.0.0
 	 */
-	public function getObjectType() {
+	public function getObjectType(): string {
 		return $this->objectType;
 	}
 
@@ -80,7 +84,7 @@ class MapperEvent extends Event {
 	 * @return string
 	 * @since 9.0.0
 	 */
-	public function getObjectId() {
+	public function getObjectId(): string {
 		return $this->objectId;
 	}
 
@@ -88,7 +92,7 @@ class MapperEvent extends Event {
 	 * @return int[]
 	 * @since 9.0.0
 	 */
-	public function getTags() {
+	public function getTags(): array {
 		return $this->tags;
 	}
 }

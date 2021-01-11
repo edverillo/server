@@ -17,14 +17,16 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
-use OCA\UpdateNotification\AppInfo\Application;
-
-$application = new Application();
-$application->registerRoutes($this, ['routes' => [
-	['name' => 'Admin#createCredentials', 'url' => '/credentials', 'verb' => 'GET'],
-	['name' => 'Admin#setChannel', 'url' => '/channel', 'verb' => 'POST'],
-]]);
+return [
+	'routes' => [
+		['name' => 'Admin#createCredentials', 'url' => '/credentials', 'verb' => 'GET'],
+		['name' => 'Admin#setChannel', 'url' => '/channel', 'verb' => 'POST'],
+	],
+	'ocs' => [
+		['name' => 'API#getAppList', 'url' => '/api/{apiVersion}/applist/{newVersion}', 'verb' => 'GET', 'requirements' => ['apiVersion' => 'v1']],
+	],
+];

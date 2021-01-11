@@ -14,7 +14,6 @@ use Test\App\CodeChecker\Mock\TestList;
 use Test\TestCase;
 
 class NodeVisitorTest extends TestCase {
-
 	public function providesFilesToCheck() {
 		return [
 			[[['OCP\AppFramework\IApi', 1006]], 'test-deprecated-use.php'],
@@ -45,10 +44,10 @@ class NodeVisitorTest extends TestCase {
 			], 'test-deprecated-function-sub-alias.php'],
 
 			// TODO Failing to resolve variables to classes
-//			[[['OCP\NamespaceName\ClassName::methodName', 1007]], 'test-deprecated-method.php'],
-//			[[['Alias::methodName', 1002]], 'test-deprecated-method-alias.php'],
-//			[[['NamespaceName\ClassName::methodName', 1002]], 'test-deprecated-method-sub.php'],
-//			[[['SubAlias\ClassName::methodName', 1002]], 'test-deprecated-method-sub-alias.php'],
+			//			[[['OCP\NamespaceName\ClassName::methodName', 1007]], 'test-deprecated-method.php'],
+			//			[[['Alias::methodName', 1002]], 'test-deprecated-method-alias.php'],
+			//			[[['NamespaceName\ClassName::methodName', 1002]], 'test-deprecated-method-sub.php'],
+			//			[[['SubAlias\ClassName::methodName', 1002]], 'test-deprecated-method-sub-alias.php'],
 		];
 	}
 
@@ -58,8 +57,13 @@ class NodeVisitorTest extends TestCase {
 	 * @param string $fileToVerify
 	 */
 	public function testMethodsToCheck($expectedErrors, $fileToVerify) {
+		if (PHP_MAJOR_VERSION > 7) {
+			$this->markTestSkipped('Only run on php7');
+		}
+
 		$checker = new CodeChecker(
-			new TestList(new EmptyCheck())
+			new TestList(new EmptyCheck()),
+			false
 		);
 		$errors = $checker->analyseFile(\OC::$SERVERROOT . "/tests/data/app/code-checker/$fileToVerify");
 

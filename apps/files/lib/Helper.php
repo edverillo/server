@@ -4,14 +4,17 @@
  *
  * @author Björn Schießle <bjoern@schiessle.org>
  * @author brumsel <brumsel@losecatcher.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author John Molakvoæ (skjnldsv) <skjnldsv@protonmail.com>
  * @author Jörn Friedrich Dreyer <jfd@butonic.de>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Michael Jobst <mjobst+github@tecratech.de>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -25,13 +28,14 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\Files;
 
 use OCP\Files\FileInfo;
+use OCP\ITagManager;
 
 /**
  * Helper class for manipulating file information
@@ -48,15 +52,19 @@ class Helper {
 		$l = \OC::$server->getL10N('files');
 		$maxUploadFileSize = \OCP\Util::maxUploadFilesize($dir, $storageInfo['free']);
 		$maxHumanFileSize = \OCP\Util::humanFileSize($maxUploadFileSize);
-		$maxHumanFileSize = $l->t('Upload (max. %s)', array($maxHumanFileSize));
+		$maxHumanFileSize = $l->t('Upload (max. %s)', [$maxHumanFileSize]);
 
 		return [
 			'uploadMaxFilesize' => $maxUploadFileSize,
-			'maxHumanFilesize'  => $maxHumanFileSize,
+			'maxHumanFilesize' => $maxHumanFileSize,
 			'freeSpace' => $storageInfo['free'],
-			'usedSpacePercent'  => (int)$storageInfo['relative'],
+			'quota' => $storageInfo['quota'],
+			'used' => $storageInfo['used'],
+			'usedSpacePercent' => (int)$storageInfo['relative'],
 			'owner' => $storageInfo['owner'],
 			'ownerDisplayName' => $storageInfo['ownerDisplayName'],
+			'mountType' => $storageInfo['mountType'],
+			'mountPoint' => $storageInfo['mountPoint'],
 		];
 	}
 
@@ -67,7 +75,7 @@ class Helper {
 	 * @return string icon URL
 	 */
 	public static function determineIcon($file) {
-		if($file['type'] === 'dir') {
+		if ($file['type'] === 'dir') {
 			$icon = \OC::$server->getMimeTypeDetector()->mimeTypeIcon('dir');
 			// TODO: move this part to the client side, using mountType
 			if ($file->isShared()) {
@@ -75,7 +83,7 @@ class Helper {
 			} elseif ($file->isMounted()) {
 				$icon = \OC::$server->getMimeTypeDetector()->mimeTypeIcon('dir-external');
 			}
-		}else{
+		} else {
 			$icon = \OC::$server->getMimeTypeDetector()->mimeTypeIcon($file->getMimetype());
 		}
 
@@ -135,7 +143,7 @@ class Helper {
 	 * @return array formatted file info
 	 */
 	public static function formatFileInfo(FileInfo $i) {
-		$entry = array();
+		$entry = [];
 
 		$entry['id'] = $i['fileid'];
 		$entry['parentId'] = $i['parent'];
@@ -157,12 +165,9 @@ class Helper {
 			$entry['isShareMountPoint'] = $i['is_share_mount_point'];
 		}
 		$mountType = null;
-		if ($i->isShared()) {
-			$mountType = 'shared';
-		} else if ($i->isMounted()) {
-			$mountType = 'external';
-		}
-		if ($mountType !== null) {
+		$mount = $i->getMountPoint();
+		$mountType = $mount->getMountType();
+		if ($mountType !== '') {
 			if ($i->getInternalPath() === '') {
 				$mountType .= '-root';
 			}
@@ -180,7 +185,7 @@ class Helper {
 	 * @return array
 	 */
 	public static function formatFileInfos($fileInfos) {
-		$files = array();
+		$files = [];
 		foreach ($fileInfos as $i) {
 			$files[] = self::formatFileInfo($i);
 		}
@@ -208,20 +213,39 @@ class Helper {
 	 * Populate the result set with file tags
 	 *
 	 * @param array $fileList
+	 * @param string $fileIdentifier identifier attribute name for values in $fileList
+	 * @param ITagManager $tagManager
 	 * @return array file list populated with tags
 	 */
-	public static function populateTags(array $fileList) {
-		$filesById = array();
+	public static function populateTags(array $fileList, $fileIdentifier = 'fileid', ITagManager $tagManager) {
+		$ids = [];
 		foreach ($fileList as $fileData) {
-			$filesById[$fileData['fileid']] = $fileData;
+			$ids[] = $fileData[$fileIdentifier];
 		}
-		$tagger = \OC::$server->getTagManager()->load('files');
-		$tags = $tagger->getTagsForObjects(array_keys($filesById));
-		if ($tags) {
+		$tagger = $tagManager->load('files');
+		$tags = $tagger->getTagsForObjects($ids);
+
+		if (!is_array($tags)) {
+			throw new \UnexpectedValueException('$tags must be an array');
+		}
+
+		// Set empty tag array
+		foreach ($fileList as $key => $fileData) {
+			$fileList[$key]['tags'] = [];
+		}
+
+		if (!empty($tags)) {
 			foreach ($tags as $fileId => $fileTags) {
-				$filesById[$fileId]['tags'] = $fileTags;
+				foreach ($fileList as $key => $fileData) {
+					if ($fileId !== $fileData[$fileIdentifier]) {
+						continue;
+					}
+
+					$fileList[$key]['tags'] = $fileTags;
+				}
 			}
 		}
+
 		return $fileList;
 	}
 
@@ -237,10 +261,10 @@ class Helper {
 		$sortFunc = 'compareFileNames';
 		if ($sortAttribute === 'mtime') {
 			$sortFunc = 'compareTimestamp';
-		} else if ($sortAttribute === 'size') {
+		} elseif ($sortAttribute === 'size') {
 			$sortFunc = 'compareSize';
 		}
-		usort($files, array('\OCA\Files\Helper', $sortFunc));
+		usort($files, [Helper::class, $sortFunc]);
 		if ($sortDescending) {
 			$files = array_reverse($files);
 		}

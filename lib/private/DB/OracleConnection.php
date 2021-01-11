@@ -3,9 +3,12 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Bart Visscher <bartv@thisnet.nl>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -19,7 +22,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -30,9 +33,14 @@ class OracleConnection extends Connection {
 	 * Quote the keys of the array
 	 */
 	private function quoteKeys(array $data) {
-		$return = array();
-		foreach($data as $key => $value) {
-			$return[$this->quoteIdentifier($key)] = $value;
+		$return = [];
+		$c = $this->getDatabasePlatform()->getIdentifierQuoteCharacter();
+		foreach ($data as $key => $value) {
+			if ($key[0] !== $c) {
+				$return[$this->quoteIdentifier($key)] = $value;
+			} else {
+				$return[$key] = $value;
+			}
 		}
 		return $return;
 	}
@@ -40,29 +48,35 @@ class OracleConnection extends Connection {
 	/**
 	 * {@inheritDoc}
 	 */
-	public function insert($tableName, array $data, array $types = array()) {
-		$tableName = $this->quoteIdentifier($tableName);
+	public function insert($table, array $data, array $types = []) {
+		if ($table[0] !== $this->getDatabasePlatform()->getIdentifierQuoteCharacter()) {
+			$table = $this->quoteIdentifier($table);
+		}
 		$data = $this->quoteKeys($data);
-		return parent::insert($tableName, $data, $types);
+		return parent::insert($table, $data, $types);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public function update($tableName, array $data, array $identifier, array $types = array()) {
-		$tableName = $this->quoteIdentifier($tableName);
+	public function update($table, array $data, array $criteria, array $types = []) {
+		if ($table[0] !== $this->getDatabasePlatform()->getIdentifierQuoteCharacter()) {
+			$table = $this->quoteIdentifier($table);
+		}
 		$data = $this->quoteKeys($data);
-		$identifier = $this->quoteKeys($identifier);
-		return parent::update($tableName, $data, $identifier, $types);
+		$criteria = $this->quoteKeys($criteria);
+		return parent::update($table, $data, $criteria, $types);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public function delete($tableExpression, array $identifier, array $types = array()) {
-		$tableName = $this->quoteIdentifier($tableExpression);
-		$identifier = $this->quoteKeys($identifier);
-		return parent::delete($tableName, $identifier);
+	public function delete($table, array $criteria, array $types = []) {
+		if ($table[0] !== $this->getDatabasePlatform()->getIdentifierQuoteCharacter()) {
+			$table = $this->quoteIdentifier($table);
+		}
+		$criteria = $this->quoteKeys($criteria);
+		return parent::delete($table, $criteria);
 	}
 
 	/**
@@ -74,7 +88,7 @@ class OracleConnection extends Connection {
 		$table = $this->tablePrefix . trim($table);
 		$table = $this->quoteIdentifier($table);
 		$schema = $this->getSchemaManager();
-		if($schema->tablesExist(array($table))) {
+		if ($schema->tablesExist([$table])) {
 			$schema->dropTable($table);
 		}
 	}
@@ -85,10 +99,10 @@ class OracleConnection extends Connection {
 	 * @param string $table table name without the prefix
 	 * @return bool
 	 */
-	public function tableExists($table){
+	public function tableExists($table) {
 		$table = $this->tablePrefix . trim($table);
 		$table = $this->quoteIdentifier($table);
 		$schema = $this->getSchemaManager();
-		return $schema->tablesExist(array($table));
+		return $schema->tablesExist([$table]);
 	}
 }

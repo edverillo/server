@@ -22,22 +22,23 @@
 namespace Test\Session;
 
 use OC\Session\CryptoSessionData;
+use OCP\ISession;
 use Test\TestCase;
 
 class CryptoWrappingTest extends TestCase {
-	/** @var \PHPUnit_Framework_MockObject_MockObject|\OCP\Security\ICrypto */
+	/** @var \PHPUnit\Framework\MockObject\MockObject|\OCP\Security\ICrypto */
 	protected $crypto;
 
-	/** @var \PHPUnit_Framework_MockObject_MockObject|\OCP\ISession */
+	/** @var \PHPUnit\Framework\MockObject\MockObject|\OCP\ISession */
 	protected $wrappedSession;
 
 	/** @var \OC\Session\CryptoSessionData */
 	protected $instance;
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
-		$this->wrappedSession = $this->getMockBuilder('OCP\ISession')
+		$this->wrappedSession = $this->getMockBuilder(ISession::class)
 			->disableOriginalConstructor()
 			->getMock();
 		$this->crypto = $this->getMockBuilder('OCP\Security\ICrypto')
@@ -51,6 +52,9 @@ class CryptoWrappingTest extends TestCase {
 		$this->crypto->expects($this->any())
 			->method('decrypt')
 			->willReturnCallback(function ($input) {
+				if ($input === '') {
+					return '';
+				}
 				return substr($input, 1, -1);
 			});
 

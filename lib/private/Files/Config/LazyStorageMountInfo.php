@@ -16,16 +16,13 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\Files\Config;
 
-use OC\Files\Filesystem;
-use OCP\Files\Config\ICachedMountInfo;
 use OCP\Files\Mount\IMountPoint;
-use OCP\Files\Node;
 use OCP\IUser;
 
 class LazyStorageMountInfo extends CachedMountInfo {

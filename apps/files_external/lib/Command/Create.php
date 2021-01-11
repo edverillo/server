@@ -2,8 +2,10 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -17,7 +19,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -63,7 +65,7 @@ class Create extends Base {
 	/** @var IUserSession */
 	private $userSession;
 
-	function __construct(GlobalStoragesService $globalService,
+	public function __construct(GlobalStoragesService $globalService,
 						 UserStoragesService $userService,
 						 IUserManager $userManager,
 						 IUserSession $userSession,
@@ -83,7 +85,7 @@ class Create extends Base {
 			->setDescription('Create a new mount configuration')
 			->addOption(
 				'user',
-				null,
+				'',
 				InputOption::VALUE_OPTIONAL,
 				'user to add the mount configuration for, if not set the mount will be added as system mount'
 			)
@@ -110,14 +112,14 @@ class Create extends Base {
 			)
 			->addOption(
 				'dry',
-				null,
+				'',
 				InputOption::VALUE_NONE,
 				'Don\'t save the created mount, only list the new mount'
 			);
 		parent::configure();
 	}
 
-	protected function execute(InputInterface $input, OutputInterface $output) {
+	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$user = $input->getOption('user');
 		$mountPoint = $input->getArgument('mount_point');
 		$storageIdentifier = $input->getArgument('storage_backend');
@@ -180,7 +182,7 @@ class Create extends Base {
 			if ($input->getOption('output') === self::OUTPUT_FORMAT_PLAIN) {
 				$output->writeln('<info>Storage created with id ' . $mount->getId() . '</info>');
 			} else {
-				$output->writeln($mount->getId());
+				$output->writeln((string)$mount->getId());
 			}
 		}
 		return 0;

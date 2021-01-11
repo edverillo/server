@@ -19,11 +19,11 @@
  *
  */
 
-
 namespace Test\Encryption;
 
-
 use OC\Encryption\Update;
+use OC\Files\Mount\Manager;
+use OC\Files\View;
 use Test\TestCase;
 
 class UpdateTest extends TestCase {
@@ -34,32 +34,32 @@ class UpdateTest extends TestCase {
 	/** @var string */
 	private $uid;
 
-	/** @var \OC\Files\View | \PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OC\Files\View | \PHPUnit\Framework\MockObject\MockObject */
 	private $view;
 
-	/** @var \OC\Encryption\Util | \PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OC\Encryption\Util | \PHPUnit\Framework\MockObject\MockObject */
 	private $util;
 
-	/** @var \OC\Files\Mount\Manager | \PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OC\Files\Mount\Manager | \PHPUnit\Framework\MockObject\MockObject */
 	private $mountManager;
 
-	/** @var \OC\Encryption\Manager | \PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OC\Encryption\Manager | \PHPUnit\Framework\MockObject\MockObject */
 	private $encryptionManager;
 
-	/** @var \OCP\Encryption\IEncryptionModule | \PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OCP\Encryption\IEncryptionModule | \PHPUnit\Framework\MockObject\MockObject */
 	private $encryptionModule;
 
-	/** @var \OC\Encryption\File | \PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OC\Encryption\File | \PHPUnit\Framework\MockObject\MockObject */
 	private $fileHelper;
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
-		$this->view = $this->getMockBuilder('\OC\Files\View')
+		$this->view = $this->getMockBuilder(View::class)
 			->disableOriginalConstructor()->getMock();
 		$this->util = $this->getMockBuilder('\OC\Encryption\Util')
 			->disableOriginalConstructor()->getMock();
-		$this->mountManager = $this->getMockBuilder('\OC\Files\Mount\Manager')
+		$this->mountManager = $this->getMockBuilder(Manager::class)
 			->disableOriginalConstructor()->getMock();
 		$this->encryptionManager = $this->getMockBuilder('\OC\Encryption\Manager')
 			->disableOriginalConstructor()->getMock();
@@ -88,7 +88,6 @@ class UpdateTest extends TestCase {
 	 * @param integer $numberOfFiles
 	 */
 	public function testUpdate($path, $isDir, $allFiles, $numberOfFiles) {
-
 		$this->encryptionManager->expects($this->once())
 			->method('getEncryptionModule')
 			->willReturn($this->encryptionModule);
@@ -97,7 +96,7 @@ class UpdateTest extends TestCase {
 			->method('is_dir')
 			->willReturn($isDir);
 
-		if($isDir) {
+		if ($isDir) {
 			$this->util->expects($this->once())
 				->method('getAllFiles')
 				->willReturn($allFiles);
@@ -120,10 +119,10 @@ class UpdateTest extends TestCase {
 	 * @return array
 	 */
 	public function dataTestUpdate() {
-		return array(
-			array('/user/files/foo', true, ['/user/files/foo/file1.txt', '/user/files/foo/file1.txt'], 2),
-			array('/user/files/test.txt', false, [], 1),
-		);
+		return [
+			['/user/files/foo', true, ['/user/files/foo/file1.txt', '/user/files/foo/file1.txt'], 2],
+			['/user/files/test.txt', false, [], 1],
+		];
 	}
 
 	/**
@@ -134,7 +133,6 @@ class UpdateTest extends TestCase {
 	 * @param boolean $encryptionEnabled
 	 */
 	public function testPostRename($source, $target, $encryptionEnabled) {
-
 		$updateMock = $this->getUpdateMock(['update', 'getOwnerPath']);
 
 		$this->encryptionManager->expects($this->once())
@@ -147,13 +145,12 @@ class UpdateTest extends TestCase {
 		} else {
 			$updateMock->expects($this->once())
 				->method('getOwnerPath')
-				->willReturnCallback(function($path) use ($target) {
+				->willReturnCallback(function ($path) use ($target) {
 					$this->assertSame(
 						$target,
 						$path,
 						'update needs to be executed for the target destination');
 					return ['owner', $path];
-
 				});
 			$updateMock->expects($this->once())->method('update');
 		}
@@ -167,14 +164,14 @@ class UpdateTest extends TestCase {
 	 * @return array
 	 */
 	public function dataTestPostRename() {
-		return array(
-			array('/test.txt', '/testNew.txt', true),
-			array('/test.txt', '/testNew.txt', false),
-			array('/folder/test.txt', '/testNew.txt', true),
-			array('/folder/test.txt', '/testNew.txt', false),
-			array('/folder/test.txt', '/testNew.txt', true),
-			array('/test.txt', '/folder/testNew.txt', false),
-		);
+		return [
+			['/test.txt', '/testNew.txt', true],
+			['/test.txt', '/testNew.txt', false],
+			['/folder/test.txt', '/testNew.txt', true],
+			['/folder/test.txt', '/testNew.txt', false],
+			['/folder/test.txt', '/testNew.txt', true],
+			['/test.txt', '/folder/testNew.txt', false],
+		];
 	}
 
 
@@ -184,7 +181,6 @@ class UpdateTest extends TestCase {
 	 * @param boolean $encryptionEnabled
 	 */
 	public function testPostRestore($encryptionEnabled) {
-
 		$updateMock = $this->getUpdateMock(['update']);
 
 		$this->encryptionManager->expects($this->once())
@@ -193,7 +189,6 @@ class UpdateTest extends TestCase {
 
 		if ($encryptionEnabled) {
 			$updateMock->expects($this->once())->method('update');
-
 		} else {
 			$updateMock->expects($this->never())->method('update');
 		}
@@ -207,17 +202,17 @@ class UpdateTest extends TestCase {
 	 * @return array
 	 */
 	public function dataTestPostRestore() {
-		return array(
-			array(true),
-			array(false),
-		);
+		return [
+			[true],
+			[false],
+		];
 	}
 
 	/**
 	 * create mock of the update method
 	 *
 	 * @param array$methods methods which should be set
-	 * @return \OC\Encryption\Update | \PHPUnit_Framework_MockObject_MockObject
+	 * @return \OC\Encryption\Update | \PHPUnit\Framework\MockObject\MockObject
 	 */
 	protected function getUpdateMock($methods) {
 		return  $this->getMockBuilder('\OC\Encryption\Update')
@@ -232,5 +227,4 @@ class UpdateTest extends TestCase {
 				]
 			)->setMethods($methods)->getMock();
 	}
-
 }

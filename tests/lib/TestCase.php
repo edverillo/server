@@ -24,59 +24,44 @@ namespace Test;
 
 use DOMDocument;
 use DOMNode;
-use OC\Cache\CappedMemoryCache;
 use OC\Command\QueueBus;
 use OC\Files\Filesystem;
 use OC\Template\Base;
-use OC_Defaults;
+use OCP\Command\IBus;
 use OCP\DB\QueryBuilder\IQueryBuilder;
+use OCP\Defaults;
 use OCP\IDBConnection;
 use OCP\IL10N;
 use OCP\Security\ISecureRandom;
 
-abstract class TestCase extends \PHPUnit_Framework_TestCase {
+abstract class TestCase extends \PHPUnit\Framework\TestCase {
 	/** @var \OC\Command\QueueBus */
 	private $commandBus;
 
 	/** @var IDBConnection */
-	static protected $realDatabase = null;
+	protected static $realDatabase = null;
 
 	/** @var bool */
-	static private $wasDatabaseAllowed = false;
+	private static $wasDatabaseAllowed = false;
 
 	/** @var array */
 	protected $services = [];
-
-	/**
-	 * Wrapper to be forward compatible to phpunit 5.4+
-	 *
-	 * @param string $originalClassName
-	 * @return \PHPUnit_Framework_MockObject_MockObject
-	 */
-	protected function createMock($originalClassName) {
-		if (is_callable('parent::createMock')) {
-			return parent::createMock($originalClassName);
-		}
-
-		return $this->getMockBuilder($originalClassName)
-			->disableOriginalConstructor()
-			->disableOriginalClone()
-			->disableArgumentCloning()
-			->getMock();
-	}
 
 	/**
 	 * @param string $name
 	 * @param mixed $newService
 	 * @return bool
 	 */
-	public function overwriteService($name, $newService) {
+	public function overwriteService(string $name, $newService): bool {
 		if (isset($this->services[$name])) {
 			return false;
 		}
 
 		$this->services[$name] = \OC::$server->query($name);
-		\OC::$server->registerService($name, function () use ($newService) {
+		$container = \OC::$server->getAppContainerForService($name);
+		$container = $container ?? \OC::$server;
+
+		$container->registerService($name, function () use ($newService) {
 			return $newService;
 		});
 
@@ -87,10 +72,14 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 	 * @param string $name
 	 * @return bool
 	 */
-	public function restoreService($name) {
+	public function restoreService(string $name): bool {
 		if (isset($this->services[$name])) {
 			$oldService = $this->services[$name];
-			\OC::$server->registerService($name, function () use ($oldService) {
+
+			$container = \OC::$server->getAppContainerForService($name);
+			$container = $container ?? \OC::$server;
+
+			$container->registerService($name, function () use ($oldService) {
 				return $oldService;
 			});
 
@@ -127,10 +116,11 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 		});
 	}
 
-	protected function setUp() {
+	protected function setUp(): void {
 		// overwrite the command bus with one we can run ourselves
 		$this->commandBus = new QueueBus();
 		$this->overwriteService('AsyncCommandBus', $this->commandBus);
+		$this->overwriteService(IBus::class, $this->commandBus);
 
 		// detect database access
 		self::$wasDatabaseAllowed = true;
@@ -153,7 +143,7 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 		}
 	}
 
-	protected function onNotSuccessfulTest($e) {
+	protected function onNotSuccessfulTest(\Throwable $t): void {
 		$this->restoreAllServices();
 
 		// restore database connection
@@ -163,10 +153,10 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 			});
 		}
 
-		parent::onNotSuccessfulTest($e);
+		parent::onNotSuccessfulTest($t);
 	}
 
-	protected function tearDown() {
+	protected function tearDown(): void {
 		$this->restoreAllServices();
 
 		// restore database connection
@@ -191,7 +181,9 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 			self::assertEquals([], $errors, "There have been xml parsing errors");
 		}
 
-		\OC\Files\Cache\Storage::getGlobalCache()->clearCache();
+		if ($this->IsDatabaseAccessAllowed()) {
+			\OC\Files\Cache\Storage::getGlobalCache()->clearCache();
+		}
 
 		// tearDown the traits
 		$traits = $this->getTestTraits();
@@ -211,7 +203,7 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 	 * @param array $parameters
 	 * @return mixed
 	 */
-	protected static function invokePrivate($object, $methodName, array $parameters = array()) {
+	protected static function invokePrivate($object, $methodName, array $parameters = []) {
 		if (is_string($object)) {
 			$className = $object;
 		} else {
@@ -234,7 +226,11 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 				$property->setValue($object, array_pop($parameters));
 			}
 
-			return $property->getValue($object);
+			if (is_object($object)) {
+				return $property->getValue($object);
+			}
+
+			return $property->getValue();
 		}
 
 		return false;
@@ -255,7 +251,7 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 		);
 	}
 
-	public static function tearDownAfterClass() {
+	public static function tearDownAfterClass(): void {
 		if (!self::$wasDatabaseAllowed && self::$realDatabase !== null) {
 			// in case an error is thrown in a test, PHPUnit jumps straight to tearDownAfterClass,
 			// so we need the database again
@@ -265,7 +261,12 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 		}
 		$dataDir = \OC::$server->getConfig()->getSystemValue('datadirectory', \OC::$SERVERROOT . '/data-autotest');
 		if (self::$wasDatabaseAllowed && \OC::$server->getDatabaseConnection()) {
-			$queryBuilder = \OC::$server->getDatabaseConnection()->getQueryBuilder();
+			$db = \OC::$server->getDatabaseConnection();
+			if ($db->inTransaction()) {
+				$db->rollBack();
+				throw new \Exception('There was a transaction still in progress and needed to be rolled back. Please fix this in your test.');
+			}
+			$queryBuilder = $db->getQueryBuilder();
 
 			self::tearDownAfterClassCleanShares($queryBuilder);
 			self::tearDownAfterClassCleanStorages($queryBuilder);
@@ -283,7 +284,7 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 	 *
 	 * @param IQueryBuilder $queryBuilder
 	 */
-	static protected function tearDownAfterClassCleanShares(IQueryBuilder $queryBuilder) {
+	protected static function tearDownAfterClassCleanShares(IQueryBuilder $queryBuilder) {
 		$queryBuilder->delete('share')
 			->execute();
 	}
@@ -293,7 +294,7 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 	 *
 	 * @param IQueryBuilder $queryBuilder
 	 */
-	static protected function tearDownAfterClassCleanStorages(IQueryBuilder $queryBuilder) {
+	protected static function tearDownAfterClassCleanStorages(IQueryBuilder $queryBuilder) {
 		$queryBuilder->delete('storages')
 			->execute();
 	}
@@ -303,7 +304,7 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 	 *
 	 * @param IQueryBuilder $queryBuilder
 	 */
-	static protected function tearDownAfterClassCleanFileCache(IQueryBuilder $queryBuilder) {
+	protected static function tearDownAfterClassCleanFileCache(IQueryBuilder $queryBuilder) {
 		$queryBuilder->delete('filecache')
 			->execute();
 	}
@@ -313,14 +314,15 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 	 *
 	 * @param string $dataDir
 	 */
-	static protected function tearDownAfterClassCleanStrayDataFiles($dataDir) {
-		$knownEntries = array(
+	protected static function tearDownAfterClassCleanStrayDataFiles($dataDir) {
+		$knownEntries = [
 			'nextcloud.log' => true,
+			'audit.log' => true,
 			'owncloud.db' => true,
 			'.ocdata' => true,
 			'..' => true,
 			'.' => true,
-		);
+		];
 
 		if ($dh = opendir($dataDir)) {
 			while (($file = readdir($dh)) !== false) {
@@ -337,7 +339,7 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 	 *
 	 * @param string $dir
 	 */
-	static protected function tearDownAfterClassCleanStrayDataUnlinkDir($dir) {
+	protected static function tearDownAfterClassCleanStrayDataUnlinkDir($dir) {
 		if ($dh = @opendir($dir)) {
 			while (($file = readdir($dh)) !== false) {
 				if (\OC\Files\Filesystem::isIgnoredDir($file)) {
@@ -358,14 +360,14 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 	/**
 	 * Clean up the list of hooks
 	 */
-	static protected function tearDownAfterClassCleanStrayHooks() {
+	protected static function tearDownAfterClassCleanStrayHooks() {
 		\OC_Hook::clear();
 	}
 
 	/**
 	 * Clean up the list of locks
 	 */
-	static protected function tearDownAfterClassCleanStrayLocks() {
+	protected static function tearDownAfterClassCleanStrayLocks() {
 		\OC::$server->getLockingProvider()->releaseAll();
 	}
 
@@ -375,7 +377,7 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 	 *
 	 * @param string $user user id or empty for a generic FS
 	 */
-	static protected function loginAsUser($user = '') {
+	protected static function loginAsUser($user = '') {
 		self::logout();
 		\OC\Files\Filesystem::tearDown();
 		\OC_User::setUserId($user);
@@ -384,7 +386,7 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 			$userObject->updateLastLoginTimestamp();
 		}
 		\OC_Util::setupFS($user);
-		if (\OC_User::userExists($user)) {
+		if (\OC::$server->getUserManager()->userExists($user)) {
 			\OC::$server->getUserFolder($user);
 		}
 	}
@@ -392,7 +394,7 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 	/**
 	 * Logout the current user and tear down the filesystem.
 	 */
-	static protected function logout() {
+	protected static function logout() {
 		\OC_Util::tearDownFS();
 		\OC_User::setUserId('');
 		// needed for fully logout
@@ -457,7 +459,7 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 		}
 	}
 
-	private function IsDatabaseAccessAllowed() {
+	protected function IsDatabaseAccessAllowed() {
 		// on travis-ci.org we allow database access in any case - otherwise
 		// this will break all apps right away
 		if (true == getenv('TRAVIS')) {
@@ -465,7 +467,7 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 		}
 		$annotations = $this->getAnnotations();
 		if (isset($annotations['class']['group'])) {
-			if(in_array('DB', $annotations['class']['group']) || in_array('SLOWDB', $annotations['class']['group']) ) {
+			if (in_array('DB', $annotations['class']['group']) || in_array('SLOWDB', $annotations['class']['group'])) {
 				return true;
 			}
 		}
@@ -479,20 +481,24 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 	 * @param array $vars
 	 */
 	protected function assertTemplate($expectedHtml, $template, $vars = []) {
-
 		require_once __DIR__.'/../../lib/private/legacy/template/functions.php';
 
 		$requestToken = 12345;
-		$theme = new OC_Defaults();
-		/** @var IL10N | \PHPUnit_Framework_MockObject_MockObject $l10n */
-		$l10n = $this->getMockBuilder('\OCP\IL10N')
+		/** @var Defaults|\PHPUnit\Framework\MockObject\MockObject $l10n */
+		$theme = $this->getMockBuilder('\OCP\Defaults')
+			->disableOriginalConstructor()->getMock();
+		$theme->expects($this->any())
+			->method('getName')
+			->willReturn('Nextcloud');
+		/** @var IL10N|\PHPUnit\Framework\MockObject\MockObject $l10n */
+		$l10n = $this->getMockBuilder(IL10N::class)
 			->disableOriginalConstructor()->getMock();
 		$l10n
 			->expects($this->any())
 			->method('t')
-			->will($this->returnCallback(function($text, $parameters = array()) {
+			->willReturnCallback(function ($text, $parameters = []) {
 				return vsprintf($text, $parameters);
-			}));
+			});
 
 		$t = new Base($template, $requestToken, $l10n, $theme);
 		$buf = $t->fetchPage($vars);
@@ -524,10 +530,10 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase {
 
 	private function removeWhitespaces(DOMNode $domNode) {
 		foreach ($domNode->childNodes as $node) {
-			if($node->hasChildNodes()) {
+			if ($node->hasChildNodes()) {
 				$this->removeWhitespaces($node);
 			} else {
-				if ($node instanceof \DOMText && $node->isWhitespaceInElementContent() ) {
+				if ($node instanceof \DOMText && $node->isWhitespaceInElementContent()) {
 					$domNode->removeChild($node);
 				}
 			}

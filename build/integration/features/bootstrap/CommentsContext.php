@@ -2,8 +2,12 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Julius Härtl <jus@bitgrid.net>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -17,7 +21,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -51,7 +55,7 @@ class CommentsContext implements \Behat\Behat\Context\Context {
 		$client = new \GuzzleHttp\Client();
 		try {
 			$client->delete(
-				$this->baseUrl.'/remote.php/webdav/myFileToComment.txt',
+				$this->baseUrl . '/remote.php/webdav/myFileToComment.txt',
 				[
 					'auth' => [
 						'user0',
@@ -72,9 +76,9 @@ class CommentsContext implements \Behat\Behat\Context\Context {
 	 * @return int
 	 */
 	private function getFileIdForPath($path) {
-		$url = $this->baseUrl.'/remote.php/webdav/'.$path;
-		$context = stream_context_create(array(
-			'http' => array(
+		$url = $this->baseUrl . '/remote.php/webdav/' . $path;
+		$context = stream_context_create([
+			'http' => [
 				'method' => 'PROPFIND',
 				'header' => "Authorization: Basic dXNlcjA6MTIzNDU2\r\nContent-Type: application/x-www-form-urlencoded",
 				'content' => '<?xml version="1.0"?>
@@ -83,8 +87,8 @@ class CommentsContext implements \Behat\Behat\Context\Context {
     <oc:fileid />
   </d:prop>
 </d:propfind>'
-			)
-		));
+			]
+		]);
 
 		$response = file_get_contents($url, false, $context);
 		preg_match_all('/\<oc:fileid\>(.*)\<\/oc:fileid\>/', $response, $matches);
@@ -99,10 +103,10 @@ class CommentsContext implements \Behat\Behat\Context\Context {
 	 * @param int $statusCode
 	 * @throws \Exception
 	 */
-	public function postsACommentWithContentOnTheFileNamedItShouldReturn($user, $content, $fileName, $statusCode)  {
+	public function postsACommentWithContentOnTheFileNamedItShouldReturn($user, $content, $fileName, $statusCode) {
 		$fileId = $this->getFileIdForPath($fileName);
 		$this->fileId = (int)$fileId;
-		$url = $this->baseUrl.'/remote.php/dav/comments/files/'.$fileId.'/';
+		$url = $this->baseUrl . '/remote.php/dav/comments/files/' . $fileId . '/';
 
 		$client = new \GuzzleHttp\Client();
 		try {
@@ -123,8 +127,8 @@ class CommentsContext implements \Behat\Behat\Context\Context {
 			$res = $e->getResponse();
 		}
 
-		if($res->getStatusCode() !== (int)$statusCode) {
-			throw new \Exception("Response status code was not $statusCode (".$res->getStatusCode().")");
+		if ($res->getStatusCode() !== (int)$statusCode) {
+			throw new \Exception("Response status code was not $statusCode (" . $res->getStatusCode() . ")");
 		}
 	}
 
@@ -138,11 +142,11 @@ class CommentsContext implements \Behat\Behat\Context\Context {
 	 */
 	public function asLoadloadAllTheCommentsOfTheFileNamedItShouldReturn($user, $fileName, $statusCode) {
 		$fileId = $this->getFileIdForPath($fileName);
-		$url = $this->baseUrl.'/remote.php/dav/comments/files/'.$fileId.'/';
+		$url = $this->baseUrl . '/remote.php/dav/comments/files/' . $fileId . '/';
 
 		try {
 			$client = new \GuzzleHttp\Client();
-			$res = $client->createRequest(
+			$res = $client->request(
 				'REPORT',
 				$url,
 				[
@@ -161,16 +165,15 @@ class CommentsContext implements \Behat\Behat\Context\Context {
 					],
 				]
 			);
-			$res = $client->send($res);
 		} catch (\GuzzleHttp\Exception\ClientException $e) {
 			$res = $e->getResponse();
 		}
 
-		if($res->getStatusCode() !== (int)$statusCode) {
-			throw new \Exception("Response status code was not $statusCode (".$res->getStatusCode().")");
+		if ($res->getStatusCode() !== (int)$statusCode) {
+			throw new \Exception("Response status code was not $statusCode (" . $res->getStatusCode() . ")");
 		}
 
-		if($res->getStatusCode() === 207) {
+		if ($res->getStatusCode() === 207) {
 			$service = new Sabre\Xml\Service();
 			$this->response = $service->parse($res->getBody()->getContents());
 			$this->commentId = (int)$this->response[0]['value'][2]['value'][0]['value'][0]['value'];
@@ -190,11 +193,11 @@ class CommentsContext implements \Behat\Behat\Context\Context {
 		$options = [];
 		$options['auth'] = [$user, '123456'];
 		$fd = $body->getRowsHash();
-		$options['body'] = $fd;
+		$options['form_params'] = $fd;
 		$options['headers'] = [
 			'OCS-APIREQUEST' => 'true',
 		];
-		$client->send($client->createRequest($verb, $this->baseUrl.'/ocs/v1.php/'.$url, $options));
+		$client->request($verb, $this->baseUrl . '/ocs/v1.php/' . $url, $options);
 	}
 
 	/**
@@ -204,7 +207,7 @@ class CommentsContext implements \Behat\Behat\Context\Context {
 	 * @throws \Exception
 	 */
 	public function asDeleteTheCreatedCommentItShouldReturn($user, $statusCode) {
-		$url = $this->baseUrl.'/remote.php/dav/comments/files/'.$this->fileId.'/'.$this->commentId;
+		$url = $this->baseUrl . '/remote.php/dav/comments/files/' . $this->fileId . '/' . $this->commentId;
 
 		$client = new \GuzzleHttp\Client();
 		try {
@@ -224,8 +227,8 @@ class CommentsContext implements \Behat\Behat\Context\Context {
 			$res = $e->getResponse();
 		}
 
-		if($res->getStatusCode() !== (int)$statusCode) {
-			throw new \Exception("Response status code was not $statusCode (".$res->getStatusCode().")");
+		if ($res->getStatusCode() !== (int)$statusCode) {
+			throw new \Exception("Response status code was not $statusCode (" . $res->getStatusCode() . ")");
 		}
 	}
 
@@ -238,14 +241,14 @@ class CommentsContext implements \Behat\Behat\Context\Context {
 	public function theResponseShouldContainAPropertyWithValue($key, $value) {
 		$keys = $this->response[0]['value'][2]['value'][0]['value'];
 		$found = false;
-		foreach($keys as $singleKey) {
-			if($singleKey['name'] === '{http://owncloud.org/ns}'.substr($key, 3)) {
-				if($singleKey['value'] === $value) {
+		foreach ($keys as $singleKey) {
+			if ($singleKey['name'] === '{http://owncloud.org/ns}' . substr($key, 3)) {
+				if ($singleKey['value'] === $value) {
 					$found = true;
 				}
 			}
 		}
-		if($found === false) {
+		if ($found === false) {
 			throw new \Exception("Cannot find property $key with $value");
 		}
 	}
@@ -256,8 +259,12 @@ class CommentsContext implements \Behat\Behat\Context\Context {
 	 * @throws \Exception
 	 */
 	public function theResponseShouldContainOnlyComments($number) {
-		if(count($this->response) !== (int)$number) {
-			throw new \Exception("Found more comments than $number (".count($this->response).")");
+		$count = 0;
+		if ($this->response !== null) {
+			$count = count($this->response);
+		}
+		if ($count !== (int)$number) {
+			throw new \Exception("Found more comments than $number (" . $count . ")");
 		}
 	}
 
@@ -276,20 +283,18 @@ class CommentsContext implements \Behat\Behat\Context\Context {
 <d:propertyupdate  xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
   <d:set>
    <d:prop>
-      <oc:message>'.$text.'</oc:message>
+      <oc:message>' . $text . '</oc:message>
     </d:prop>
   </d:set>
 </d:propertyupdate>';
 		try {
-			$res = $client->send($client->createRequest('PROPPATCH', $this->baseUrl.'/remote.php/dav/comments/files/' . $this->fileId . '/' . $this->commentId, $options));
+			$res = $client->request('PROPPATCH', $this->baseUrl . '/remote.php/dav/comments/files/' . $this->fileId . '/' . $this->commentId, $options);
 		} catch (\GuzzleHttp\Exception\ClientException $e) {
 			$res = $e->getResponse();
 		}
 
-		if($res->getStatusCode() !== (int)$statusCode) {
-			throw new \Exception("Response status code was not $statusCode (".$res->getStatusCode().")");
+		if ($res->getStatusCode() !== (int)$statusCode) {
+			throw new \Exception("Response status code was not $statusCode (" . $res->getStatusCode() . ")");
 		}
 	}
-
-
 }

@@ -2,8 +2,10 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Vlastimil Pecinka <pecinka@email.cz>
  *
  * @license AGPL-3.0
  *
@@ -17,7 +19,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -26,6 +28,7 @@ namespace OC\Files\Mount;
 use OCP\Files\Config\IHomeMountProvider;
 use OCP\Files\Storage\IStorageFactory;
 use OCP\IConfig;
+use OCP\ILogger;
 use OCP\IUser;
 
 /**
@@ -54,7 +57,6 @@ class ObjectHomeMountProvider implements IHomeMountProvider {
 	 * @return \OCP\Files\Mount\IMountPoint
 	 */
 	public function getHomeMountForUser(IUser $user, IStorageFactory $loader) {
-
 		$config = $this->getMultiBucketObjectStoreConfig($user);
 		if ($config === null) {
 			$config = $this->getSingleBucketObjectStoreConfig($user);
@@ -79,14 +81,15 @@ class ObjectHomeMountProvider implements IHomeMountProvider {
 
 		// sanity checks
 		if (empty($config['class'])) {
-			\OCP\Util::writeLog('files', 'No class given for objectstore', \OCP\Util::ERROR);
+			\OCP\Util::writeLog('files', 'No class given for objectstore', ILogger::ERROR);
 		}
 		if (!isset($config['arguments'])) {
 			$config['arguments'] = [];
 		}
-		$config['arguments']['user'] = $user;
 		// instantiate object store implementation
 		$config['arguments']['objectstore'] = new $config['class']($config['arguments']);
+
+		$config['arguments']['user'] = $user;
 
 		return $config;
 	}
@@ -103,12 +106,11 @@ class ObjectHomeMountProvider implements IHomeMountProvider {
 
 		// sanity checks
 		if (empty($config['class'])) {
-			\OCP\Util::writeLog('files', 'No class given for objectstore', \OCP\Util::ERROR);
+			\OCP\Util::writeLog('files', 'No class given for objectstore', ILogger::ERROR);
 		}
 		if (!isset($config['arguments'])) {
 			$config['arguments'] = [];
 		}
-		$config['arguments']['user'] = $user;
 
 		$bucket = $this->config->getUserValue($user->getUID(), 'homeobjectstore', 'bucket', null);
 
@@ -131,6 +133,8 @@ class ObjectHomeMountProvider implements IHomeMountProvider {
 
 		// instantiate object store implementation
 		$config['arguments']['objectstore'] = new $config['class']($config['arguments']);
+
+		$config['arguments']['user'] = $user;
 
 		return $config;
 	}

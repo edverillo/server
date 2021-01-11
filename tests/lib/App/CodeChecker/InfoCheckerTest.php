@@ -22,14 +22,13 @@
 namespace Test\App\CodeChecker;
 
 use OC\App\CodeChecker\InfoChecker;
-use OC\App\InfoParser;
 use Test\TestCase;
 
 class InfoCheckerTest extends TestCase {
 	/** @var InfoChecker */
 	protected $infoChecker;
 
-	public static function setUpBeforeClass() {
+	public static function setUpBeforeClass(): void {
 		\OC::$APPSROOTS[] = [
 			'path' => \OC::$SERVERROOT . '/tests/apps',
 			'url' => '/apps-test',
@@ -37,24 +36,28 @@ class InfoCheckerTest extends TestCase {
 		];
 	}
 
-	public static function tearDownAfterClass() {
+	public static function tearDownAfterClass(): void {
 		// remove last element
 		array_pop(\OC::$APPSROOTS);
 	}
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
-		$this->infoChecker = new InfoChecker(new InfoParser());
+		$this->infoChecker = new InfoChecker();
 	}
 
 	public function appInfoData() {
 		return [
-			['testapp-infoxml', []],
-			['testapp-version', []],
-			['testapp-infoxml-version', []],
-			['testapp-infoxml-version-different', [['type' => 'differentVersions', 'message' => 'appinfo/version: 1.2.4 - appinfo/info.xml: 1.2.3']]],
-			['testapp-version-missing', []],
-			['testapp-name-missing', [['type' => 'mandatoryFieldMissing', 'field' => 'name']]],
+			['testapp_infoxml', []],
+			['testapp_version', [
+				['type' => 'parseError', 'field' => 'Element \'licence\': This element is not expected. Expected is one of ( description, version ).' . "\n"],
+			]],
+			['testapp_dependency_missing', [
+				['type' => 'parseError', 'field' => 'Element \'info\': Missing child element(s). Expected is one of ( repository, screenshot, dependencies ).' . "\n"],
+			]],
+			['testapp_name_missing', [
+				['type' => 'parseError', 'field' => 'Element \'summary\': This element is not expected. Expected is ( name ).' . "\n"],
+			]],
 		];
 	}
 
@@ -66,6 +69,7 @@ class InfoCheckerTest extends TestCase {
 	 */
 	public function testApps($appId, $expectedErrors) {
 		$errors = $this->infoChecker->analyse($appId);
+		libxml_clear_errors();
 
 		$this->assertEquals($expectedErrors, $errors);
 	}

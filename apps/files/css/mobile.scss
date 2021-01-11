@@ -1,18 +1,13 @@
-/* 938 = table min-width(688) + app-navigation width: 250
-   769 = size where app-navigation (768) is hidden +1
-   688 = table min-width */
-@media only screen and (max-width: 938px) and (min-width: 769px), only screen and (max-width: 688px) {
+/* 938 = table min-width(688) + app-navigation width: 250\
+	$breakpoint-mobile +1 = size where app-navigation is hidden +1
+	688 = table min-width */
+$min-table-width: 688px;
+@media only screen and (max-width: $min-table-width + $navigation-width) and (min-width: $breakpoint-mobile + 1), only screen and (max-width: $min-table-width) {
 
 .app-files #app-content.dir-drop{
 	background-color: rgba(255, 255, 255, 1)!important;
 }
 
-/* don’t require a minimum width for files table */
-#body-user #filestable {
-	min-width: initial !important;
-}
-
-/* hide size and date columns */
 table th#headerSize,
 table td.filesize,
 table th#headerDate,
@@ -24,19 +19,10 @@ table td.date {
 table td {
 	padding: 0;
 }
-/* and accordingly fix left margin of file list summary on mobile */
-.summary .info {
-	margin-left: 105px;
-}
 
 /* remove shift for multiselect bar to account for missing navigation */
 table.multiselect thead {
 	padding-left: 0;
-}
-
-/* restrict length of displayed filename to prevent overflow */
-table td.filename .nametext {
-	width: 100%;
 }
 
 #fileList a.action.action-menu img {
@@ -47,29 +33,19 @@ table td.filename .nametext {
 	margin-right: 6px;
 }
 /* hide text of the share action on mobile */
-#fileList a.action-share span {
-	display: none;
-}
-#fileList a.action.action-favorite {
-	-ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=70)" !important;
-	opacity: .7 !important;
-}
-#fileList a.action.action-favorite {
-	-ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=30)" !important;
-	opacity: .3 !important;
+/* .hidden-visually for accessbility */
+#fileList a.action-share span:not(.icon):not(.avatar) {
+	position: absolute;
+	left:-10000px;
+	top: auto;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
 }
 
-/* ellipsis on file names */
-table td.filename .nametext .innernametext {
-	max-width: calc(100% - 175px);
-}
 
 /* proper notification area for multi line messages */
 #notification-container {
-	display: -webkit-box;
-	display: -moz-box;
-	display: -ms-flexbox;
-	display: -webkit-flex;
 	display: flex;
 }
 
@@ -85,4 +61,28 @@ table td.filename .nametext .innernametext {
 	display: block !important;
 }
 
+/* ensure that it is visible over #app-content */
+table.dragshadow {
+	z-index: 1000;
+}
+
+}
+@media only screen and (max-width: 480px)  {
+	/* Only show icons */
+	table th .selectedActions {
+		float: right;
+	}
+	table th .selectedActions > a span:not(.icon) {
+		display: none;
+	}
+
+	/* Increase touch area for the icons */
+	table th .selectedActions a {
+		padding: 17px 14px;
+	}
+
+	/* Remove the margin to reduce the overlap between the name and the icons */
+	table.multiselect th .columntitle.name {
+		margin-left: 0;
+	}
 }

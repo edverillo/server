@@ -2,7 +2,10 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Michael Weimann <mail@michael-weimann.eu>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author scolebrook <scolebrook@mac.com>
  *
  * @license AGPL-3.0
@@ -17,13 +20,13 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\Core\Command\Maintenance;
 
-use \OCP\IConfig;
+use OCP\IConfig;
 
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -58,19 +61,29 @@ class Mode extends Command {
 			);
 	}
 
-	protected function execute(InputInterface $input, OutputInterface $output) {
+	protected function execute(InputInterface $input, OutputInterface $output): int {
+		$maintenanceMode = $this->config->getSystemValueBool('maintenance');
 		if ($input->getOption('on')) {
-			$this->config->setSystemValue('maintenance', true);
-			$output->writeln('Maintenance mode enabled');
+			if ($maintenanceMode === false) {
+				$this->config->setSystemValue('maintenance', true);
+				$output->writeln('Maintenance mode enabled');
+			} else {
+				$output->writeln('Maintenance mode already enabled');
+			}
 		} elseif ($input->getOption('off')) {
-			$this->config->setSystemValue('maintenance', false);
-			$output->writeln('Maintenance mode disabled');
+			if ($maintenanceMode === true) {
+				$this->config->setSystemValue('maintenance', false);
+				$output->writeln('Maintenance mode disabled');
+			} else {
+				$output->writeln('Maintenance mode already disabled');
+			}
 		} else {
-			if ($this->config->getSystemValue('maintenance', false)) {
+			if ($maintenanceMode) {
 				$output->writeln('Maintenance mode is currently enabled');
 			} else {
 				$output->writeln('Maintenance mode is currently disabled');
 			}
 		}
+		return 0;
 	}
 }

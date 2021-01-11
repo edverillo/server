@@ -2,10 +2,15 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Georg Ehrke <oc.list@georgehrke.com>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Jörn Friedrich Dreyer <jfd@butonic.de>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Noveen Sachdeva <noveen.sachdeva@research.iiit.ac.in>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -19,7 +24,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -27,9 +32,9 @@ namespace OC\BackgroundJob;
 
 use OCP\AppFramework\QueryException;
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\AutoloadNotAllowedException;
 use OCP\BackgroundJob\IJob;
 use OCP\BackgroundJob\IJobList;
-use OCP\AutoloadNotAllowedException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IConfig;
 use OCP\IDBConnection;
@@ -180,6 +185,7 @@ class JobList implements IJobList {
 		$query->select('*')
 			->from('jobs')
 			->where($query->expr()->lte('reserved_at', $query->createNamedParameter($this->timeFactory->getTime() - 12 * 3600, IQueryBuilder::PARAM_INT)))
+			->andWhere($query->expr()->lte('last_checked', $query->createNamedParameter($this->timeFactory->getTime(), IQueryBuilder::PARAM_INT)))
 			->orderBy('last_checked', 'ASC')
 			->setMaxResults(1);
 
@@ -187,28 +193,41 @@ class JobList implements IJobList {
 		$update->update('jobs')
 			->set('reserved_at', $update->createNamedParameter($this->timeFactory->getTime()))
 			->set('last_checked', $update->createNamedParameter($this->timeFactory->getTime()))
-			->where($update->expr()->eq('id', $update->createParameter('jobid')));
+			->where($update->expr()->eq('id', $update->createParameter('jobid')))
+			->andWhere($update->expr()->eq('reserved_at', $update->createParameter('reserved_at')))
+			->andWhere($update->expr()->eq('last_checked', $update->createParameter('last_checked')));
 
-		$this->connection->lockTable('jobs');
 		$result = $query->execute();
 		$row = $result->fetch();
 		$result->closeCursor();
 
 		if ($row) {
 			$update->setParameter('jobid', $row['id']);
-			$update->execute();
-			$this->connection->unlockTable();
+			$update->setParameter('reserved_at', $row['reserved_at']);
+			$update->setParameter('last_checked', $row['last_checked']);
+			$count = $update->execute();
 
+			if ($count === 0) {
+				// Background job already executed elsewhere, try again.
+				return $this->getNext();
+			}
 			$job = $this->buildJob($row);
 
 			if ($job === null) {
+				// set the last_checked to 12h in the future to not check failing jobs all over again
+				$reset = $this->connection->getQueryBuilder();
+				$reset->update('jobs')
+					->set('reserved_at', $reset->expr()->literal(0, IQueryBuilder::PARAM_INT))
+					->set('last_checked', $reset->createNamedParameter($this->timeFactory->getTime() + 12 * 3600, IQueryBuilder::PARAM_INT))
+					->where($reset->expr()->eq('id', $reset->createNamedParameter($row['id'], IQueryBuilder::PARAM_INT)));
+				$reset->execute();
+
 				// Background job from disabled app, try again.
 				return $this->getNext();
 			}
 
 			return $job;
 		} else {
-			$this->connection->unlockTable();
 			return null;
 		}
 	}
@@ -255,8 +274,8 @@ class JobList implements IJobList {
 				}
 			}
 
-			$job->setId($row['id']);
-			$job->setLastRun($row['last_run']);
+			$job->setId((int) $row['id']);
+			$job->setLastRun((int) $row['last_run']);
 			$job->setArgument(json_decode($row['argument'], true));
 			return $job;
 		} catch (AutoloadNotAllowedException $e) {
@@ -270,7 +289,7 @@ class JobList implements IJobList {
 	 *
 	 * @param IJob $job
 	 */
-	public function setLastJob($job) {
+	public function setLastJob(IJob $job) {
 		$this->unlockJob($job);
 		$this->config->setAppValue('backgroundjob', 'lastjob', $job->getId());
 	}
@@ -280,7 +299,7 @@ class JobList implements IJobList {
 	 *
 	 * @param IJob $job
 	 */
-	public function unlockJob($job) {
+	public function unlockJob(IJob $job) {
 		$query = $this->connection->getQueryBuilder();
 		$query->update('jobs')
 			->set('reserved_at', $query->expr()->literal(0, IQueryBuilder::PARAM_INT))
@@ -289,26 +308,26 @@ class JobList implements IJobList {
 	}
 
 	/**
-	 * get the id of the last ran job
-	 *
-	 * @return int
-	 * @deprecated 9.1.0 - The functionality behind the value is deprecated, it
-	 *    only tells you which job finished last, but since we now allow multiple
-	 *    executors to run in parallel, it's not used to calculate the next job.
-	 */
-	public function getLastJob() {
-		return (int) $this->config->getAppValue('backgroundjob', 'lastjob', 0);
-	}
-
-	/**
 	 * set the lastRun of $job to now
 	 *
 	 * @param IJob $job
 	 */
-	public function setLastRun($job) {
+	public function setLastRun(IJob $job) {
 		$query = $this->connection->getQueryBuilder();
 		$query->update('jobs')
 			->set('last_run', $query->createNamedParameter(time(), IQueryBuilder::PARAM_INT))
+			->where($query->expr()->eq('id', $query->createNamedParameter($job->getId(), IQueryBuilder::PARAM_INT)));
+		$query->execute();
+	}
+
+	/**
+	 * @param IJob $job
+	 * @param $timeTaken
+	 */
+	public function setExecutionTime(IJob $job, $timeTaken) {
+		$query = $this->connection->getQueryBuilder();
+		$query->update('jobs')
+			->set('execution_duration', $query->createNamedParameter($timeTaken, IQueryBuilder::PARAM_INT))
 			->where($query->expr()->eq('id', $query->createNamedParameter($job->getId(), IQueryBuilder::PARAM_INT)));
 		$query->execute();
 	}

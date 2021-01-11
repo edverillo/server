@@ -2,7 +2,12 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Pavel Krasikov <klonishe@gmail.com>
+ * @author Pierre Rudloff <contact@rudloff.pro>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Thomas Citharel <nextcloud@tcit.fr>
  *
  * @license AGPL-3.0
  *
@@ -16,13 +21,11 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCP\AppFramework\Http;
-
-use OCP\AppFramework\Http;
 
 /**
  * Class EmptyContentSecurityPolicy is a simple helper which allows applications
@@ -32,7 +35,6 @@ use OCP\AppFramework\Http;
  * As alternative with sane exemptions look at ContentSecurityPolicy
  *
  * @see \OCP\AppFramework\Http\ContentSecurityPolicy
- * @package OCP\AppFramework\Http
  * @since 9.0.0
  */
 class EmptyContentSecurityPolicy {
@@ -70,6 +72,15 @@ class EmptyContentSecurityPolicy {
 	protected $allowedFontDomains = null;
 	/** @var array Domains from which web-workers and nested browsing content can load elements */
 	protected $allowedChildSrcDomains = null;
+	/** @var array Domains which can embed this Nextcloud instance */
+	protected $allowedFrameAncestors = null;
+	/** @var array Domains from which web-workers can be loaded */
+	protected $allowedWorkerSrcDomains = null;
+	/** @var array Domains which can be used as target for forms */
+	protected $allowedFormActionDomains = null;
+
+	/** @var array Locations to report violations to */
+	protected $reportTo = null;
 
 	/**
 	 * Whether inline JavaScript snippets are allowed or forbidden
@@ -85,6 +96,7 @@ class EmptyContentSecurityPolicy {
 
 	/**
 	 * Use the according JS nonce
+	 * This method is only for CSPMiddleware, custom values are ignored in mergePolicies of ContentSecurityPolicyManager
 	 *
 	 * @param string $nonce
 	 * @return $this
@@ -100,6 +112,7 @@ class EmptyContentSecurityPolicy {
 	 * @param bool $state
 	 * @return $this
 	 * @since 8.1.0
+	 * @deprecated Eval should not be used anymore. Please update your scripts. This function will stop functioning in a future version of Nextcloud.
 	 */
 	public function allowEvalScript($state = true) {
 		$this->evalScriptAllowed = $state;
@@ -310,6 +323,7 @@ class EmptyContentSecurityPolicy {
 	 * @param string $domain Domain to whitelist. Any passed value needs to be properly sanitized.
 	 * @return $this
 	 * @since 8.1.0
+	 * @deprecated 15.0.0 use addAllowedWorkerSrcDomains or addAllowedFrameDomain
 	 */
 	public function addAllowedChildSrcDomain($domain) {
 		$this->allowedChildSrcDomains[] = $domain;
@@ -322,9 +336,93 @@ class EmptyContentSecurityPolicy {
 	 * @param string $domain
 	 * @return $this
 	 * @since 8.1.0
+	 * @deprecated 15.0.0 use the WorkerSrcDomains or FrameDomain
 	 */
 	public function disallowChildSrcDomain($domain) {
 		$this->allowedChildSrcDomains = array_diff($this->allowedChildSrcDomains, [$domain]);
+		return $this;
+	}
+
+	/**
+	 * Domains which can embed an iFrame of the Nextcloud instance
+	 *
+	 * @param string $domain
+	 * @return $this
+	 * @since 13.0.0
+	 */
+	public function addAllowedFrameAncestorDomain($domain) {
+		$this->allowedFrameAncestors[] = $domain;
+		return $this;
+	}
+
+	/**
+	 * Domains which can embed an iFrame of the Nextcloud instance
+	 *
+	 * @param string $domain
+	 * @return $this
+	 * @since 13.0.0
+	 */
+	public function disallowFrameAncestorDomain($domain) {
+		$this->allowedFrameAncestors = array_diff($this->allowedFrameAncestors, [$domain]);
+		return $this;
+	}
+
+	/**
+	 * Domain from which workers can be loaded
+	 *
+	 * @param string $domain
+	 * @return $this
+	 * @since 15.0.0
+	 */
+	public function addAllowedWorkerSrcDomain(string $domain) {
+		$this->allowedWorkerSrcDomains[] = $domain;
+		return $this;
+	}
+
+	/**
+	 * Remove domain from which workers can be loaded
+	 *
+	 * @param string $domain
+	 * @return $this
+	 * @since 15.0.0
+	 */
+	public function disallowWorkerSrcDomain(string $domain) {
+		$this->allowedWorkerSrcDomains = array_diff($this->allowedWorkerSrcDomains, [$domain]);
+		return $this;
+	}
+
+	/**
+	 * Domain to where forms can submit
+	 *
+	 * @since 17.0.0
+	 *
+	 * @return $this
+	 */
+	public function addAllowedFormActionDomain(string $domain) {
+		$this->allowedFormActionDomains[] = $domain;
+		return $this;
+	}
+
+	/**
+	 * Remove domain to where forms can submit
+	 *
+	 * @return $this
+	 * @since 17.0.0
+	 */
+	public function disallowFormActionDomain(string $domain) {
+		$this->allowedFormActionDomains = array_diff($this->allowedFormActionDomains, [$domain]);
+		return $this;
+	}
+
+	/**
+	 * Add location to report CSP violations to
+	 *
+	 * @param string $location
+	 * @return $this
+	 * @since 15.0.0
+	 */
+	public function addReportTo(string $location) {
+		$this->reportTo[] = $location;
 		return $this;
 	}
 
@@ -338,72 +436,95 @@ class EmptyContentSecurityPolicy {
 		$policy .= "base-uri 'none';";
 		$policy .= "manifest-src 'self';";
 
-		if(!empty($this->allowedScriptDomains) || $this->inlineScriptAllowed || $this->evalScriptAllowed) {
+		if (!empty($this->allowedScriptDomains) || $this->inlineScriptAllowed || $this->evalScriptAllowed) {
 			$policy .= 'script-src ';
-			if(is_string($this->useJsNonce)) {
+			if (is_string($this->useJsNonce)) {
 				$policy .= '\'nonce-'.base64_encode($this->useJsNonce).'\'';
 				$allowedScriptDomains = array_flip($this->allowedScriptDomains);
 				unset($allowedScriptDomains['\'self\'']);
 				$this->allowedScriptDomains = array_flip($allowedScriptDomains);
-				if(count($allowedScriptDomains) !== 0) {
+				if (count($allowedScriptDomains) !== 0) {
 					$policy .= ' ';
 				}
 			}
-			if(is_array($this->allowedScriptDomains)) {
+			if (is_array($this->allowedScriptDomains)) {
 				$policy .= implode(' ', $this->allowedScriptDomains);
 			}
-			if($this->inlineScriptAllowed) {
+			if ($this->inlineScriptAllowed) {
 				$policy .= ' \'unsafe-inline\'';
 			}
-			if($this->evalScriptAllowed) {
+			if ($this->evalScriptAllowed) {
 				$policy .= ' \'unsafe-eval\'';
 			}
 			$policy .= ';';
 		}
 
-		if(!empty($this->allowedStyleDomains) || $this->inlineStyleAllowed) {
+		if (!empty($this->allowedStyleDomains) || $this->inlineStyleAllowed) {
 			$policy .= 'style-src ';
-			if(is_array($this->allowedStyleDomains)) {
+			if (is_array($this->allowedStyleDomains)) {
 				$policy .= implode(' ', $this->allowedStyleDomains);
 			}
-			if($this->inlineStyleAllowed) {
+			if ($this->inlineStyleAllowed) {
 				$policy .= ' \'unsafe-inline\'';
 			}
 			$policy .= ';';
 		}
 
-		if(!empty($this->allowedImageDomains)) {
+		if (!empty($this->allowedImageDomains)) {
 			$policy .= 'img-src ' . implode(' ', $this->allowedImageDomains);
 			$policy .= ';';
 		}
 
-		if(!empty($this->allowedFontDomains)) {
+		if (!empty($this->allowedFontDomains)) {
 			$policy .= 'font-src ' . implode(' ', $this->allowedFontDomains);
 			$policy .= ';';
 		}
 
-		if(!empty($this->allowedConnectDomains)) {
+		if (!empty($this->allowedConnectDomains)) {
 			$policy .= 'connect-src ' . implode(' ', $this->allowedConnectDomains);
 			$policy .= ';';
 		}
 
-		if(!empty($this->allowedMediaDomains)) {
+		if (!empty($this->allowedMediaDomains)) {
 			$policy .= 'media-src ' . implode(' ', $this->allowedMediaDomains);
 			$policy .= ';';
 		}
 
-		if(!empty($this->allowedObjectDomains)) {
+		if (!empty($this->allowedObjectDomains)) {
 			$policy .= 'object-src ' . implode(' ', $this->allowedObjectDomains);
 			$policy .= ';';
 		}
 
-		if(!empty($this->allowedFrameDomains)) {
-			$policy .= 'frame-src ' . implode(' ', $this->allowedFrameDomains);
+		if (!empty($this->allowedFrameDomains)) {
+			$policy .= 'frame-src ';
+			$policy .= implode(' ', $this->allowedFrameDomains);
 			$policy .= ';';
 		}
 
-		if(!empty($this->allowedChildSrcDomains)) {
+		if (!empty($this->allowedChildSrcDomains)) {
 			$policy .= 'child-src ' . implode(' ', $this->allowedChildSrcDomains);
+			$policy .= ';';
+		}
+
+		if (!empty($this->allowedFrameAncestors)) {
+			$policy .= 'frame-ancestors ' . implode(' ', $this->allowedFrameAncestors);
+			$policy .= ';';
+		} else {
+			$policy .= 'frame-ancestors \'none\';';
+		}
+
+		if (!empty($this->allowedWorkerSrcDomains)) {
+			$policy .= 'worker-src ' . implode(' ', $this->allowedWorkerSrcDomains);
+			$policy .= ';';
+		}
+
+		if (!empty($this->allowedFormActionDomains)) {
+			$policy .= 'form-action ' . implode(' ', $this->allowedFormActionDomains);
+			$policy .= ';';
+		}
+
+		if (!empty($this->reportTo)) {
+			$policy .= 'report-uri ' . implode(' ', $this->reportTo);
 			$policy .= ';';
 		}
 

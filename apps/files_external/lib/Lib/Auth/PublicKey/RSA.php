@@ -2,7 +2,9 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -16,26 +18,24 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\Files_External\Lib\Auth\PublicKey;
 
-use \OCP\IL10N;
-use \OCA\Files_External\Lib\DefinitionParameter;
-use \OCA\Files_External\Lib\Auth\AuthMechanism;
-use \OCA\Files_External\Lib\StorageConfig;
-use \OCP\IConfig;
+use OCA\Files_External\Lib\Auth\AuthMechanism;
+use OCA\Files_External\Lib\DefinitionParameter;
+use OCA\Files_External\Lib\StorageConfig;
+use OCP\IConfig;
+use OCP\IL10N;
 use OCP\IUser;
-use \phpseclib\Crypt\RSA as RSACrypt;
+use phpseclib\Crypt\RSA as RSACrypt;
 
 /**
  * RSA public key authentication
  */
 class RSA extends AuthMechanism {
-
-	const CREATE_KEY_BITS = 1024;
 
 	/** @var IConfig */
 	private $config;
@@ -48,8 +48,8 @@ class RSA extends AuthMechanism {
 			->setScheme(self::SCHEME_PUBLICKEY)
 			->setText($l->t('RSA public key'))
 			->addParameters([
-				(new DefinitionParameter('user', $l->t('Username'))),
-				(new DefinitionParameter('public_key', $l->t('Public key'))),
+				new DefinitionParameter('user', $l->t('Username')),
+				new DefinitionParameter('public_key', $l->t('Public key')),
 				(new DefinitionParameter('private_key', 'private_key'))
 					->setType(DefinitionParameter::VALUE_HIDDEN),
 			])
@@ -69,14 +69,18 @@ class RSA extends AuthMechanism {
 	/**
 	 * Generate a keypair
 	 *
+	 * @param int $keyLenth
 	 * @return array ['privatekey' => $privateKey, 'publickey' => $publicKey]
 	 */
-	public function createKey() {
+	public function createKey($keyLength) {
 		$rsa = new RSACrypt();
 		$rsa->setPublicKeyFormat(RSACrypt::PUBLIC_FORMAT_OPENSSH);
 		$rsa->setPassword($this->config->getSystemValue('secret', ''));
 
-		return $rsa->createKey(self::CREATE_KEY_BITS);
-	}
+		if ($keyLength !== 1024 && $keyLength !== 2048 && $keyLength !== 4096) {
+			$keyLength = 1024;
+		}
 
+		return $rsa->createKey($keyLength);
+	}
 }

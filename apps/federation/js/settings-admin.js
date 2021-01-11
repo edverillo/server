@@ -77,7 +77,7 @@
 
             console.log("typing away");
 
-            url = $(this).val();
+            var url = $(this).val();
 
             // toggle add-button visiblity based on input length
             if ( url.length > 0 )
@@ -135,7 +135,7 @@
  
 })( jQuery );
 
-$(document).ready(function () {
+window.addEventListener('DOMContentLoaded', function () {
 
     $('#ocFederationSettings').ocFederationAddServer();
     

@@ -2,9 +2,12 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
  * @author Björn Schießle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Jan-Christoph Borchardt <hey@jancborchardt.net>
- * @author Joas Schilling <coding@schilljs.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -19,7 +22,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -31,16 +34,15 @@ use OC\Encryption\Exceptions\ModuleDoesNotExistsException;
 use OC\Files\Filesystem;
 use OC\Files\View;
 use OCP\Encryption\IEncryptionModule;
-use OCP\Files\Storage;
 use OCP\IConfig;
+use OCP\IUser;
 
 class Util {
+	public const HEADER_START = 'HBEGIN';
+	public const HEADER_END = 'HEND';
+	public const HEADER_PADDING_CHAR = '-';
 
-	const HEADER_START = 'HBEGIN';
-	const HEADER_END = 'HEND';
-	const HEADER_PADDING_CHAR = '-';
-
-	const HEADER_ENCRYPTION_MODULE_KEY = 'oc_encryption_module';
+	public const HEADER_ENCRYPTION_MODULE_KEY = 'oc_encryption_module';
 
 	/**
 	 * block size will always be 8192 for a PHP stream
@@ -86,7 +88,6 @@ class Util {
 		\OC\User\Manager $userManager,
 		\OC\Group\Manager $groupManager,
 		IConfig $config) {
-
 		$this->ocHeaderKeys = [
 			self::HEADER_ENCRYPTION_MODULE_KEY
 		];
@@ -98,6 +99,7 @@ class Util {
 
 		$this->excludedPaths[] = 'files_encryption';
 		$this->excludedPaths[] = 'appdata_' . $config->getSystemValue('instanceid', null);
+		$this->excludedPaths[] = 'files_external';
 	}
 
 	/**
@@ -161,8 +163,8 @@ class Util {
 	 * @return array with list of files relative to the users files folder
 	 */
 	public function getAllFiles($dir) {
-		$result = array();
-		$dirList = array($dir);
+		$result = [];
+		$dirList = [$dir];
 
 		while ($dirList) {
 			$dir = array_pop($dirList);
@@ -172,10 +174,9 @@ class Util {
 				if ($c->getType() === 'dir') {
 					$dirList[] = $c->getPath();
 				} else {
-					$result[] =  $c->getPath();
+					$result[] = $c->getPath();
 				}
 			}
-
 		}
 
 		return $result;
@@ -222,7 +223,6 @@ class Util {
 	 * @throws \BadMethodCallException
 	 */
 	public function getUidAndFilename($path) {
-
 		$parts = explode('/', $path);
 		$uid = '';
 		if (count($parts) > 2) {
@@ -236,8 +236,7 @@ class Util {
 
 		$ownerPath = implode('/', array_slice($parts, 2));
 
-		return array($uid, Filesystem::normalizePath($ownerPath));
-
+		return [$uid, Filesystem::normalizePath($ownerPath)];
 	}
 
 	/**
@@ -249,28 +248,29 @@ class Util {
 	public function stripPartialFileExtension($path) {
 		$extension = pathinfo($path, PATHINFO_EXTENSION);
 
-		if ( $extension === 'part') {
-
+		if ($extension === 'part') {
 			$newLength = strlen($path) - 5; // 5 = strlen(".part")
 			$fPath = substr($path, 0, $newLength);
 
 			// if path also contains a transaction id, we remove it too
 			$extension = pathinfo($fPath, PATHINFO_EXTENSION);
-			if(substr($extension, 0, 12) === 'ocTransferId') { // 12 = strlen("ocTransferId")
-				$newLength = strlen($fPath) - strlen($extension) -1;
+			if (substr($extension, 0, 12) === 'ocTransferId') { // 12 = strlen("ocTransferId")
+				$newLength = strlen($fPath) - strlen($extension) - 1;
 				$fPath = substr($fPath, 0, $newLength);
 			}
 			return $fPath;
-
 		} else {
 			return $path;
 		}
 	}
 
 	public function getUserWithAccessToMountPoint($users, $groups) {
-		$result = array();
+		$result = [];
 		if (in_array('all', $users)) {
-			$result = \OCP\User::getUsers();
+			$users = $this->userManager->search('', null, null);
+			$result = array_map(function (IUser $user) {
+				return $user->getUID();
+			}, $users);
 		} else {
 			$result = array_merge($result, $users);
 
@@ -299,7 +299,7 @@ class Util {
 	 */
 	public function isSystemWideMountPoint($path, $uid) {
 		if (\OCP\App::isEnabled("files_external")) {
-			$mounts = \OC_Mount_Config::getSystemMountPoints();
+			$mounts = \OCA\Files_External\MountConfig::getSystemMountPoints();
 			foreach ($mounts as $mount) {
 				if (strpos($path, '/files/' . $mount['mountpoint']) === 0) {
 					if ($this->isMountPointApplicableToUser($mount, $uid)) {
@@ -319,7 +319,7 @@ class Util {
 	 * @return boolean
 	 */
 	private function isMountPointApplicableToUser($mount, $uid) {
-		$acceptedUids = array('all', $uid);
+		$acceptedUids = ['all', $uid];
 		// check if mount point is applicable for the user
 		$intersection = array_intersect($acceptedUids, $mount['applicable']['users']);
 		if (!empty($intersection)) {
@@ -365,7 +365,6 @@ class Util {
 			// detect user specific folders
 			if ($this->userManager->userExists($root[1])
 				&& in_array($root[2], $this->excludedPaths)) {
-
 				return true;
 			}
 		}
@@ -381,7 +380,7 @@ class Util {
 	public function recoveryEnabled($uid) {
 		$enabled = $this->config->getUserValue($uid, 'encryption', 'recovery_enabled', '0');
 
-		return ($enabled === '1') ? true : false;
+		return $enabled === '1';
 	}
 
 	/**
@@ -401,5 +400,4 @@ class Util {
 	public function getKeyStorageRoot() {
 		return $this->config->getAppValue('core', 'encryption_key_storage_root', '');
 	}
-
 }

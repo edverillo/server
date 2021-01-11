@@ -31,7 +31,7 @@ class QuoteHelperTest extends \Test\TestCase {
 	/** @var QuoteHelper */
 	protected $helper;
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->helper = new QuoteHelper();
@@ -65,7 +65,7 @@ class QuoteHelperTest extends \Test\TestCase {
 	public function dataQuoteColumnNames() {
 		return [
 			// Single case
-			['d.column', 'd.`column`'],
+			['d.column', '`d`.`column`'],
 			['column', '`column`'],
 			[new Literal('literal'), 'literal'],
 			[new Literal(1), '1'],

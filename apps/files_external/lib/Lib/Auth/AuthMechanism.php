@@ -2,8 +2,10 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -17,17 +19,17 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\Files_External\Lib\Auth;
 
-use \OCA\Files_External\Lib\StorageConfig;
-use \OCA\Files_External\Lib\VisibilityTrait;
-use \OCA\Files_External\Lib\IdentifierTrait;
-use \OCA\Files_External\Lib\FrontendDefinitionTrait;
-use \OCA\Files_External\Lib\StorageModifierTrait;
+use OCA\Files_External\Lib\FrontendDefinitionTrait;
+use OCA\Files_External\Lib\IdentifierTrait;
+use OCA\Files_External\Lib\StorageConfig;
+use OCA\Files_External\Lib\StorageModifierTrait;
+use OCA\Files_External\Lib\VisibilityTrait;
 
 /**
  * Authentication mechanism
@@ -50,15 +52,15 @@ use \OCA\Files_External\Lib\StorageModifierTrait;
  *      Object can affect storage mounting
  */
 class AuthMechanism implements \JsonSerializable {
-
 	/** Standard authentication schemes */
-	const SCHEME_NULL = 'null';
-	const SCHEME_BUILTIN = 'builtin';
-	const SCHEME_PASSWORD = 'password';
-	const SCHEME_OAUTH1 = 'oauth1';
-	const SCHEME_OAUTH2 = 'oauth2';
-	const SCHEME_PUBLICKEY = 'publickey';
-	const SCHEME_OPENSTACK = 'openstack';
+	public const SCHEME_NULL = 'null';
+	public const SCHEME_BUILTIN = 'builtin';
+	public const SCHEME_PASSWORD = 'password';
+	public const SCHEME_OAUTH1 = 'oauth1';
+	public const SCHEME_OAUTH2 = 'oauth2';
+	public const SCHEME_PUBLICKEY = 'publickey';
+	public const SCHEME_OPENSTACK = 'openstack';
+	public const SCHEME_SMB = 'smb';
 
 	use VisibilityTrait;
 	use FrontendDefinitionTrait;
@@ -80,7 +82,7 @@ class AuthMechanism implements \JsonSerializable {
 
 	/**
 	 * @param string $scheme
-	 * @return self
+	 * @return $this
 	 */
 	public function setScheme($scheme) {
 		$this->scheme = $scheme;
@@ -117,5 +119,4 @@ class AuthMechanism implements \JsonSerializable {
 
 		return $this->validateStorageDefinition($storage);
 	}
-
 }

@@ -1,8 +1,14 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Joas Schilling <coding@schilljs.com>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -16,7 +22,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -28,23 +34,23 @@ use OCP\IConfig;
 use Test\TestCase;
 
 class ResetTokenBackgroundJobTest extends TestCase {
-	/** @var IConfig */
+	/** @var IConfig|\PHPUnit\Framework\MockObject\MockObject */
 	private $config;
+	/** @var ITimeFactory|\PHPUnit\Framework\MockObject\MockObject */
+	private $timeFactory;
 	/** @var ResetTokenBackgroundJob */
 	private $resetTokenBackgroundJob;
-	/** @var ITimeFactory */
-	private $timeFactory;
 
-	public function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
-		$this->config = $this->getMockBuilder('\\OCP\\IConfig')->getMock();
-		$this->timeFactory = $this->getMockBuilder('\\OCP\\AppFramework\\Utility\\ITimeFactory')->getMock();
+		$this->config = $this->createMock(IConfig::class);
+		$this->timeFactory = $this->createMock(ITimeFactory::class);
 		$this->resetTokenBackgroundJob = new ResetTokenBackgroundJob($this->config, $this->timeFactory);
 	}
 
 	public function testRunWithNotExpiredToken() {
 		$this->timeFactory
-			->expects($this->any())
+			->expects($this->atLeastOnce())
 			->method('getTime')
 			->willReturn(123);
 		$this->config
@@ -53,10 +59,9 @@ class ResetTokenBackgroundJobTest extends TestCase {
 			->with('core', 'updater.secret.created', 123);
 		$this->config
 			->expects($this->never())
-			->method('deleteSystemValue')
-			->with('updater.secret');
+			->method('deleteSystemValue');
 
-		$this->invokePrivate($this->resetTokenBackgroundJob, 'run', ['']);
+		static::invokePrivate($this->resetTokenBackgroundJob, 'run', [null]);
 	}
 
 	public function testRunWithExpiredToken() {
@@ -77,6 +82,6 @@ class ResetTokenBackgroundJobTest extends TestCase {
 			->method('deleteSystemValue')
 			->with('updater.secret');
 
-		$this->invokePrivate($this->resetTokenBackgroundJob, 'run', ['']);
+		static::invokePrivate($this->resetTokenBackgroundJob, 'run', [null]);
 	}
 }

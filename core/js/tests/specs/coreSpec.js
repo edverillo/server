@@ -31,235 +31,17 @@ describe('Core base tests', function() {
 	});
 	describe('Base values', function() {
 		it('Sets webroots', function() {
-			expect(OC.webroot).toBeDefined();
+			expect(OC.getRootPath()).toBeDefined();
 			expect(OC.appswebroots).toBeDefined();
-		});
-	});
-	describe('basename', function() {
-		it('Returns the nothing if no file name given', function() {
-			expect(OC.basename('')).toEqual('');
-		});
-		it('Returns the nothing if dir is root', function() {
-			expect(OC.basename('/')).toEqual('');
-		});
-		it('Returns the same name if no path given', function() {
-			expect(OC.basename('some name.txt')).toEqual('some name.txt');
-		});
-		it('Returns the base name if root path given', function() {
-			expect(OC.basename('/some name.txt')).toEqual('some name.txt');
-		});
-		it('Returns the base name if double root path given', function() {
-			expect(OC.basename('//some name.txt')).toEqual('some name.txt');
-		});
-		it('Returns the base name if subdir given without root', function() {
-			expect(OC.basename('subdir/some name.txt')).toEqual('some name.txt');
-		});
-		it('Returns the base name if subdir given with root', function() {
-			expect(OC.basename('/subdir/some name.txt')).toEqual('some name.txt');
-		});
-		it('Returns the base name if subdir given with double root', function() {
-			expect(OC.basename('//subdir/some name.txt')).toEqual('some name.txt');
-		});
-		it('Returns the base name if subdir has dot', function() {
-			expect(OC.basename('/subdir.dat/some name.txt')).toEqual('some name.txt');
-		});
-		it('Returns dot if file name is dot', function() {
-			expect(OC.basename('/subdir/.')).toEqual('.');
-		});
-		// TODO: fix the source to make it work like PHP's basename
-		it('Returns the dir itself if no file name given', function() {
-			// TODO: fix the source to make it work like PHP's dirname
-			// expect(OC.basename('subdir/')).toEqual('subdir');
-			expect(OC.basename('subdir/')).toEqual('');
-		});
-		it('Returns the dir itself if no file name given with root', function() {
-			// TODO: fix the source to make it work like PHP's dirname
-			// expect(OC.basename('/subdir/')).toEqual('subdir');
-			expect(OC.basename('/subdir/')).toEqual('');
-		});
-	});
-	describe('dirname', function() {
-		it('Returns the nothing if no file name given', function() {
-			expect(OC.dirname('')).toEqual('');
-		});
-		it('Returns the root if dir is root', function() {
-			// TODO: fix the source to make it work like PHP's dirname
-			// expect(OC.dirname('/')).toEqual('/');
-			expect(OC.dirname('/')).toEqual('');
-		});
-		it('Returns the root if dir is double root', function() {
-			// TODO: fix the source to make it work like PHP's dirname
-			// expect(OC.dirname('//')).toEqual('/');
-			expect(OC.dirname('//')).toEqual('/'); // oh no...
-		});
-		it('Returns dot if dir is dot', function() {
-			expect(OC.dirname('.')).toEqual('.');
-		});
-		it('Returns dot if no root given', function() {
-			// TODO: fix the source to make it work like PHP's dirname
-			// expect(OC.dirname('some dir')).toEqual('.');
-			expect(OC.dirname('some dir')).toEqual('some dir'); // oh no...
-		});
-		it('Returns the dir name if file name and root path given', function() {
-			// TODO: fix the source to make it work like PHP's dirname
-			// expect(OC.dirname('/some name.txt')).toEqual('/');
-			expect(OC.dirname('/some name.txt')).toEqual('');
-		});
-		it('Returns the dir name if double root path given', function() {
-			expect(OC.dirname('//some name.txt')).toEqual('/'); // how lucky...
-		});
-		it('Returns the dir name if subdir given without root', function() {
-			expect(OC.dirname('subdir/some name.txt')).toEqual('subdir');
-		});
-		it('Returns the dir name if subdir given with root', function() {
-			expect(OC.dirname('/subdir/some name.txt')).toEqual('/subdir');
-		});
-		it('Returns the dir name if subdir given with double root', function() {
-			// TODO: fix the source to make it work like PHP's dirname
-			// expect(OC.dirname('//subdir/some name.txt')).toEqual('/subdir');
-			expect(OC.dirname('//subdir/some name.txt')).toEqual('//subdir'); // oh...
-		});
-		it('Returns the dir name if subdir has dot', function() {
-			expect(OC.dirname('/subdir.dat/some name.txt')).toEqual('/subdir.dat');
-		});
-		it('Returns the dir name if file name is dot', function() {
-			expect(OC.dirname('/subdir/.')).toEqual('/subdir');
-		});
-		it('Returns the dir name if no file name given', function() {
-			expect(OC.dirname('subdir/')).toEqual('subdir');
-		});
-		it('Returns the dir name if no file name given with root', function() {
-			expect(OC.dirname('/subdir/')).toEqual('/subdir');
-		});
-	});
-	describe('escapeHTML', function() {
-		it('Returns nothing if no string was given', function() {
-			expect(escapeHTML('')).toEqual('');
-		});
-		it('Returns a sanitized string if a string containing HTML is given', function() {
-			expect(escapeHTML('There needs to be a <script>alert(\"Unit\" + \'test\')</script> for it!')).toEqual('There needs to be a &lt;script&gt;alert(&quot;Unit&quot; + &#039;test&#039;)&lt;/script&gt; for it!');
-		});
-		it('Returns the string without modification if no potentially dangerous character is passed.', function() {
-			expect(escapeHTML('This is a good string without HTML.')).toEqual('This is a good string without HTML.');
-		});
-	});
-	describe('joinPaths', function() {
-		it('returns empty string with no or empty arguments', function() {
-			expect(OC.joinPaths()).toEqual('');
-			expect(OC.joinPaths('')).toEqual('');
-			expect(OC.joinPaths('', '')).toEqual('');
-		});
-		it('returns joined path sections', function() {
-			expect(OC.joinPaths('abc')).toEqual('abc');
-			expect(OC.joinPaths('abc', 'def')).toEqual('abc/def');
-			expect(OC.joinPaths('abc', 'def', 'ghi')).toEqual('abc/def/ghi');
-		});
-		it('keeps leading slashes', function() {
-			expect(OC.joinPaths('/abc')).toEqual('/abc');
-			expect(OC.joinPaths('/abc', '')).toEqual('/abc');
-			expect(OC.joinPaths('', '/abc')).toEqual('/abc');
-			expect(OC.joinPaths('/abc', 'def')).toEqual('/abc/def');
-			expect(OC.joinPaths('/abc', 'def', 'ghi')).toEqual('/abc/def/ghi');
-		});
-		it('keeps trailing slashes', function() {
-			expect(OC.joinPaths('', 'abc/')).toEqual('abc/');
-			expect(OC.joinPaths('abc/')).toEqual('abc/');
-			expect(OC.joinPaths('abc/', '')).toEqual('abc/');
-			expect(OC.joinPaths('abc', 'def/')).toEqual('abc/def/');
-			expect(OC.joinPaths('abc', 'def', 'ghi/')).toEqual('abc/def/ghi/');
-		});
-		it('splits paths in specified strings and discards extra slashes', function() {
-			expect(OC.joinPaths('//abc//')).toEqual('/abc/');
-			expect(OC.joinPaths('//abc//def//')).toEqual('/abc/def/');
-			expect(OC.joinPaths('//abc//', '//def//')).toEqual('/abc/def/');
-			expect(OC.joinPaths('//abc//', '//def//', '//ghi//')).toEqual('/abc/def/ghi/');
-			expect(OC.joinPaths('//abc//def//', '//ghi//jkl/mno/', '//pqr//'))
-				.toEqual('/abc/def/ghi/jkl/mno/pqr/');
-			expect(OC.joinPaths('/abc', '/def')).toEqual('/abc/def');
-			expect(OC.joinPaths('/abc/', '/def')).toEqual('/abc/def');
-			expect(OC.joinPaths('/abc/', 'def')).toEqual('/abc/def');
-		});
-		it('discards empty sections', function() {
-			expect(OC.joinPaths('abc', '', 'def')).toEqual('abc/def');
-		});
-		it('returns root if only slashes', function() {
-			expect(OC.joinPaths('//')).toEqual('/');
-			expect(OC.joinPaths('/', '/')).toEqual('/');
-			expect(OC.joinPaths('/', '//', '/')).toEqual('/');
-		});
-	});
-	describe('isSamePath', function() {
-		it('recognizes empty paths are equal', function() {
-			expect(OC.isSamePath('', '')).toEqual(true);
-			expect(OC.isSamePath('/', '')).toEqual(true);
-			expect(OC.isSamePath('//', '')).toEqual(true);
-			expect(OC.isSamePath('/', '/')).toEqual(true);
-			expect(OC.isSamePath('/', '//')).toEqual(true);
-		});
-		it('recognizes path with single sections as equal regardless of extra slashes', function() {
-			expect(OC.isSamePath('abc', 'abc')).toEqual(true);
-			expect(OC.isSamePath('/abc', 'abc')).toEqual(true);
-			expect(OC.isSamePath('//abc', 'abc')).toEqual(true);
-			expect(OC.isSamePath('abc', '/abc')).toEqual(true);
-			expect(OC.isSamePath('abc/', 'abc')).toEqual(true);
-			expect(OC.isSamePath('abc/', 'abc/')).toEqual(true);
-			expect(OC.isSamePath('/abc/', 'abc/')).toEqual(true);
-			expect(OC.isSamePath('/abc/', '/abc/')).toEqual(true);
-			expect(OC.isSamePath('//abc/', '/abc/')).toEqual(true);
-			expect(OC.isSamePath('//abc//', '/abc/')).toEqual(true);
-
-			expect(OC.isSamePath('abc', 'def')).toEqual(false);
-			expect(OC.isSamePath('/abc', 'def')).toEqual(false);
-			expect(OC.isSamePath('//abc', 'def')).toEqual(false);
-			expect(OC.isSamePath('abc', '/def')).toEqual(false);
-			expect(OC.isSamePath('abc/', 'def')).toEqual(false);
-			expect(OC.isSamePath('abc/', 'def/')).toEqual(false);
-			expect(OC.isSamePath('/abc/', 'def/')).toEqual(false);
-			expect(OC.isSamePath('/abc/', '/def/')).toEqual(false);
-			expect(OC.isSamePath('//abc/', '/def/')).toEqual(false);
-			expect(OC.isSamePath('//abc//', '/def/')).toEqual(false);
-		});
-		it('recognizes path with multiple sections as equal regardless of extra slashes', function() {
-			expect(OC.isSamePath('abc/def', 'abc/def')).toEqual(true);
-			expect(OC.isSamePath('/abc/def', 'abc/def')).toEqual(true);
-			expect(OC.isSamePath('abc/def', '/abc/def')).toEqual(true);
-			expect(OC.isSamePath('abc/def/', '/abc/def/')).toEqual(true);
-			expect(OC.isSamePath('/abc/def/', '/abc/def/')).toEqual(true);
-			expect(OC.isSamePath('/abc/def/', 'abc/def/')).toEqual(true);
-			expect(OC.isSamePath('//abc/def/', 'abc/def/')).toEqual(true);
-			expect(OC.isSamePath('//abc/def//', 'abc/def/')).toEqual(true);
-
-			expect(OC.isSamePath('abc/def', 'abc/ghi')).toEqual(false);
-			expect(OC.isSamePath('/abc/def', 'abc/ghi')).toEqual(false);
-			expect(OC.isSamePath('abc/def', '/abc/ghi')).toEqual(false);
-			expect(OC.isSamePath('abc/def/', '/abc/ghi/')).toEqual(false);
-			expect(OC.isSamePath('/abc/def/', '/abc/ghi/')).toEqual(false);
-			expect(OC.isSamePath('/abc/def/', 'abc/ghi/')).toEqual(false);
-			expect(OC.isSamePath('//abc/def/', 'abc/ghi/')).toEqual(false);
-			expect(OC.isSamePath('//abc/def//', 'abc/ghi/')).toEqual(false);
-		});
-		it('recognizes path entries with dot', function() {
-			expect(OC.isSamePath('.', '')).toEqual(true);
-			expect(OC.isSamePath('.', '.')).toEqual(true);
-			expect(OC.isSamePath('.', '/')).toEqual(true);
-			expect(OC.isSamePath('/.', '/')).toEqual(true);
-			expect(OC.isSamePath('/./', '/')).toEqual(true);
-			expect(OC.isSamePath('/./', '/.')).toEqual(true);
-			expect(OC.isSamePath('/./', '/./')).toEqual(true);
-			expect(OC.isSamePath('/./', '/./')).toEqual(true);
-
-			expect(OC.isSamePath('a/./b', 'a/b')).toEqual(true);
-			expect(OC.isSamePath('a/b/.', 'a/b')).toEqual(true);
-			expect(OC.isSamePath('./a/b', 'a/b')).toEqual(true);
 		});
 	});
 	describe('filePath', function() {
 		beforeEach(function() {
 			OC.webroot = 'http://localhost';
-			OC.appswebroots['files'] = OC.webroot + '/apps3/files';
+			OC.appswebroots.files = OC.getRootPath() + '/apps3/files';
 		});
 		afterEach(function() {
-			delete OC.appswebroots['files'];
+			delete OC.appswebroots.files;
 		});
 
 		it('Uses a direct link for css and images,' , function() {
@@ -275,7 +57,7 @@ describe('Core base tests', function() {
 	});
 	describe('Link functions', function() {
 		var TESTAPP = 'testapp';
-		var TESTAPP_ROOT = OC.webroot + '/appsx/testapp';
+		var TESTAPP_ROOT = OC.getRootPath() + '/appsx/testapp';
 
 		beforeEach(function() {
 			OC.appswebroots[TESTAPP] = TESTAPP_ROOT;
@@ -285,22 +67,22 @@ describe('Core base tests', function() {
 			delete OC.appswebroots[TESTAPP];
 		});
 		it('Generates correct links for core apps', function() {
-			expect(OC.linkTo('core', 'somefile.php')).toEqual(OC.webroot + '/core/somefile.php');
-			expect(OC.linkTo('admin', 'somefile.php')).toEqual(OC.webroot + '/admin/somefile.php');
+			expect(OC.linkTo('core', 'somefile.php')).toEqual(OC.getRootPath() + '/core/somefile.php');
+			expect(OC.linkTo('admin', 'somefile.php')).toEqual(OC.getRootPath() + '/admin/somefile.php');
 		});
 		it('Generates correct links for regular apps', function() {
-			expect(OC.linkTo(TESTAPP, 'somefile.php')).toEqual(OC.webroot + '/index.php/apps/' + TESTAPP + '/somefile.php');
+			expect(OC.linkTo(TESTAPP, 'somefile.php')).toEqual(OC.getRootPath() + '/index.php/apps/' + TESTAPP + '/somefile.php');
 		});
 		it('Generates correct remote links', function() {
-			expect(OC.linkToRemote('webdav')).toEqual(window.location.protocol + '//' + window.location.host + OC.webroot + '/remote.php/webdav');
+			expect(OC.linkToRemote('webdav')).toEqual(window.location.protocol + '//' + window.location.host + OC.getRootPath() + '/remote.php/webdav');
 		});
 		describe('Images', function() {
 			it('Generates image path with given extension', function() {
-				expect(OC.imagePath('core', 'somefile.jpg')).toEqual(OC.webroot + '/core/img/somefile.jpg');
+				expect(OC.imagePath('core', 'somefile.jpg')).toEqual(OC.getRootPath() + '/core/img/somefile.jpg');
 				expect(OC.imagePath(TESTAPP, 'somefile.jpg')).toEqual(TESTAPP_ROOT + '/img/somefile.jpg');
 			});
 			it('Generates image path with svg extension', function() {
-				expect(OC.imagePath('core', 'somefile')).toEqual(OC.webroot + '/core/img/somefile.svg');
+				expect(OC.imagePath('core', 'somefile')).toEqual(OC.getRootPath() + '/core/img/somefile.svg');
 				expect(OC.imagePath(TESTAPP, 'somefile')).toEqual(TESTAPP_ROOT + '/img/somefile.svg');
 			});
 		});
@@ -345,39 +127,35 @@ describe('Core base tests', function() {
 	describe('Session heartbeat', function() {
 		var clock,
 			oldConfig,
-			routeStub,
 			counter;
 
 		beforeEach(function() {
 			clock = sinon.useFakeTimers();
-			oldConfig = window.oc_config;
-			routeStub = sinon.stub(OC, 'generateUrl').returns('/heartbeat');
+			oldConfig = OC.config;
 			counter = 0;
 
 			fakeServer.autoRespond = true;
 			fakeServer.autoRespondAfter = 0;
-			fakeServer.respondWith(/\/heartbeat/, function(xhr) {
+			fakeServer.respondWith(/\/csrftoken/, function(xhr) {
 				counter++;
-				xhr.respond(200, {'Content-Type': 'application/json'}, '{}');
+				xhr.respond(200, {'Content-Type': 'application/json'}, '{"token": "pgBEsb3MzTb1ZPd2mfDZbQ6/0j3OrXHMEZrghHcOkg8=:3khw5PSa+wKQVo4f26exFD3nplud9ECjJ8/Y5zk5/k4="}');
 			});
 			$(document).off('ajaxComplete'); // ignore previously registered heartbeats
 		});
 		afterEach(function() {
 			clock.restore();
 			/* jshint camelcase: false */
-			window.oc_config = oldConfig;
-			routeStub.restore();
+			OC.config = oldConfig;
 			$(document).off('ajaxError');
 			$(document).off('ajaxComplete');
 		});
 		it('sends heartbeat half the session lifetime when heartbeat enabled', function() {
 			/* jshint camelcase: false */
-			window.oc_config = {
+			OC.config = {
 				session_keepalive: true,
 				session_lifetime: 300
 			};
 			window.initCore();
-			expect(routeStub.calledWith('/heartbeat')).toEqual(true);
 
 			expect(counter).toEqual(0);
 
@@ -399,12 +177,11 @@ describe('Core base tests', function() {
 		});
 		it('does not send heartbeat when heartbeat disabled', function() {
 			/* jshint camelcase: false */
-			window.oc_config = {
+			OC.config = {
 				session_keepalive: false,
 				session_lifetime: 300
 			};
 			window.initCore();
-			expect(routeStub.notCalled).toEqual(true);
 
 			expect(counter).toEqual(0);
 
@@ -416,7 +193,7 @@ describe('Core base tests', function() {
 		it('limits the heartbeat between one minute and one day', function() {
 			/* jshint camelcase: false */
 			var setIntervalStub = sinon.stub(window, 'setInterval');
-			window.oc_config = {
+			OC.config = {
 				session_keepalive: true,
 				session_lifetime: 5
 			};
@@ -424,7 +201,7 @@ describe('Core base tests', function() {
 			expect(setIntervalStub.getCall(0).args[1]).toEqual(60 * 1000);
 			setIntervalStub.reset();
 
-			window.oc_config = {
+			OC.config = {
 				session_keepalive: true,
 				session_lifetime: 48 * 3600
 			};
@@ -502,23 +279,23 @@ describe('Core base tests', function() {
 	});
 	describe('Generate Url', function() {
 		it('returns absolute urls', function() {
-			expect(OC.generateUrl('heartbeat')).toEqual(OC.webroot + '/index.php/heartbeat');
-			expect(OC.generateUrl('/heartbeat')).toEqual(OC.webroot + '/index.php/heartbeat');
+			expect(OC.generateUrl('csrftoken')).toEqual(OC.getRootPath() + '/index.php/csrftoken');
+			expect(OC.generateUrl('/csrftoken')).toEqual(OC.getRootPath() + '/index.php/csrftoken');
 		});
 		it('substitutes parameters which are escaped by default', function() {
-			expect(OC.generateUrl('apps/files/download/{file}', {file: '<">ImAnUnescapedString/!'})).toEqual(OC.webroot + '/index.php/apps/files/download/%3C%22%3EImAnUnescapedString%2F!');
+			expect(OC.generateUrl('apps/files/download/{file}', {file: '<">ImAnUnescapedString/!'})).toEqual(OC.getRootPath() + '/index.php/apps/files/download/%3C%22%3EImAnUnescapedString%2F!');
 		});
 		it('substitutes parameters which can also be unescaped via option flag', function() {
-			expect(OC.generateUrl('apps/files/download/{file}', {file: 'subfolder/Welcome.txt'}, {escape: false})).toEqual(OC.webroot + '/index.php/apps/files/download/subfolder/Welcome.txt');
+			expect(OC.generateUrl('apps/files/download/{file}', {file: 'subfolder/Welcome.txt'}, {escape: false})).toEqual(OC.getRootPath() + '/index.php/apps/files/download/subfolder/Welcome.txt');
 		});
 		it('substitutes multiple parameters which are escaped by default', function() {
-			expect(OC.generateUrl('apps/files/download/{file}/{id}', {file: '<">ImAnUnescapedString/!', id: 5})).toEqual(OC.webroot + '/index.php/apps/files/download/%3C%22%3EImAnUnescapedString%2F!/5');
+			expect(OC.generateUrl('apps/files/download/{file}/{id}', {file: '<">ImAnUnescapedString/!', id: 5})).toEqual(OC.getRootPath() + '/index.php/apps/files/download/%3C%22%3EImAnUnescapedString%2F!/5');
 		});
 		it('substitutes multiple parameters which can also be unescaped via option flag', function() {
-			expect(OC.generateUrl('apps/files/download/{file}/{id}', {file: 'subfolder/Welcome.txt', id: 5}, {escape: false})).toEqual(OC.webroot + '/index.php/apps/files/download/subfolder/Welcome.txt/5');
+			expect(OC.generateUrl('apps/files/download/{file}/{id}', {file: 'subfolder/Welcome.txt', id: 5}, {escape: false})).toEqual(OC.getRootPath() + '/index.php/apps/files/download/subfolder/Welcome.txt/5');
 		});
 		it('doesnt error out with no params provided', function  () {
-			expect(OC.generateUrl('apps/files/download{file}')).toEqual(OC.webroot + '/index.php/apps/files/download%7Bfile%7D');
+			expect(OC.generateUrl('apps/files/download{file}')).toEqual(OC.getRootPath() + '/index.php/apps/files/download%7Bfile%7D');
 		});
 	});
 	describe('Main menu mobile toggle', function() {
@@ -550,6 +327,10 @@ describe('Core base tests', function() {
 		});
 		it('Clicking menu toggle toggles navigation in', function() {
 			window.initCore();
+			// fore show more apps icon since otherwise it would be hidden since no icons are available
+			clock.tick(1 * 1000);
+			$('#more-apps').show();
+
 			expect($navigation.is(':visible')).toEqual(false);
 			$toggle.click();
 			clock.tick(1 * 1000);
@@ -560,36 +341,6 @@ describe('Core base tests', function() {
 		});
 	});
 	describe('Util', function() {
-		describe('humanFileSize', function() {
-			it('renders file sizes with the correct unit', function() {
-				var data = [
-					[0, '0 B'],
-					["0", '0 B'],
-					["A", 'NaN B'],
-					[125, '125 B'],
-					[128000, '125 KB'],
-					[128000000, '122.1 MB'],
-					[128000000000, '119.2 GB'],
-					[128000000000000, '116.4 TB']
-				];
-				for (var i = 0; i < data.length; i++) {
-					expect(OC.Util.humanFileSize(data[i][0])).toEqual(data[i][1]);
-				}
-			});
-			it('renders file sizes with the correct unit for small sizes', function() {
-				var data = [
-					[0, '0 KB'],
-					[125, '< 1 KB'],
-					[128000, '125 KB'],
-					[128000000, '122.1 MB'],
-					[128000000000, '119.2 GB'],
-					[128000000000000, '116.4 TB']
-				];
-				for (var i = 0; i < data.length; i++) {
-					expect(OC.Util.humanFileSize(data[i][0], true)).toEqual(data[i][1]);
-				}
-			});
-		});
 		describe('computerFileSize', function() {
 			it('correctly parses file sizes from a human readable formated string', function() {
 				var data = [
@@ -838,181 +589,214 @@ describe('Core base tests', function() {
 		});
 	});
 	describe('Notifications', function() {
-		var showSpy;
 		var showHtmlSpy;
-		var hideSpy;
 		var clock;
+
+		/**
+		 * Returns the HTML or plain text of the given notification row.
+		 *
+		 * This is needed to ignore the close button that is added to the
+		 * notification row after the text.
+		 */
+		var getNotificationText = function($node) {
+			return $node.contents()[0].outerHTML ||
+					$node.contents()[0].nodeValue;
+		}
 
 		beforeEach(function() {
 			clock = sinon.useFakeTimers();
-			showSpy = sinon.spy(OC.Notification, 'show');
-			showHtmlSpy = sinon.spy(OC.Notification, 'showHtml');
-			hideSpy = sinon.spy(OC.Notification, 'hide');
-
-			$('#testArea').append('<div id="notification"></div>');
 		});
 		afterEach(function() {
-			showSpy.restore();
-			showHtmlSpy.restore();
-			hideSpy.restore();
 			// jump past animations
 			clock.tick(10000);
 			clock.restore();
+			$('body .toastify').remove();
 		});
 		describe('showTemporary', function() {
 			it('shows a plain text notification with default timeout', function() {
-				var $row = OC.Notification.showTemporary('My notification test');
+				OC.Notification.showTemporary('My notification test');
 
-				expect(showSpy.calledOnce).toEqual(true);
-				expect(showSpy.firstCall.args[0]).toEqual('My notification test');
-				expect(showSpy.firstCall.args[1]).toEqual({isHTML: false, timeout: 7});
-
-				expect($row).toBeDefined();
-				expect($row.text()).toEqual('My notification test');
+				var $row = $('body .toastify');
+				expect($row.length).toEqual(1);
+				expect(getNotificationText($row)).toEqual('My notification test');
 			});
 			it('shows a HTML notification with default timeout', function() {
-				var $row = OC.Notification.showTemporary('<a>My notification test</a>', { isHTML: true });
+				OC.Notification.showTemporary('<a>My notification test</a>', { isHTML: true });
 
-				expect(showSpy.notCalled).toEqual(true);
-				expect(showHtmlSpy.calledOnce).toEqual(true);
-				expect(showHtmlSpy.firstCall.args[0]).toEqual('<a>My notification test</a>');
-				expect(showHtmlSpy.firstCall.args[1]).toEqual({isHTML: true, timeout: 7});
-
-				expect($row).toBeDefined();
-				expect($row.text()).toEqual('My notification test');
+				var $row = $('body .toastify');
+				expect($row.length).toEqual(1);
+				expect(getNotificationText($row)).toEqual('<a>My notification test</a>');
 			});
 			it('hides itself after 7 seconds', function() {
-				var $row = OC.Notification.showTemporary('');
+				OC.Notification.showTemporary('');
+
+				var $row = $('body .toastify');
+				expect($row.length).toEqual(1);
 
 				// travel in time +7000 milliseconds
-				clock.tick(7000);
+				clock.tick(7500);
 
-				expect(hideSpy.calledOnce).toEqual(true);
-				expect(hideSpy.firstCall.args[0]).toEqual($row);
+				$row = $('body .toastify');
+				expect($row.length).toEqual(0);
+			});
+			it('hides itself after a given time', function() {
+				OC.Notification.showTemporary('', {timeout: 10000});
+
+				var $row = $('body .toastify');
+				expect($row.length).toEqual(1);
+
+				// travel in time +7000 milliseconds
+				clock.tick(7500);
+
+				$row = $('body .toastify');
+				expect($row.length).toEqual(1);
+
+				// travel in time another 4000 milliseconds
+				clock.tick(4000);
+
+				$row = $('body .toastify');
+				expect($row.length).toEqual(0);
 			});
 		});
 		describe('show', function() {
 			it('hides itself after a given time', function() {
-				OC.Notification.show('', { timeout: 10 });
+				OC.Notification.show('', {timeout: 10000});
 
-				// travel in time +9 seconds
-				clock.tick(9000);
+				var $row = $('body .toastify');
+				expect($row.length).toEqual(1);
 
-				expect(hideSpy.notCalled).toEqual(true);
+				clock.tick(11500);
 
-				// travel in time +1 seconds
-				clock.tick(1000);
-
-				expect(hideSpy.calledOnce).toEqual(true);
-			});
-			it('does not hide itself after a given time if a timeout of 0 is defined', function() {
-				OC.Notification.show('', { timeout: 0 });
-
-				// travel in time +1000 seconds
-				clock.tick(1000000);
-
-				expect(hideSpy.notCalled).toEqual(true);
+				$row = $('body .toastify');
+				expect($row.length).toEqual(0);
 			});
 			it('does not hide itself if no timeout given to show', function() {
 				OC.Notification.show('');
 
+				var $row = $('body .toastify');
+				expect($row.length).toEqual(1);
+
 				// travel in time +1000 seconds
 				clock.tick(1000000);
 
-				expect(hideSpy.notCalled).toEqual(true);
+				$row = $('body .toastify');
+				expect($row.length).toEqual(1);
+			});
+		});
+		describe('showHtml', function() {
+			it('hides itself after a given time', function() {
+				OC.Notification.showHtml('<p></p>', {timeout: 10000});
+
+				var $row = $('body .toastify');
+				expect($row.length).toEqual(1);
+
+				clock.tick(11500);
+
+				$row = $('body .toastify');
+				expect($row.length).toEqual(0);
+			});
+			it('does not hide itself if no timeout given to show', function() {
+				OC.Notification.showHtml('<p></p>');
+
+				var $row = $('body .toastify');
+				expect($row.length).toEqual(1);
+
+				// travel in time +1000 seconds
+				clock.tick(1000000);
+
+				$row = $('body .toastify');
+				expect($row.length).toEqual(1);
+			});
+		});
+		describe('hide', function() {
+			it('hides a temporary notification before its timeout expires', function() {
+				var hideCallback = sinon.spy();
+
+				var notification = OC.Notification.showTemporary('');
+
+				var $row = $('body .toastify');
+				expect($row.length).toEqual(1);
+
+				OC.Notification.hide(notification, hideCallback);
+
+				// Give time to the hide animation to finish
+				clock.tick(1000);
+
+				$row = $('body .toastify');
+				expect($row.length).toEqual(0);
+
+				expect(hideCallback.calledOnce).toEqual(true);
+			});
+			it('hides a notification before its timeout expires', function() {
+				var hideCallback = sinon.spy();
+
+				var notification = OC.Notification.show('', {timeout: 10000});
+
+				var $row = $('body .toastify');
+				expect($row.length).toEqual(1);
+
+				OC.Notification.hide(notification, hideCallback);
+
+				// Give time to the hide animation to finish
+				clock.tick(1000);
+
+				$row = $('body .toastify');
+				expect($row.length).toEqual(0);
+
+				expect(hideCallback.calledOnce).toEqual(true);
+			});
+			it('hides a notification without timeout', function() {
+				var hideCallback = sinon.spy();
+
+				var notification = OC.Notification.show('');
+
+				var $row = $('body .toastify');
+				expect($row.length).toEqual(1);
+
+				OC.Notification.hide(notification, hideCallback);
+
+				// Give time to the hide animation to finish
+				clock.tick(1000);
+
+				$row = $('body .toastify');
+				expect($row.length).toEqual(0);
+
+				expect(hideCallback.calledOnce).toEqual(true);
 			});
 		});
 		it('cumulates several notifications', function() {
 			var $row1 = OC.Notification.showTemporary('One');
-			var $row2 = OC.Notification.showTemporary('Two', {timeout: 2});
+			var $row2 = OC.Notification.showTemporary('Two', {timeout: 2000});
 			var $row3 = OC.Notification.showTemporary('Three');
 
-			var $el = $('#notification');
-			var $rows = $el.find('.row');
+			var $el = $('body');
+			var $rows = $el.find('.toastify');
 			expect($rows.length).toEqual(3);
 
-			expect($rows.eq(0).is($row1)).toEqual(true);
+			expect($rows.eq(0).is($row3)).toEqual(true);
 			expect($rows.eq(1).is($row2)).toEqual(true);
-			expect($rows.eq(2).is($row3)).toEqual(true);
+			expect($rows.eq(2).is($row1)).toEqual(true);
 
 			clock.tick(3000);
 
-			$rows = $el.find('.row');
+			$rows = $el.find('.toastify');
 			expect($rows.length).toEqual(2);
 
-			expect($rows.eq(0).is($row1)).toEqual(true);
-			expect($rows.eq(1).is($row3)).toEqual(true);
-		});
-		it('shows close button for error types', function() {
-			var $row = OC.Notification.showTemporary('One');
-			var $rowError = OC.Notification.showTemporary('Two', {type: 'error'});
-			expect($row.find('.close').length).toEqual(0);
-			expect($rowError.find('.close').length).toEqual(1);
-
-			// after clicking, row is gone
-			$rowError.find('.close').click();
-
-			var $rows = $('#notification').find('.row');
-			expect($rows.length).toEqual(1);
-			expect($rows.eq(0).is($row)).toEqual(true);
-		});
-		it('fades out the last notification but not the other ones', function() {
-			var fadeOutStub = sinon.stub($.fn, 'fadeOut');
-			var $row1 = OC.Notification.show('One', {type: 'error'});
-			var $row2 = OC.Notification.show('Two', {type: 'error'});
-			OC.Notification.showTemporary('Three', {timeout: 2});
-
-			var $el = $('#notification');
-			var $rows = $el.find('.row');
-			expect($rows.length).toEqual(3);
-
-			clock.tick(3000);
-
-			$rows = $el.find('.row');
-			expect($rows.length).toEqual(2);
-
-			$row1.find('.close').click();
-			clock.tick(1000);
-
-			expect(fadeOutStub.notCalled).toEqual(true);
-
-			$row2.find('.close').click();
-			clock.tick(1000);
-			expect(fadeOutStub.calledOnce).toEqual(true);
-
-			expect($el.is(':empty')).toEqual(false);
-			fadeOutStub.yield();
-			expect($el.is(':empty')).toEqual(true);
-
-			fadeOutStub.restore();
-		});
-		it('hides the first notification when calling hide without arguments', function() {
-			OC.Notification.show('One');
-			var $row2 = OC.Notification.show('Two');
-			spyOn(console, 'warn');
-
-			var $el = $('#notification');
-			var $rows = $el.find('.row');
-			expect($rows.length).toEqual(2);
-
-			OC.Notification.hide();
-
-			expect(console.warn).toHaveBeenCalled();
-			$rows = $el.find('.row');
-			expect($rows.length).toEqual(1);
-			expect($rows.eq(0).is($row2)).toEqual(true);
+			expect($rows.eq(0).is($row3)).toEqual(true);
+			expect($rows.eq(1).is($row1)).toEqual(true);
 		});
 		it('hides the given notification when calling hide with argument', function() {
 			var $row1 = OC.Notification.show('One');
 			var $row2 = OC.Notification.show('Two');
 
-			var $el = $('#notification');
-			var $rows = $el.find('.row');
+			var $el = $('body');
+			var $rows = $el.find('.toastify');
 			expect($rows.length).toEqual(2);
 
 			OC.Notification.hide($row2);
+			clock.tick(3000);
 
-			$rows = $el.find('.row');
+			$rows = $el.find('.toastify');
 			expect($rows.length).toEqual(1);
 			expect($rows.eq(0).is($row1)).toEqual(true);
 		});
@@ -1110,6 +894,498 @@ describe('Core base tests', function() {
 			clock.tick(101);
 
 			expect(OC._ajaxConnectionLostHandler.calls.count()).toBe(1);
+		});
+	});
+	describe('Snapper', function() {
+		var snapConstructorStub;
+		var snapperStub;
+		var clock;
+
+		beforeEach(function() {
+			snapConstructorStub = sinon.stub(window, 'Snap');
+			snapperStub = {};
+
+			snapperStub.enable = sinon.stub();
+			snapperStub.disable = sinon.stub();
+			snapperStub.close = sinon.stub();
+			snapperStub.on = sinon.stub();
+			snapperStub.state = sinon.stub().returns({
+				state: sinon.stub()
+			});
+
+			snapConstructorStub.returns(snapperStub);
+
+			clock = sinon.useFakeTimers();
+
+			// _.now could have been set to Date.now before Sinon replaced it
+			// with a fake version, so _.now must be stubbed to ensure that the
+			// fake Date.now will be called instead of the original one.
+			_.now = sinon.stub(_, 'now').callsFake(function() {
+				return new Date().getTime();
+			});
+
+			$('#testArea').append('<div id="app-navigation">The navigation bar</div><div id="app-content">Content</div>');
+		});
+		afterEach(function() {
+			snapConstructorStub.restore();
+
+			clock.restore();
+
+			_.now.restore();
+
+			// Remove the event handler for the resize event added to the window
+			// due to calling window.initCore() when there is an #app-navigation
+			// element.
+			$(window).off('resize');
+
+			viewport.reset();
+		});
+
+		it('is enabled on a narrow screen', function() {
+			viewport.set(480);
+
+			window.initCore();
+
+			expect(snapConstructorStub.calledOnce).toBe(true);
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.called).toBe(false);
+		});
+		it('is disabled when disallowing the gesture on a narrow screen', function() {
+			viewport.set(480);
+
+			window.initCore();
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.called).toBe(false);
+			expect(snapperStub.close.called).toBe(false);
+
+			OC.disallowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.disable.alwaysCalledWithExactly(true)).toBe(true);
+			expect(snapperStub.close.called).toBe(false);
+		});
+		it('is not disabled again when disallowing the gesture twice on a narrow screen', function() {
+			viewport.set(480);
+
+			window.initCore();
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.called).toBe(false);
+			expect(snapperStub.close.called).toBe(false);
+
+			OC.disallowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.disable.alwaysCalledWithExactly(true)).toBe(true);
+			expect(snapperStub.close.called).toBe(false);
+
+			OC.disallowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.close.called).toBe(false);
+		});
+		it('is enabled when allowing the gesture after disallowing it on a narrow screen', function() {
+			viewport.set(480);
+
+			window.initCore();
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.called).toBe(false);
+			expect(snapperStub.close.called).toBe(false);
+
+			OC.disallowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.disable.alwaysCalledWithExactly(true)).toBe(true);
+			expect(snapperStub.close.called).toBe(false);
+
+			OC.allowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.calledTwice).toBe(true);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.close.called).toBe(false);
+		});
+		it('is not enabled again when allowing the gesture twice after disallowing it on a narrow screen', function() {
+			viewport.set(480);
+
+			window.initCore();
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.called).toBe(false);
+			expect(snapperStub.close.called).toBe(false);
+
+			OC.disallowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.disable.alwaysCalledWithExactly(true)).toBe(true);
+			expect(snapperStub.close.called).toBe(false);
+
+			OC.allowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.calledTwice).toBe(true);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.close.called).toBe(false);
+
+			OC.allowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.calledTwice).toBe(true);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.close.called).toBe(false);
+		});
+		it('is disabled on a wide screen', function() {
+			viewport.set(1280);
+
+			window.initCore();
+
+			expect(snapConstructorStub.calledOnce).toBe(true);
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+		});
+		it('is not disabled again when disallowing the gesture on a wide screen', function() {
+			viewport.set(1280);
+
+			window.initCore();
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.close.calledOnce).toBe(true);
+
+			OC.disallowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.close.calledOnce).toBe(true);
+		});
+		it('is not enabled when allowing the gesture after disallowing it on a wide screen', function() {
+			viewport.set(1280);
+
+			window.initCore();
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.close.calledOnce).toBe(true);
+
+			OC.disallowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.close.calledOnce).toBe(true);
+
+			OC.allowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.close.calledOnce).toBe(true);
+		});
+		it('is enabled when resizing to a narrow screen', function() {
+			viewport.set(1280);
+
+			window.initCore();
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+
+			viewport.set(480);
+
+			// Setting the viewport width does not automatically trigger a
+			// resize.
+			$(window).resize();
+
+			// The resize handler is debounced to be executed a few milliseconds
+			// after the resize event.
+			clock.tick(1000);
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+		});
+		it('is not enabled when resizing to a narrow screen after disallowing the gesture', function() {
+			viewport.set(1280);
+
+			window.initCore();
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+
+			OC.disallowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+
+			viewport.set(480);
+
+			// Setting the viewport width does not automatically trigger a
+			// resize.
+			$(window).resize();
+
+			// The resize handler is debounced to be executed a few milliseconds
+			// after the resize event.
+			clock.tick(1000);
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+		});
+		it('is enabled when resizing to a narrow screen after disallowing the gesture and allowing it', function() {
+			viewport.set(1280);
+
+			window.initCore();
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+
+			OC.disallowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+
+			OC.allowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+
+			viewport.set(480);
+
+			// Setting the viewport width does not automatically trigger a
+			// resize.
+			$(window).resize();
+
+			// The resize handler is debounced to be executed a few milliseconds
+			// after the resize event.
+			clock.tick(1000);
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+		});
+		it('is enabled when allowing the gesture after disallowing it and resizing to a narrow screen', function() {
+			viewport.set(1280);
+
+			window.initCore();
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+
+			OC.disallowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+
+			viewport.set(480);
+
+			// Setting the viewport width does not automatically trigger a
+			// resize.
+			$(window).resize();
+
+			// The resize handler is debounced to be executed a few milliseconds
+			// after the resize event.
+			clock.tick(1000);
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+
+			OC.allowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+		});
+		it('is disabled when disallowing the gesture after disallowing it, resizing to a narrow screen and allowing it', function() {
+			viewport.set(1280);
+
+			window.initCore();
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+
+			OC.disallowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+
+			viewport.set(480);
+
+			// Setting the viewport width does not automatically trigger a
+			// resize.
+			$(window).resize();
+
+			// The resize handler is debounced to be executed a few milliseconds
+			// after the resize event.
+			clock.tick(1000);
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+
+			OC.allowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+
+			OC.disallowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.calledTwice).toBe(true);
+			expect(snapperStub.disable.getCall(1).calledWithExactly(true)).toBe(true);
+		});
+		it('is disabled when resizing to a wide screen', function() {
+			viewport.set(480);
+
+			window.initCore();
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.called).toBe(false);
+			expect(snapperStub.close.called).toBe(false);
+
+			viewport.set(1280);
+
+			// Setting the viewport width does not automatically trigger a
+			// resize.
+			$(window).resize();
+
+			// The resize handler is debounced to be executed a few milliseconds
+			// after the resize event.
+			clock.tick(1000);
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.close.calledOnce).toBe(true);
+		});
+		it('is not disabled again when disallowing the gesture after resizing to a wide screen', function() {
+			viewport.set(480);
+
+			window.initCore();
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.called).toBe(false);
+			expect(snapperStub.close.called).toBe(false);
+
+			viewport.set(1280);
+
+			// Setting the viewport width does not automatically trigger a
+			// resize.
+			$(window).resize();
+
+			// The resize handler is debounced to be executed a few milliseconds
+			// after the resize event.
+			clock.tick(1000);
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.close.calledOnce).toBe(true);
+
+			OC.disallowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.calledOnce).toBe(true);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.close.calledOnce).toBe(true);
+		});
+		it('is not enabled when allowing the gesture after disallowing it, resizing to a narrow screen and resizing to a wide screen', function() {
+			viewport.set(1280);
+
+			window.initCore();
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.close.calledOnce).toBe(true);
+
+			OC.disallowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.close.calledOnce).toBe(true);
+
+			viewport.set(480);
+
+			// Setting the viewport width does not automatically trigger a
+			// resize.
+			$(window).resize();
+
+			// The resize handler is debounced to be executed a few milliseconds
+			// after the resize event.
+			clock.tick(1000);
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledOnce).toBe(true);
+			expect(snapperStub.close.calledOnce).toBe(true);
+
+			viewport.set(1280);
+
+			$(window).resize();
+
+			clock.tick(1000);
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledTwice).toBe(true);
+			expect(snapperStub.close.calledTwice).toBe(true);
+
+			OC.allowNavigationBarSlideGesture();
+
+			expect(snapperStub.enable.called).toBe(false);
+			expect(snapperStub.disable.calledTwice).toBe(true);
+			expect(snapperStub.close.calledTwice).toBe(true);
+		});
+	});
+	describe('Requires password confirmation', function () {
+		var stubMomentNow;
+		var stubJsPageLoadTime;
+
+		afterEach(function () {
+			delete window.nc_pageLoad;
+			delete window.nc_lastLogin;
+			delete window.backendAllowsPasswordConfirmation;
+
+			stubMomentNow.restore();
+			stubJsPageLoadTime.restore();
+		});
+
+		it('should not show the password confirmation dialog when server time is earlier than local time', function () {
+			// add server variables
+			window.nc_pageLoad = parseInt(new Date(2018, 0, 3, 1, 15, 0).getTime() / 1000);
+			window.nc_lastLogin = parseInt(new Date(2018, 0, 3, 1, 0, 0).getTime() / 1000);
+			window.backendAllowsPasswordConfirmation = true;
+
+			stubJsPageLoadTime = sinon.stub(OC.PasswordConfirmation, 'pageLoadTime').value(new Date(2018, 0, 3, 12, 15, 0).getTime());
+			stubMomentNow = sinon.stub(moment, 'now').returns(new Date(2018, 0, 3, 12, 20, 0).getTime());
+
+			expect(OC.PasswordConfirmation.requiresPasswordConfirmation()).toBeFalsy();
+		});
+
+		it('should show the password confirmation dialog when server time is earlier than local time', function () {
+			// add server variables
+			window.nc_pageLoad = parseInt(new Date(2018, 0, 3, 1, 15, 0).getTime() / 1000);
+			window.nc_lastLogin = parseInt(new Date(2018, 0, 3, 1, 0, 0).getTime() / 1000);
+			window.backendAllowsPasswordConfirmation = true;
+
+			stubJsPageLoadTime = sinon.stub(OC.PasswordConfirmation, 'pageLoadTime').value(new Date(2018, 0, 3, 12, 15, 0).getTime());
+			stubMomentNow = sinon.stub(moment, 'now').returns(new Date(2018, 0, 3, 12, 31, 0).getTime());
+
+			expect(OC.PasswordConfirmation.requiresPasswordConfirmation()).toBeTruthy();
+		});
+
+		it('should not show the password confirmation dialog when server time is later than local time', function () {
+			// add server variables
+			window.nc_pageLoad = parseInt(new Date(2018, 0, 3, 23, 15, 0).getTime() / 1000);
+			window.nc_lastLogin = parseInt(new Date(2018, 0, 3, 23, 0, 0).getTime() / 1000);
+			window.backendAllowsPasswordConfirmation = true;
+
+			stubJsPageLoadTime = sinon.stub(OC.PasswordConfirmation, 'pageLoadTime').value(new Date(2018, 0, 3, 12, 15, 0).getTime());
+			stubMomentNow = sinon.stub(moment, 'now').returns(new Date(2018, 0, 3, 12, 20, 0).getTime());
+
+			expect(OC.PasswordConfirmation.requiresPasswordConfirmation()).toBeFalsy();
+		});
+
+		it('should show the password confirmation dialog when server time is later than local time', function () {
+			// add server variables
+			window.nc_pageLoad = parseInt(new Date(2018, 0, 3, 23, 15, 0).getTime() / 1000);
+			window.nc_lastLogin = parseInt(new Date(2018, 0, 3, 23, 0, 0).getTime() / 1000);
+			window.backendAllowsPasswordConfirmation = true;
+
+			stubJsPageLoadTime = sinon.stub(OC.PasswordConfirmation, 'pageLoadTime').value(new Date(2018, 0, 3, 12, 15, 0).getTime());
+			stubMomentNow = sinon.stub(moment, 'now').returns(new Date(2018, 0, 3, 12, 31, 0).getTime());
+
+			expect(OC.PasswordConfirmation.requiresPasswordConfirmation()).toBeTruthy();
 		});
 	});
 });

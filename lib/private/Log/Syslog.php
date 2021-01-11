@@ -2,7 +2,9 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
  * @author Bart Visscher <bartv@thisnet.nl>
+ * @author Julius Härtl <jus@bitgrid.net>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
@@ -19,28 +21,32 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\Log;
 
-class Syslog {
-	static protected $levels = array(
-		\OCP\Util::DEBUG => LOG_DEBUG,
-		\OCP\Util::INFO => LOG_INFO,
-		\OCP\Util::WARN => LOG_WARNING,
-		\OCP\Util::ERROR => LOG_ERR,
-		\OCP\Util::FATAL => LOG_CRIT,
-	);
+use OC\SystemConfig;
+use OCP\ILogger;
+use OCP\Log\IWriter;
 
-	/**
-	 * Init class data
-	 */
-	public static function init() {
-		openlog(\OC::$server->getSystemConfig()->getValue("syslog_tag", "ownCloud"), LOG_PID | LOG_CONS, LOG_USER);
-		// Close at shutdown
-		register_shutdown_function('closelog');
+class Syslog extends LogDetails implements IWriter {
+	protected $levels = [
+		ILogger::DEBUG => LOG_DEBUG,
+		ILogger::INFO => LOG_INFO,
+		ILogger::WARN => LOG_WARNING,
+		ILogger::ERROR => LOG_ERR,
+		ILogger::FATAL => LOG_CRIT,
+	];
+
+	public function __construct(SystemConfig $config) {
+		parent::__construct($config);
+		openlog($config->getValue('syslog_tag', 'Nextcloud'), LOG_PID | LOG_CONS, LOG_USER);
+	}
+
+	public function __destruct() {
+		closelog();
 	}
 
 	/**
@@ -49,8 +55,8 @@ class Syslog {
 	 * @param string $message
 	 * @param int $level
 	 */
-	public static function write($app, $message, $level) {
-		$syslog_level = self::$levels[$level];
-		syslog($syslog_level, '{'.$app.'} '.$message);
+	public function write(string $app, $message, int $level) {
+		$syslog_level = $this->levels[$level];
+		syslog($syslog_level, $this->logDetailsAsJSON($app, $message, $level));
 	}
 }

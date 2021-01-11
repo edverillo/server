@@ -1,8 +1,11 @@
 <?php
 /**
+ * @copyright Copyright (c) 2017, ownCloud GmbH
+ *
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
- * @copyright Copyright (c) 2017, ownCloud GmbH
  * @license AGPL-3.0
  *
  * This code is free software: you can redistribute it and/or modify
@@ -15,13 +18,14 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\Core\Command\Db;
 
-use Doctrine\DBAL\Platforms\MySqlPlatform;
+use Doctrine\DBAL\Platforms\MySQLPlatform;
+use OC\DB\MySqlTools;
 use OC\Migration\ConsoleOutput;
 use OC\Repair\Collation;
 use OCP\IConfig;
@@ -65,23 +69,22 @@ class ConvertMysqlToMB4 extends Command {
 			->setDescription('Convert charset of MySQL/MariaDB to use utf8mb4');
 	}
 
-	protected function execute(InputInterface $input, OutputInterface $output) {
-		if (!$this->connection->getDatabasePlatform() instanceof MySqlPlatform) {
+	protected function execute(InputInterface $input, OutputInterface $output): int {
+		if (!$this->connection->getDatabasePlatform() instanceof MySQLPlatform) {
 			$output->writeln("This command is only valid for MySQL/MariaDB databases.");
 			return 1;
 		}
 
-		$oldValue = $this->config->getSystemValue('mysql.utf8mb4', false);
-		// enable charset
-		$this->config->setSystemValue('mysql.utf8mb4', true);
-
-		if (!$this->connection->supports4ByteText()) {
+		$tools = new MySqlTools();
+		if (!$tools->supports4ByteCharset($this->connection)) {
 			$url = $this->urlGenerator->linkToDocs('admin-mysql-utf8mb4');
 			$output->writeln("The database is not properly setup to use the charset utf8mb4.");
 			$output->writeln("For more information please read the documentation at $url");
-			$this->config->setSystemValue('mysql.utf8mb4', $oldValue);
 			return 1;
 		}
+
+		// enable charset
+		$this->config->setSystemValue('mysql.utf8mb4', true);
 
 		// run conversion
 		$coll = new Collation($this->config, $this->logger, $this->connection, false);

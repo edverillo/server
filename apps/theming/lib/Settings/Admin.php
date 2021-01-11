@@ -3,6 +3,11 @@
  * @copyright Copyright (c) 2016 Arthur Schiwon <blizzz@arthur-schiwon.de>
  *
  * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Julius Härtl <jus@bitgrid.net>
+ * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -17,12 +22,13 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 namespace OCA\Theming\Settings;
 
+use OCA\Theming\ImageManager;
 use OCA\Theming\ThemingDefaults;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IConfig;
@@ -39,43 +45,46 @@ class Admin implements ISettings {
 	private $themingDefaults;
 	/** @var IURLGenerator */
 	private $urlGenerator;
+	/** @var ImageManager */
+	private $imageManager;
 
 	public function __construct(IConfig $config,
 								IL10N $l,
 								ThemingDefaults $themingDefaults,
-								IURLGenerator $urlGenerator) {
+								IURLGenerator $urlGenerator,
+								ImageManager $imageManager) {
 		$this->config = $config;
 		$this->l = $l;
 		$this->themingDefaults = $themingDefaults;
 		$this->urlGenerator = $urlGenerator;
+		$this->imageManager = $imageManager;
 	}
 
 	/**
 	 * @return TemplateResponse
 	 */
-	public function getForm() {
-		$path = $this->urlGenerator->linkToRoute('theming.Theming.updateLogo');
-
+	public function getForm(): TemplateResponse {
 		$themable = true;
 		$errorMessage = '';
 		$theme = $this->config->getSystemValue('theme', '');
 		if ($theme !== '') {
 			$themable = false;
-			$errorMessage = $this->l->t('You are already using a custom theme');
+			$errorMessage = $this->l->t('You are already using a custom theme. Theming app settings might be overwritten by that.');
 		}
 
 		$parameters = [
-			'themable'        => $themable,
-			'errorMessage'    => $errorMessage,
-			'name'            => $this->themingDefaults->getEntity(),
-			'url'             => $this->themingDefaults->getBaseUrl(),
-			'slogan'          => $this->themingDefaults->getSlogan(),
-			'color'           => $this->themingDefaults->getColorPrimary(),
-			'logo'            => $this->themingDefaults->getLogo(),
-			'logoMime'        => $this->config->getAppValue('theming', 'logoMime', ''),
-			'background'      => $this->themingDefaults->getBackground(),
-			'backgroundMime'  => $this->config->getAppValue('theming', 'backgroundMime', ''),
-			'uploadLogoRoute' => $path,
+			'themable' => $themable,
+			'errorMessage' => $errorMessage,
+			'name' => $this->themingDefaults->getEntity(),
+			'url' => $this->themingDefaults->getBaseUrl(),
+			'slogan' => $this->themingDefaults->getSlogan(),
+			'color' => $this->themingDefaults->getColorPrimary(),
+			'uploadLogoRoute' => $this->urlGenerator->linkToRoute('theming.Theming.uploadImage'),
+			'canThemeIcons' => $this->imageManager->shouldReplaceIcons(),
+			'iconDocs' => $this->urlGenerator->linkToDocs('admin-theming-icons'),
+			'images' => $this->imageManager->getCustomImages(),
+			'imprintUrl' => $this->themingDefaults->getImprintUrl(),
+			'privacyUrl' => $this->themingDefaults->getPrivacyUrl(),
 		];
 
 		return new TemplateResponse('theming', 'settings-admin', $parameters, '');
@@ -84,7 +93,7 @@ class Admin implements ISettings {
 	/**
 	 * @return string the section ID, e.g. 'sharing'
 	 */
-	public function getSection() {
+	public function getSection(): string {
 		return 'theming';
 	}
 
@@ -95,8 +104,7 @@ class Admin implements ISettings {
 	 *
 	 * E.g.: 70
 	 */
-	public function getPriority() {
+	public function getPriority(): int {
 		return 5;
 	}
-
 }

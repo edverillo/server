@@ -21,17 +21,18 @@
 
 namespace OCA\WorkflowEngine\Tests\Check;
 
+use OCP\IL10N;
 
 class RequestTimeTest extends \Test\TestCase {
 
-	/** @var \OCP\AppFramework\Utility\ITimeFactory|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OCP\AppFramework\Utility\ITimeFactory|\PHPUnit\Framework\MockObject\MockObject */
 	protected $timeFactory;
 
 	/**
-	 * @return \OCP\IL10N|\PHPUnit_Framework_MockObject_MockObject
+	 * @return \OCP\IL10N|\PHPUnit\Framework\MockObject\MockObject
 	 */
 	protected function getL10NMock() {
-		$l = $this->getMockBuilder('OCP\IL10N')
+		$l = $this->getMockBuilder(IL10N::class)
 			->disableOriginalConstructor()
 			->getMock();
 		$l->expects($this->any())
@@ -42,7 +43,7 @@ class RequestTimeTest extends \Test\TestCase {
 		return $l;
 	}
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->timeFactory = $this->getMockBuilder('OCP\AppFramework\Utility\ITimeFactory')
@@ -128,6 +129,7 @@ class RequestTimeTest extends \Test\TestCase {
 	public function testValidateCheck($operator, $value) {
 		$check = new \OCA\WorkflowEngine\Check\RequestTime($this->getL10NMock(), $this->timeFactory);
 		$check->validateCheck($operator, $value);
+		$this->addToAssertionCount(1);
 	}
 
 	public function dataValidateCheckInvalid() {

@@ -2,6 +2,8 @@
 /**
  * @copyright 2016 Roeland Jago Douma <roeland@famdouma.nl>
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Julius Härtl <jus@bitgrid.net>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license GNU AGPL version 3 or any later version
@@ -17,16 +19,18 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
+
 namespace OC\Files\SimpleFS;
 
 use OCP\Files\File;
+use OCP\Files\NotFoundException;
 use OCP\Files\NotPermittedException;
 use OCP\Files\SimpleFS\ISimpleFile;
 
-class SimpleFile implements ISimpleFile  {
+class SimpleFile implements ISimpleFile {
 
 	/** @var File $file */
 	private $file;
@@ -79,21 +83,63 @@ class SimpleFile implements ISimpleFile  {
 	/**
 	 * Get the content
 	 *
+	 * @throws NotPermittedException
+	 * @throws NotFoundException
 	 * @return string
 	 */
 	public function getContent() {
-		return $this->file->getContent();
+		$result = $this->file->getContent();
+
+		if ($result === false) {
+			$this->checkFile();
+		}
+
+		return $result;
 	}
 
 	/**
 	 * Overwrite the file
 	 *
-	 * @param string $data
+	 * @param string|resource $data
 	 * @throws NotPermittedException
+	 * @throws NotFoundException
 	 */
 	public function putContent($data) {
-		$this->file->putContent($data);
+		try {
+			return $this->file->putContent($data);
+		} catch (NotFoundException $e) {
+			$this->checkFile();
+		}
 	}
+
+	/**
+	 * Sometimes there are some issues with the AppData. Most of them are from
+	 * user error. But we should handle them gracefull anyway.
+	 *
+	 * If for some reason the current file can't be found. We remove it.
+	 * Then traverse up and check all folders if they exists. This so that the
+	 * next request will have a valid appdata structure again.
+	 *
+	 * @throws NotFoundException
+	 */
+	private function checkFile() {
+		$cur = $this->file;
+
+		while ($cur->stat() === false) {
+			$parent = $cur->getParent();
+			try {
+				$cur->delete();
+			} catch (NotFoundException $e) {
+				// Just continue then
+			}
+			$cur = $parent;
+		}
+
+		if ($cur !== $this->file) {
+			throw new NotFoundException('File does not exist');
+		}
+	}
+
 
 	/**
 	 * Delete the file
@@ -111,5 +157,27 @@ class SimpleFile implements ISimpleFile  {
 	 */
 	public function getMimeType() {
 		return $this->file->getMimeType();
+	}
+
+	/**
+	 * Open the file as stream for reading, resulting resource can be operated as stream like the result from php's own fopen
+	 *
+	 * @return resource
+	 * @throws \OCP\Files\NotPermittedException
+	 * @since 14.0.0
+	 */
+	public function read() {
+		return $this->file->fopen('r');
+	}
+
+	/**
+	 * Open the file as stream for writing, resulting resource can be operated as stream like the result from php's own fopen
+	 *
+	 * @return resource
+	 * @throws \OCP\Files\NotPermittedException
+	 * @since 14.0.0
+	 */
+	public function write() {
+		return $this->file->fopen('w');
 	}
 }

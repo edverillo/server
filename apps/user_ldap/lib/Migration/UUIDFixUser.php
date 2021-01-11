@@ -17,21 +17,18 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 namespace OCA\User_LDAP\Migration;
 
-use OCA\User_LDAP\Helper;
-use OCA\User_LDAP\LDAP;
+use OCA\User_LDAP\User_Proxy;
 use OCA\User_LDAP\Mapping\UserMapping;
-use OCA\User_LDAP\Group_Proxy;
-use OCP\IConfig;
 
 class UUIDFixUser extends UUIDFix {
-	public function __construct(UserMapping $mapper, LDAP $ldap, IConfig $config, Helper $helper) {
+	public function __construct(UserMapping $mapper, User_Proxy $proxy) {
 		$this->mapper = $mapper;
-		$this->proxy = new Group_Proxy($helper->getServerConfigurationPrefixes(true), $ldap, $config);
+		$this->proxy = $proxy;
 	}
 }

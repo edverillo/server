@@ -2,6 +2,9 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Rello <Rello@users.noreply.github.com>
+ * @author Robin Appelman <robin@icewind.nl>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
  *
  * @license AGPL-3.0
@@ -16,7 +19,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -24,8 +27,6 @@ namespace OC\Files\Type;
 
 use OCP\Files\IMimeTypeLoader;
 use OCP\IDBConnection;
-
-use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 
 /**
  * Mimetype database loader
@@ -112,16 +113,9 @@ class Loader implements IMimeTypeLoader {
 	 * @param int inserted ID
 	 */
 	protected function store($mimetype) {
-		try {
-			$qb = $this->dbConnection->getQueryBuilder();
-			$qb->insert('mimetypes')
-				->values([
-					'mimetype' => $qb->createNamedParameter($mimetype)
-				]);
-			$qb->execute();
-		} catch (UniqueConstraintViolationException $e) {
-			// something inserted it before us
-		}
+		$this->dbConnection->insertIfNotExist('*PREFIX*mimetypes', [
+			'mimetype' => $mimetype
+		]);
 
 		$fetch = $this->dbConnection->getQueryBuilder();
 		$fetch->select('id')
@@ -129,7 +123,14 @@ class Loader implements IMimeTypeLoader {
 			->where(
 				$fetch->expr()->eq('mimetype', $fetch->createNamedParameter($mimetype)
 			));
-		$row = $fetch->execute()->fetch();
+
+		$result = $fetch->execute();
+		$row = $result->fetch();
+		$result->closeCursor();
+
+		if (!$row) {
+			throw new \Exception("Failed to get mimetype id for $mimetype after trying to store it");
+		}
 
 		$this->mimetypes[$row['id']] = $mimetype;
 		$this->mimetypeIds[$mimetype] = $row['id'];
@@ -143,7 +144,10 @@ class Loader implements IMimeTypeLoader {
 		$qb = $this->dbConnection->getQueryBuilder();
 		$qb->select('id', 'mimetype')
 			->from('mimetypes');
-		$results = $qb->execute()->fetchAll();
+
+		$result = $qb->execute();
+		$results = $result->fetchAll();
+		$result->closeCursor();
 
 		foreach ($results as $row) {
 			$this->mimetypes[$row['id']] = $row['mimetype'];
@@ -155,20 +159,24 @@ class Loader implements IMimeTypeLoader {
 	 * Update filecache mimetype based on file extension
 	 *
 	 * @param string $ext file extension
-	 * @param int $mimetypeId
+	 * @param int $mimeTypeId
 	 * @return int number of changed rows
 	 */
-	public function updateFilecache($ext, $mimetypeId) {
+	public function updateFilecache($ext, $mimeTypeId) {
+		$folderMimeTypeId = $this->getId('httpd/unix-directory');
 		$update = $this->dbConnection->getQueryBuilder();
 		$update->update('filecache')
-			->set('mimetype', $update->createNamedParameter($mimetypeId))
+			->set('mimetype', $update->createNamedParameter($mimeTypeId))
 			->where($update->expr()->neq(
-				'mimetype', $update->createNamedParameter($mimetypeId)
+				'mimetype', $update->createNamedParameter($mimeTypeId)
+			))
+			->andWhere($update->expr()->neq(
+				'mimetype', $update->createNamedParameter($folderMimeTypeId)
 			))
 			->andWhere($update->expr()->like(
-				$update->createFunction('LOWER(`name`)'), $update->createNamedParameter($ext)
+				$update->func()->lower('name'),
+				$update->createNamedParameter('%' . $this->dbConnection->escapeLikeParameter('.' . $ext))
 			));
 		return $update->execute();
 	}
-
 }

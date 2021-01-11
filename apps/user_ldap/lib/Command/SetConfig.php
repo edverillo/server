@@ -3,8 +3,10 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -19,21 +21,22 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\User_LDAP\Command;
 
+use OCA\User_LDAP\Configuration;
+use OCA\User_LDAP\ConnectionFactory;
+use OCA\User_LDAP\Helper;
+use OCA\User_LDAP\LDAP;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use OCA\User_LDAP\Helper;
-use OCA\User_LDAP\Configuration;
 
 class SetConfig extends Command {
-
 	protected function configure() {
 		$this
 			->setName('ldap:set-config')
@@ -42,27 +45,27 @@ class SetConfig extends Command {
 					'configID',
 					InputArgument::REQUIRED,
 					'the configuration ID'
-				     )
+					 )
 			->addArgument(
 					'configKey',
 					InputArgument::REQUIRED,
 					'the configuration key'
-				     )
+					 )
 			->addArgument(
 					'configValue',
 					InputArgument::REQUIRED,
 					'the new configuration value'
-				     )
+					 )
 		;
 	}
 
-	protected function execute(InputInterface $input, OutputInterface $output) {
-		$helper = new Helper(\OC::$server->getConfig());
+	protected function execute(InputInterface $input, OutputInterface $output): int {
+		$helper = new Helper(\OC::$server->getConfig(), \OC::$server->getDatabaseConnection());
 		$availableConfigs = $helper->getServerConfigurationPrefixes();
 		$configID = $input->getArgument('configID');
-		if(!in_array($configID, $availableConfigs)) {
+		if (!in_array($configID, $availableConfigs)) {
 			$output->writeln("Invalid configID");
-			return;
+			return 1;
 		}
 
 		$this->setValue(
@@ -70,6 +73,7 @@ class SetConfig extends Command {
 			$input->getArgument('configKey'),
 			$input->getArgument('configValue')
 		);
+		return 0;
 	}
 
 	/**
@@ -82,5 +86,8 @@ class SetConfig extends Command {
 		$configHolder = new Configuration($configID);
 		$configHolder->$key = $value;
 		$configHolder->saveConfiguration();
+
+		$connectionFactory = new ConnectionFactory(new LDAP());
+		$connectionFactory->get($configID)->clearCache();
 	}
 }

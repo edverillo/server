@@ -2,6 +2,8 @@
 /**
  * @copyright Copyright (c) 2017 Robin Appelman <robin@icewind.nl>
  *
+ * @author Robin Appelman <robin@icewind.nl>
+ *
  * @license GNU AGPL version 3 or any later version
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,7 +17,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
@@ -37,6 +39,7 @@ class SearchQuery implements ISearchQuery {
 	private $order;
 	/** @var IUser */
 	private $user;
+	private $limitToHome;
 
 	/**
 	 * SearchQuery constructor.
@@ -46,13 +49,22 @@ class SearchQuery implements ISearchQuery {
 	 * @param int $offset
 	 * @param array $order
 	 * @param IUser $user
+	 * @param bool $limitToHome
 	 */
-	public function __construct(ISearchOperator $searchOperation, $limit, $offset, array $order, IUser $user) {
+	public function __construct(
+		ISearchOperator $searchOperation,
+		int $limit,
+		int $offset,
+		array $order,
+		IUser $user,
+		bool $limitToHome = false
+	) {
 		$this->searchOperation = $searchOperation;
 		$this->limit = $limit;
 		$this->offset = $offset;
 		$this->order = $order;
 		$this->user = $user;
+		$this->limitToHome = $limitToHome;
 	}
 
 	/**
@@ -88,5 +100,9 @@ class SearchQuery implements ISearchQuery {
 	 */
 	public function getUser() {
 		return $this->user;
+	}
+
+	public function limitToHome(): bool {
+		return $this->limitToHome;
 	}
 }

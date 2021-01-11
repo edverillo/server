@@ -2,7 +2,11 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -16,15 +20,16 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
+
 namespace OCA\DAV\Files;
 
+use OCP\Files\FileInfo;
 use Sabre\DAV\INode;
-use Sabre\DAVACL\AbstractPrincipalCollection;
-use Sabre\HTTP\URLUtil;
 use Sabre\DAV\SimpleCollection;
+use Sabre\DAVACL\AbstractPrincipalCollection;
 
 class RootCollection extends AbstractPrincipalCollection {
 
@@ -38,8 +43,8 @@ class RootCollection extends AbstractPrincipalCollection {
 	 * @param array $principalInfo
 	 * @return INode
 	 */
-	function getChildForPrincipal(array $principalInfo) {
-		list(,$name) = URLUtil::splitPath($principalInfo['uri']);
+	public function getChildForPrincipal(array $principalInfo) {
+		list(,$name) = \Sabre\Uri\split($principalInfo['uri']);
 		$user = \OC::$server->getUserSession()->getUser();
 		if (is_null($user) || $name !== $user->getUID()) {
 			// a user is only allowed to see their own home contents, so in case another collection
@@ -47,11 +52,14 @@ class RootCollection extends AbstractPrincipalCollection {
 			// in the future this could be considered to be used for accessing shared files
 			return new SimpleCollection($name);
 		}
-		return new FilesHome($principalInfo);
+		$userFolder = \OC::$server->getUserFolder();
+		if (!($userFolder instanceof FileInfo)) {
+			throw new \Exception('Home does not exist');
+		}
+		return new FilesHome($principalInfo, $userFolder);
 	}
 
-	function getName() {
+	public function getName() {
 		return 'files';
 	}
-
 }

@@ -10,6 +10,8 @@ namespace Test;
 
 use OC_Util;
 use OCP\App\IAppManager;
+use OCP\IConfig;
+use OCP\IUser;
 
 /**
  * Class UtilTest
@@ -36,71 +38,7 @@ class UtilTest extends \Test\TestCase {
 		$this->assertTrue(is_string($edition));
 	}
 
-	/**
-	 * @group DB
-	 */
-	function testFormatDate() {
-		date_default_timezone_set("UTC");
-
-		$result = OC_Util::formatDate(1350129205);
-		$expected = 'October 13, 2012 at 11:53:25 AM GMT+0';
-		$this->assertEquals($expected, $result);
-
-		$result = OC_Util::formatDate(1102831200, true);
-		$expected = 'December 12, 2004';
-		$this->assertEquals($expected, $result);
-	}
-
-	/**
-	 * @group DB
-	 */
-	function testFormatDateWithTZ() {
-		date_default_timezone_set("UTC");
-
-		$result = OC_Util::formatDate(1350129205, false, 'Europe/Berlin');
-		$expected = 'October 13, 2012 at 1:53:25 PM GMT+2';
-		$this->assertEquals($expected, $result);
-	}
-
-	/**
-	 * @expectedException \Exception
-	 */
-	function testFormatDateWithInvalidTZ() {
-		OC_Util::formatDate(1350129205, false, 'Mordor/Barad-dûr');
-	}
-
-	public function formatDateWithTZFromSessionData() {
-		return array(
-			array(3, 'October 13, 2012 at 2:53:25 PM GMT+3', 'Etc/GMT-3'),
-			array(15, 'October 13, 2012 at 11:53:25 AM GMT+0', 'UTC'),
-			array(-13, 'October 13, 2012 at 11:53:25 AM GMT+0', 'UTC'),
-			array(9.5, 'October 13, 2012 at 9:23:25 PM GMT+9:30', 'Australia/Darwin'),
-			array(-4.5, 'October 13, 2012 at 7:23:25 AM GMT-4:30', 'America/Caracas'),
-			array(15.5, 'October 13, 2012 at 11:53:25 AM GMT+0', 'UTC'),
-		);
-	}
-
-	/**
-	 * @dataProvider formatDateWithTZFromSessionData
-	 * @group DB
-	 */
-	function testFormatDateWithTZFromSession($offset, $expected, $expectedTimeZone) {
-		date_default_timezone_set("UTC");
-
-		\OC::$server->getSession()->set('timezone', $offset);
-
-		$selectedTimeZone = \OC::$server->getDateTimeZone()->getTimeZone(1350129205);
-		$this->assertEquals($expectedTimeZone, $selectedTimeZone->getName());
-		$newDateTimeFormatter = new \OC\DateTimeFormatter($selectedTimeZone, \OC::$server->getL10N('lib', 'en'));
-		$this->overwriteService('DateTimeFormatter', $newDateTimeFormatter);
-
-		$result = OC_Util::formatDate(1350129205, false);
-		$this->assertEquals($expected, $result);
-
-		$this->restoreService('DateTimeFormatter');
-	}
-
-	function testSanitizeHTML() {
+	public function testSanitizeHTML() {
 		$badArray = [
 			'While it is unusual to pass an array',
 			'this function actually <blink>supports</blink> it.',
@@ -133,7 +71,7 @@ class UtilTest extends \Test\TestCase {
 		$this->assertEquals('This is a good string without HTML.', $result);
 	}
 
-	function testEncodePath() {
+	public function testEncodePath() {
 		$component = '/§#@test%&^ä/-child';
 		$result = OC_Util::encodePath($component);
 		$this->assertEquals("/%C2%A7%23%40test%25%26%5E%C3%A4/-child", $result);
@@ -144,12 +82,12 @@ class UtilTest extends \Test\TestCase {
 		$this->assertEquals($expected, \OC_Util::fileInfoLoaded());
 	}
 
-	function testGetDefaultEmailAddress() {
+	public function testGetDefaultEmailAddress() {
 		$email = \OCP\Util::getDefaultEmailAddress("no-reply");
 		$this->assertEquals('no-reply@localhost', $email);
 	}
 
-	function testGetDefaultEmailAddressFromConfig() {
+	public function testGetDefaultEmailAddressFromConfig() {
 		$config = \OC::$server->getConfig();
 		$config->setSystemValue('mail_domain', 'example.com');
 		$email = \OCP\Util::getDefaultEmailAddress("no-reply");
@@ -157,7 +95,7 @@ class UtilTest extends \Test\TestCase {
 		$config->deleteSystemValue('mail_domain');
 	}
 
-	function testGetConfiguredEmailAddressFromConfig() {
+	public function testGetConfiguredEmailAddressFromConfig() {
 		$config = \OC::$server->getConfig();
 		$config->setSystemValue('mail_domain', 'example.com');
 		$config->setSystemValue('mail_from_address', 'owncloud');
@@ -167,30 +105,12 @@ class UtilTest extends \Test\TestCase {
 		$config->deleteSystemValue('mail_from_address');
 	}
 
-	function testGetInstanceIdGeneratesValidId() {
+	public function testGetInstanceIdGeneratesValidId() {
 		\OC::$server->getConfig()->deleteSystemValue('instanceid');
 		$instanceId = OC_Util::getInstanceId();
 		$this->assertStringStartsWith('oc', $instanceId);
 		$matchesRegex = preg_match('/^[a-z0-9]+$/', $instanceId);
 		$this->assertSame(1, $matchesRegex);
-	}
-
-	/**
-	 * @dataProvider baseNameProvider
-	 */
-	public function testBaseName($expected, $file) {
-		$base = \OC_Util::basename($file);
-		$this->assertEquals($expected, $base);
-	}
-
-	public function baseNameProvider() {
-		return array(
-			array('public_html', '/home/user/public_html/'),
-			array('public_html', '/home/user/public_html'),
-			array('', '/'),
-			array('public_html', 'public_html'),
-			array('442aa682de2a64db1e010f50e60fd9c9', 'local::C:\Users\ADMINI~1\AppData\Local\Temp\2/442aa682de2a64db1e010f50e60fd9c9/')
-		);
 	}
 
 	/**
@@ -204,41 +124,51 @@ class UtilTest extends \Test\TestCase {
 	}
 
 	public function filenameValidationProvider() {
-		return array(
+		return [
 			// valid names
-			array('boringname', true),
-			array('something.with.extension', true),
-			array('now with spaces', true),
-			array('.a', true),
-			array('..a', true),
-			array('.dotfile', true),
-			array('single\'quote', true),
-			array('  spaces before', true),
-			array('spaces after   ', true),
-			array('allowed chars including the crazy ones $%&_-^@!,()[]{}=;#', true),
-			array('汉字也能用', true),
-			array('und Ümläüte sind auch willkommen', true),
+			['boringname', true],
+			['something.with.extension', true],
+			['now with spaces', true],
+			['.a', true],
+			['..a', true],
+			['.dotfile', true],
+			['single\'quote', true],
+			['  spaces before', true],
+			['spaces after   ', true],
+			['allowed chars including the crazy ones $%&_-^@!,()[]{}=;#', true],
+			['汉字也能用', true],
+			['und Ümläüte sind auch willkommen', true],
 			// disallowed names
-			array('', false),
-			array('     ', false),
-			array('.', false),
-			array('..', false),
-			array('back\\slash', false),
-			array('sl/ash', false),
-			array('lt<lt', true),
-			array('gt>gt', true),
-			array('col:on', true),
-			array('double"quote', true),
-			array('pi|pe', true),
-			array('dont?ask?questions?', true),
-			array('super*star', true),
-			array('new\nline', false),
+			['', false],
+			['     ', false],
+			['.', false],
+			['..', false],
+			['back\\slash', false],
+			['sl/ash', false],
+			['lt<lt', true],
+			['gt>gt', true],
+			['col:on', true],
+			['double"quote', true],
+			['pi|pe', true],
+			['dont?ask?questions?', true],
+			['super*star', true],
+			['new\nline', false],
+
 			// better disallow these to avoid unexpected trimming to have side effects
-			array(' ..', false),
-			array('.. ', false),
-			array('. ', false),
-			array(' .', false),
-		);
+			[' ..', false],
+			['.. ', false],
+			['. ', false],
+			[' .', false],
+
+			// part files not allowed
+			['.part', false],
+			['notallowed.part', false],
+			['neither.filepart', false],
+
+			// part in the middle is ok
+			['super movie part one.mkv', true],
+			['super.movie.part.mkv', true],
+		];
 	}
 
 	/**
@@ -248,27 +178,27 @@ class UtilTest extends \Test\TestCase {
 	 * @param array $excludedGroups groups which should be excluded from sharing
 	 * @param bool $expected expected result
 	 */
-	function testIsSharingDisabledForUser($groups, $membership, $excludedGroups, $expected) {
-		$config = $this->getMockBuilder('OCP\IConfig')->disableOriginalConstructor()->getMock();
+	public function testIsSharingDisabledForUser($groups, $membership, $excludedGroups, $expected) {
+		$config = $this->getMockBuilder(IConfig::class)->disableOriginalConstructor()->getMock();
 		$groupManager = $this->getMockBuilder('OCP\IGroupManager')->disableOriginalConstructor()->getMock();
-		$user = $this->getMockBuilder('OCP\IUser')->disableOriginalConstructor()->getMock();
+		$user = $this->getMockBuilder(IUser::class)->disableOriginalConstructor()->getMock();
 
 		$config
 				->expects($this->at(0))
 				->method('getAppValue')
 				->with('core', 'shareapi_exclude_groups', 'no')
-				->will($this->returnValue('yes'));
+				->willReturn('yes');
 		$config
 				->expects($this->at(1))
 				->method('getAppValue')
 				->with('core', 'shareapi_exclude_groups_list')
-				->will($this->returnValue(json_encode($excludedGroups)));
+				->willReturn(json_encode($excludedGroups));
 
 		$groupManager
 				->expects($this->at(0))
 				->method('getUserGroupIds')
 				->with($user)
-				->will($this->returnValue($membership));
+				->willReturn($membership);
 
 		$result = \OC_Util::isSharingDisabledForUser($config, $groupManager, $user);
 
@@ -276,16 +206,16 @@ class UtilTest extends \Test\TestCase {
 	}
 
 	public function dataProviderForTestIsSharingDisabledForUser() {
-		return array(
+		return [
 			// existing groups, groups the user belong to, groups excluded from sharing, expected result
-			array(array('g1', 'g2', 'g3'), array(), array('g1'), false),
-			array(array('g1', 'g2', 'g3'), array(), array(), false),
-			array(array('g1', 'g2', 'g3'), array('g2'), array('g1'), false),
-			array(array('g1', 'g2', 'g3'), array('g2'), array(), false),
-			array(array('g1', 'g2', 'g3'), array('g1', 'g2'), array('g1'), false),
-			array(array('g1', 'g2', 'g3'), array('g1', 'g2'), array('g1', 'g2'), true),
-			array(array('g1', 'g2', 'g3'), array('g1', 'g2'), array('g1', 'g2', 'g3'), true),
-		);
+			[['g1', 'g2', 'g3'], [], ['g1'], false],
+			[['g1', 'g2', 'g3'], [], [], false],
+			[['g1', 'g2', 'g3'], ['g2'], ['g1'], false],
+			[['g1', 'g2', 'g3'], ['g2'], [], false],
+			[['g1', 'g2', 'g3'], ['g1', 'g2'], ['g1'], false],
+			[['g1', 'g2', 'g3'], ['g1', 'g2'], ['g1', 'g2'], true],
+			[['g1', 'g2', 'g3'], ['g1', 'g2'], ['g1', 'g2', 'g3'], true],
+		];
 	}
 
 	/**
@@ -294,8 +224,8 @@ class UtilTest extends \Test\TestCase {
 	 * @dataProvider defaultAppsProvider
 	 * @group DB
 	 */
-	function testDefaultApps($defaultAppConfig, $expectedPath, $enabledApps) {
-		$oldDefaultApps = \OCP\Config::getSystemValue('defaultapp', '');
+	public function testDefaultApps($defaultAppConfig, $expectedPath, $enabledApps) {
+		$oldDefaultApps = \OC::$server->getConfig()->getSystemValue('defaultapp', '');
 		// CLI is doing messy stuff with the webroot, so need to work it around
 		$oldWebRoot = \OC::$WEBROOT;
 		\OC::$WEBROOT = '';
@@ -303,49 +233,49 @@ class UtilTest extends \Test\TestCase {
 		$appManager = $this->createMock(IAppManager::class);
 		$appManager->expects($this->any())
 			->method('isEnabledForUser')
-			->will($this->returnCallback(function($appId) use ($enabledApps){
+			->willReturnCallback(function ($appId) use ($enabledApps) {
 				return in_array($appId, $enabledApps);
-		}));
+			});
 		Dummy_OC_Util::$appManager = $appManager;
 
 		// need to set a user id to make sure enabled apps are read from cache
 		\OC_User::setUserId($this->getUniqueID());
-		\OCP\Config::setSystemValue('defaultapp', $defaultAppConfig);
+		\OC::$server->getConfig()->setSystemValue('defaultapp', $defaultAppConfig);
 		$this->assertEquals('http://localhost/' . $expectedPath, Dummy_OC_Util::getDefaultPageUrl());
 
 		// restore old state
 		\OC::$WEBROOT = $oldWebRoot;
-		\OCP\Config::setSystemValue('defaultapp', $oldDefaultApps);
+		\OC::$server->getConfig()->setSystemValue('defaultapp', $oldDefaultApps);
 		\OC_User::setUserId(null);
 	}
 
-	function defaultAppsProvider() {
-		return array(
+	public function defaultAppsProvider() {
+		return [
 			// none specified, default to files
-			array(
+			[
 				'',
 				'index.php/apps/files/',
-				array('files'),
-			),
+				['files'],
+			],
 			// unexisting or inaccessible app specified, default to files
-			array(
+			[
 				'unexist',
 				'index.php/apps/files/',
-				array('files'),
-			),
+				['files'],
+			],
 			// non-standard app
-			array(
+			[
 				'calendar',
 				'index.php/apps/calendar/',
-				array('files', 'calendar'),
-			),
+				['files', 'calendar'],
+			],
 			// non-standard app with fallback
-			array(
+			[
 				'contacts,calendar',
 				'index.php/apps/calendar/',
-				array('files', 'calendar'),
-			),
-		);
+				['files', 'calendar'],
+			],
+		];
 	}
 
 	public function testGetDefaultPageUrlWithRedirectUrlWithoutFrontController() {
@@ -389,26 +319,26 @@ class UtilTest extends \Test\TestCase {
 		$this->assertFalse(\OCP\Util::needUpgrade());
 
 		$config->setSystemValue('version', '7.0.0.0');
-		\OC::$server->getSession()->set('OC_Version', array(7, 0, 0, 1));
-		self::invokePrivate(new \OCP\Util, 'needUpgradeCache', array(null));
+		\OC::$server->getSession()->set('OC_Version', [7, 0, 0, 1]);
+		self::invokePrivate(new \OCP\Util, 'needUpgradeCache', [null]);
 
 		$this->assertTrue(\OCP\Util::needUpgrade());
 
 		$config->setSystemValue('version', $oldConfigVersion);
 		\OC::$server->getSession()->set('OC_Version', $oldSessionVersion);
-		self::invokePrivate(new \OCP\Util, 'needUpgradeCache', array(null));
+		self::invokePrivate(new \OCP\Util, 'needUpgradeCache', [null]);
 
 		$this->assertFalse(\OCP\Util::needUpgrade());
 	}
 
 	public function testCheckDataDirectoryValidity() {
-		$dataDir = \OCP\Files::tmpFolder();
+		$dataDir = \OC::$server->getTempManager()->getTemporaryFolder();
 		touch($dataDir . '/.ocdata');
 		$errors = \OC_Util::checkDataDirectoryValidity($dataDir);
 		$this->assertEmpty($errors);
 		\OCP\Files::rmdirr($dataDir);
 
-		$dataDir = \OCP\Files::tmpFolder();
+		$dataDir = \OC::$server->getTempManager()->getTemporaryFolder();
 		// no touch
 		$errors = \OC_Util::checkDataDirectoryValidity($dataDir);
 		$this->assertNotEmpty($errors);
@@ -418,13 +348,13 @@ class UtilTest extends \Test\TestCase {
 		$this->assertNotEmpty($errors);
 	}
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		\OC_Util::$scripts = [];
 		\OC_Util::$styles = [];
 	}
-	protected function tearDown() {
+	protected function tearDown(): void {
 		parent::tearDown();
 
 		\OC_Util::$scripts = [];

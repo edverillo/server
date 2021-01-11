@@ -21,15 +21,45 @@
 
 namespace Test\Files\ObjectStore;
 
+use Icewind\Streams\Wrapper;
 use OC\Files\ObjectStore\S3;
+
+class MultiPartUploadS3 extends S3 {
+	public function writeObject($urn, $stream) {
+		$this->getConnection()->upload($this->bucket, $urn, $stream, 'private', [
+			'mup_threshold' => 1,
+		]);
+	}
+}
+
+class NonSeekableStream extends Wrapper {
+	public static function wrap($source) {
+		$context = stream_context_create([
+			'nonseek' => [
+				'source' => $source,
+			],
+		]);
+		return Wrapper::wrapSource($source, $context, 'nonseek', self::class);
+	}
+
+	public function dir_opendir($path, $options) {
+		return false;
+	}
+
+	public function stream_open($path, $mode, $options, &$opened_path) {
+		$this->loadContext('nonseek');
+		return true;
+	}
+
+	public function stream_seek($offset, $whence = SEEK_SET) {
+		return false;
+	}
+}
 
 /**
  * @group PRIMARY-s3
  */
 class S3Test extends ObjectStoreTest {
-	/**
-	 * @return \OCP\Files\ObjectStore\IObjectStore
-	 */
 	protected function getInstance() {
 		$config = \OC::$server->getConfig()->getSystemValue('objectstore');
 		if (!is_array($config) || $config['class'] !== 'OC\\Files\\ObjectStore\\S3') {
@@ -37,5 +67,36 @@ class S3Test extends ObjectStoreTest {
 		}
 
 		return new S3($config['arguments']);
+	}
+
+	public function testUploadNonSeekable() {
+		$config = \OC::$server->getConfig()->getSystemValue('objectstore');
+		if (!is_array($config) || $config['class'] !== 'OC\\Files\\ObjectStore\\S3') {
+			$this->markTestSkipped('objectstore not configured for s3');
+		}
+
+		$s3 = $this->getInstance();
+
+		$s3->writeObject('multiparttest', NonSeekableStream::wrap(fopen(__FILE__, 'r')));
+
+		$result = $s3->readObject('multiparttest');
+
+		$this->assertEquals(file_get_contents(__FILE__), stream_get_contents($result));
+	}
+
+	public function testSeek() {
+		$data = file_get_contents(__FILE__);
+
+		$instance = $this->getInstance();
+		$instance->writeObject('seek', $this->stringToStream($data));
+
+		$read = $instance->readObject('seek');
+		$this->assertEquals(substr($data, 0, 100), fread($read, 100));
+
+		fseek($read, 10);
+		$this->assertEquals(substr($data, 10, 100), fread($read, 100));
+
+		fseek($read, 100, SEEK_CUR);
+		$this->assertEquals(substr($data, 210, 100), fread($read, 100));
 	}
 }

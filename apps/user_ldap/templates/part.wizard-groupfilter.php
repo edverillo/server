@@ -1,7 +1,7 @@
 <fieldset id="ldapWizard4">
 	<div>
 		<p>
-			<?php p($l->t('Groups meeting these criteria are available in %s:', $theme->getName()));?>
+			<?php p($l->t('Groups meeting these criteria are available in %s:', [$theme->getName()]));?>
 		</p>
 		<p>
 			<label for="ldap_groupfilter_objectclass">
@@ -45,7 +45,7 @@
 		<p id="rawGroupFilterContainer" class="invisible">
 			<textarea type="text" id="ldap_group_filter" name="ldap_group_filter"
 					  placeholder="<?php p($l->t('Edit LDAP Query'));?>"
-					  title="<?php p($l->t('The filter specifies which LDAP groups shall have access to the %s instance.', $theme->getName()));?>">
+					  title="<?php p($l->t('The filter specifies which LDAP groups shall have access to the %s instance.', [$theme->getName()]));?>">
 			</textarea>
 		</p>
 		<p>
@@ -53,7 +53,7 @@
 		</p>
 		<p class="ldap_count">
 			<button class="ldapGetEntryCount ldapGetGroupCount" name="ldapGetEntryCount" type="button">
-				<?php p($l->t('Verify settings and count groups'));?>
+				<?php p($l->t('Verify settings and count the groups'));?>
 			</button>
 			<span id="ldap_group_count"></span>
 		</p>

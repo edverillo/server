@@ -2,10 +2,12 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Olivier Paroz <github@oparoz.com>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
+ * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -19,46 +21,49 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\Preview;
 
 use Imagick;
+use OCP\Files\File;
+use OCP\IImage;
+use OCP\ILogger;
 
 /**
  * Creates a PNG preview using ImageMagick via the PECL extension
  *
  * @package OC\Preview
  */
-abstract class Bitmap extends Provider {
+abstract class Bitmap extends ProviderV2 {
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public function getThumbnail($path, $maxX, $maxY, $scalingup, $fileview) {
-
-		$tmpPath = $fileview->toTmpFile($path);
-		if (!$tmpPath) {
-			return false;
-		}
+	public function getThumbnail(File $file, int $maxX, int $maxY): ?IImage {
+		$tmpPath = $this->getLocalFile($file);
 
 		// Creates \Imagick object from bitmap or vector file
 		try {
 			$bp = $this->getResizedPreview($tmpPath, $maxX, $maxY);
 		} catch (\Exception $e) {
-			\OCP\Util::writeLog('core', 'ImageMagick says: ' . $e->getmessage(), \OCP\Util::ERROR);
-			return false;
+			\OC::$server->getLogger()->logException($e, [
+				'message' => 'File: ' . $file->getPath() . ' Imagick says:',
+				'level' => ILogger::ERROR,
+				'app' => 'core',
+			]);
+			return null;
 		}
 
-		unlink($tmpPath);
+		$this->cleanTmpFiles();
 
 		//new bitmap image object
 		$image = new \OC_Image();
 		$image->loadFromData($bp);
 		//check if image object is valid
-		return $image->valid() ? $image : false;
+		return $image->valid() ? $image : null;
 	}
 
 	/**
@@ -111,5 +116,4 @@ abstract class Bitmap extends Provider {
 
 		return $bp;
 	}
-
 }

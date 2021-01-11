@@ -27,14 +27,14 @@
 
 namespace Test\Util\User;
 
-use \OC\User\Backend;
+use OC\User\Backend;
 
 /**
  * dummy user backend, does not keep state, only for testing use
  */
 class Dummy extends Backend implements \OCP\IUserBackend {
-	private $users = array();
-	private $displayNames = array();
+	private $users = [];
+	private $displayNames = [];
 
 	/**
 	 * Create a new user
@@ -95,7 +95,7 @@ class Dummy extends Backend implements \OCP\IUserBackend {
 	 *
 	 * @param string $uid The username
 	 * @param string $password The password
-	 * @return string
+	 * @return string|bool
 	 *
 	 * Check if the password is correct without logging in the user
 	 * returns the user id or false
@@ -103,9 +103,16 @@ class Dummy extends Backend implements \OCP\IUserBackend {
 	public function checkPassword($uid, $password) {
 		if (isset($this->users[$uid]) && $this->users[$uid] === $password) {
 			return $uid;
-		} else {
-			return false;
 		}
+
+		return false;
+	}
+
+	public function loginName2UserName($loginName) {
+		if (isset($this->users[strtolower($loginName)])) {
+			return strtolower($loginName);
+		}
+		return false;
 	}
 
 	/**
@@ -120,7 +127,7 @@ class Dummy extends Backend implements \OCP\IUserBackend {
 		if (empty($search)) {
 			return array_keys($this->users);
 		}
-		$result = array();
+		$result = [];
 		foreach (array_keys($this->users) as $user) {
 			if (stripos($user, $search) !== false) {
 				$result[] = $user;
@@ -157,6 +164,7 @@ class Dummy extends Backend implements \OCP\IUserBackend {
 
 	public function setDisplayName($uid, $displayName) {
 		$this->displayNames[$uid] = $displayName;
+		return true;
 	}
 
 	public function getDisplayName($uid) {
@@ -167,7 +175,7 @@ class Dummy extends Backend implements \OCP\IUserBackend {
 	 * Backend name to be shown in user management
 	 * @return string the name of the backend to be shown
 	 */
-	public function getBackendName(){
+	public function getBackendName() {
 		return 'Dummy';
 	}
 }

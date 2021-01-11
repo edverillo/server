@@ -2,10 +2,13 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -19,9 +22,10 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
+
 namespace OCA\Files_External\Tests\Service;
 
 use OCA\Files_External\Lib\StorageConfig;
@@ -39,7 +43,7 @@ use Test\Traits\UserTrait;
 class UserGlobalStoragesServiceTest extends GlobalStoragesServiceTest {
 	use UserTrait;
 
-	/** @var \OCP\IGroupManager|\PHPUnit_Framework_MockObject_MockObject groupManager */
+	/** @var \OCP\IGroupManager|\PHPUnit\Framework\MockObject\MockObject groupManager */
 	protected $groupManager;
 
 	/**
@@ -54,26 +58,26 @@ class UserGlobalStoragesServiceTest extends GlobalStoragesServiceTest {
 
 	protected $user;
 
-	const USER_ID = 'test_user';
-	const GROUP_ID = 'test_group';
-	const GROUP_ID2 = 'test_group2';
+	public const USER_ID = 'test_user';
+	public const GROUP_ID = 'test_group';
+	public const GROUP_ID2 = 'test_group2';
 
-	public function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->globalStoragesService = $this->service;
 
-		$this->user = new \OC\User\User(self::USER_ID, null);
-		/** @var \OCP\IUserSession|\PHPUnit_Framework_MockObject_MockObject $userSession */
+		$this->user = new \OC\User\User(self::USER_ID, null, \OC::$server->getEventDispatcher());
+		/** @var \OCP\IUserSession|\PHPUnit\Framework\MockObject\MockObject $userSession */
 		$userSession = $this->createMock(IUserSession::class);
 		$userSession
 			->expects($this->any())
 			->method('getUser')
-			->will($this->returnValue($this->user));
+			->willReturn($this->user);
 
 		$this->groupManager = $this->createMock(IGroupManager::class);
 		$this->groupManager->method('isInGroup')
-			->will($this->returnCallback(function ($userId, $groupId) {
+			->willReturnCallback(function ($userId, $groupId) {
 				if ($userId === self::USER_ID) {
 					switch ($groupId) {
 						case self::GROUP_ID:
@@ -82,15 +86,15 @@ class UserGlobalStoragesServiceTest extends GlobalStoragesServiceTest {
 					}
 				}
 				return false;
-			}));
+			});
 		$this->groupManager->method('getUserGroupIds')
-			->will($this->returnCallback(function (IUser $user) {
+			->willReturnCallback(function (IUser $user) {
 				if ($user->getUID() === self::USER_ID) {
 					return [self::GROUP_ID, self::GROUP_ID2];
 				} else {
 					return [];
 				}
-			}));
+			});
 
 		$this->service = new UserGlobalStoragesService(
 			$this->backendService,
@@ -150,16 +154,14 @@ class UserGlobalStoragesServiceTest extends GlobalStoragesServiceTest {
 				$this->service->getStorage($newStorage->getId());
 				$this->fail('Failed asserting that storage can\'t be accessed by id');
 			} catch (NotFoundException $e) {
-
 			}
 		}
-
 	}
 
-	/**
-	 * @expectedException \DomainException
-	 */
+
 	public function testAddStorage($storageParams = null) {
+		$this->expectException(\DomainException::class);
+
 		$backend = $this->backendService->getBackend('identifier:\OCA\Files_External\Lib\Backend\SMB');
 		$authMechanism = $this->backendService->getAuthMechanism('identifier:\Auth\Mechanism');
 
@@ -172,10 +174,10 @@ class UserGlobalStoragesServiceTest extends GlobalStoragesServiceTest {
 		$this->service->addStorage($storage);
 	}
 
-	/**
-	 * @expectedException \DomainException
-	 */
+
 	public function testUpdateStorage($storageParams = null) {
+		$this->expectException(\DomainException::class);
+
 		$backend = $this->backendService->getBackend('identifier:\OCA\Files_External\Lib\Backend\SMB');
 		$authMechanism = $this->backendService->getAuthMechanism('identifier:\Auth\Mechanism');
 
@@ -192,18 +194,19 @@ class UserGlobalStoragesServiceTest extends GlobalStoragesServiceTest {
 		$this->service->updateStorage($retrievedStorage);
 	}
 
-	/**
-	 * @expectedException \DomainException
-	 */
+
 	public function testNonExistingStorage() {
-		parent::testNonExistingStorage();
+		$this->expectException(\DomainException::class);
+
+		$this->ActualNonExistingStorageTest();
 	}
 
 	/**
-	 * @expectedException \DomainException
 	 * @dataProvider deleteStorageDataProvider
 	 */
 	public function testDeleteStorage($backendOptions, $rustyStorageId, $expectedCountAfterDeletion) {
+		$this->expectException(\DomainException::class);
+
 		$backend = $this->backendService->getBackend('identifier:\OCA\Files_External\Lib\Backend\SMB');
 		$authMechanism = $this->backendService->getAuthMechanism('identifier:\Auth\Mechanism');
 
@@ -219,11 +222,11 @@ class UserGlobalStoragesServiceTest extends GlobalStoragesServiceTest {
 		$this->service->removeStorage($id);
 	}
 
-	/**
-	 * @expectedException \DomainException
-	 */
+
 	public function testDeleteUnexistingStorage() {
-		parent::testDeleteUnexistingStorage();
+		$this->expectException(\DomainException::class);
+
+		$this->actualDeletedUnexistingStorageTest();
 	}
 
 	public function getUniqueStoragesProvider() {
@@ -303,66 +306,66 @@ class UserGlobalStoragesServiceTest extends GlobalStoragesServiceTest {
 
 	public function testGetStoragesBackendNotVisible() {
 		// we don't test this here
-		$this->assertTrue(true);
+		$this->addToAssertionCount(1);
 	}
 
 	public function testGetStoragesAuthMechanismNotVisible() {
 		// we don't test this here
-		$this->assertTrue(true);
+		$this->addToAssertionCount(1);
 	}
 
 	public function testHooksAddStorage($a = null, $b = null, $c = null) {
 		// we don't test this here
-		$this->assertTrue(true);
+		$this->addToAssertionCount(1);
 	}
 
 	public function testHooksUpdateStorage($a = null, $b = null, $c = null, $d = null, $e = null) {
 		// we don't test this here
-		$this->assertTrue(true);
+		$this->addToAssertionCount(1);
 	}
 
 	public function testHooksRenameMountPoint() {
 		// we don't test this here
-		$this->assertTrue(true);
+		$this->addToAssertionCount(1);
 	}
 
 	public function testHooksDeleteStorage($a = null, $b = null, $c = null) {
 		// we don't test this here
-		$this->assertTrue(true);
+		$this->addToAssertionCount(1);
 	}
 
 	public function testLegacyConfigConversionApplicableAll() {
 		// we don't test this here
-		$this->assertTrue(true);
+		$this->addToAssertionCount(1);
 	}
 
 	public function testLegacyConfigConversionApplicableUserAndGroup() {
 		// we don't test this here
-		$this->assertTrue(true);
+		$this->addToAssertionCount(1);
 	}
 
 	public function testReadLegacyConfigAndGenerateConfigId() {
 		// we don't test this here
-		$this->assertTrue(true);
+		$this->addToAssertionCount(1);
 	}
 
 	public function testReadLegacyConfigNoAuthMechanism() {
 		// we don't test this here
-		$this->assertTrue(true);
+		$this->addToAssertionCount(1);
 	}
 
 	public function testReadLegacyConfigClass() {
 		// we don't test this here
-		$this->assertTrue(true);
+		$this->addToAssertionCount(1);
 	}
 
 	public function testReadEmptyMountPoint() {
 		// we don't test this here
-		$this->assertTrue(true);
+		$this->addToAssertionCount(1);
 	}
 
 	public function testUpdateStorageMountPoint() {
 		// we don't test this here
-		$this->assertTrue(true);
+		$this->addToAssertionCount(1);
 	}
 }

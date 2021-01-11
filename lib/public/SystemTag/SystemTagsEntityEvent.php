@@ -1,8 +1,14 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -16,23 +22,21 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCP\SystemTag;
 
-use Symfony\Component\EventDispatcher\Event;
+use OCP\EventDispatcher\Event;
 
 /**
  * Class SystemTagsEntityEvent
  *
- * @package OCP\SystemTag
  * @since 9.1.0
  */
 class SystemTagsEntityEvent extends Event {
-
-	const EVENT_ENTITY = 'OCP\SystemTag\ISystemTagManager::registerEntity';
+	public const EVENT_ENTITY = 'OCP\SystemTag\ISystemTagManager::registerEntity';
 
 	/** @var string */
 	protected $event;
@@ -45,7 +49,7 @@ class SystemTagsEntityEvent extends Event {
 	 * @param string $event
 	 * @since 9.1.0
 	 */
-	public function __construct($event) {
+	public function __construct(string $event) {
 		$this->event = $event;
 		$this->collections = [];
 	}
@@ -59,7 +63,7 @@ class SystemTagsEntityEvent extends Event {
 	 * @throws \OutOfBoundsException when the entity name is already taken
 	 * @since 9.1.0
 	 */
-	public function addEntityCollection($name, \Closure $entityExistsFunction) {
+	public function addEntityCollection(string $name, \Closure $entityExistsFunction) {
 		if (isset($this->collections[$name])) {
 			throw new \OutOfBoundsException('Duplicate entity name "' . $name . '"');
 		}
@@ -71,7 +75,7 @@ class SystemTagsEntityEvent extends Event {
 	 * @return \Closure[]
 	 * @since 9.1.0
 	 */
-	public function getEntityCollections() {
+	public function getEntityCollections(): array {
 		return $this->collections;
 	}
 }

@@ -1,8 +1,16 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright 2017, Roeland Jago Douma <roeland@famdouma.nl>
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author John Molakvoæ (skjnldsv) <skjnldsv@protonmail.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Thomas Citharel <nextcloud@tcit.fr>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -17,15 +25,18 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
+
 namespace OC\Core\Controller;
 
+use OC\Files\AppData\Factory;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\NotFoundResponse;
 use OCP\AppFramework\Http\FileDisplayResponse;
+use OCP\AppFramework\Http\NotFoundResponse;
+use OCP\AppFramework\Http\Response;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\IAppData;
 use OCP\Files\NotFoundException;
@@ -41,33 +52,28 @@ class JsController extends Controller {
 	/** @var ITimeFactory */
 	protected $timeFactory;
 
-	/**
-	 * @param string $appName
-	 * @param IRequest $request
-	 * @param IAppData $appData
-	 * @param ITimeFactory $timeFactory
-	 */
-	public function __construct($appName, IRequest $request, IAppData $appData, ITimeFactory $timeFactory) {
+	public function __construct($appName, IRequest $request, Factory $appDataFactory, ITimeFactory $timeFactory) {
 		parent::__construct($appName, $request);
 
-		$this->appData = $appData;
+		$this->appData = $appDataFactory->get('js');
 		$this->timeFactory = $timeFactory;
 	}
 
 	/**
 	 * @PublicPage
 	 * @NoCSRFRequired
+	 * @NoSameSiteCookieRequired
 	 *
-	 * @param string $fileName css filename with extension
-	 * @param string $appName css folder name
+	 * @param string $fileName js filename with extension
+	 * @param string $appName js folder name
 	 * @return FileDisplayResponse|NotFoundResponse
 	 */
-	public function getJs($fileName, $appName) {
+	public function getJs(string $fileName, string $appName): Response {
 		try {
 			$folder = $this->appData->getFolder($appName);
 			$gzip = false;
 			$file = $this->getFile($folder, $fileName, $gzip);
-		} catch(NotFoundException $e) {
+		} catch (NotFoundException $e) {
 			return new NotFoundResponse();
 		}
 
@@ -75,10 +81,13 @@ class JsController extends Controller {
 		if ($gzip) {
 			$response->addHeader('Content-Encoding', 'gzip');
 		}
-		$response->cacheFor(86400);
+
+		$ttl = 31536000;
+		$response->addHeader('Cache-Control', 'max-age='.$ttl.', immutable');
+
 		$expires = new \DateTime();
 		$expires->setTimestamp($this->timeFactory->getTime());
-		$expires->add(new \DateInterval('PT24H'));
+		$expires->add(new \DateInterval('PT'.$ttl.'S'));
 		$response->addHeader('Expires', $expires->format(\DateTime::RFC1123));
 		$response->addHeader('Pragma', 'cache');
 		return $response;
@@ -89,11 +98,13 @@ class JsController extends Controller {
 	 * @param string $fileName
 	 * @param bool $gzip is set to true if we use the gzip file
 	 * @return ISimpleFile
+	 *
+	 * @throws NotFoundException
 	 */
-	private function getFile(ISimpleFolder $folder, $fileName, &$gzip) {
+	private function getFile(ISimpleFolder $folder, string $fileName, bool &$gzip): ISimpleFile {
 		$encoding = $this->request->getHeader('Accept-Encoding');
 
-		if ($encoding !== null && strpos($encoding, 'gzip') !== false) {
+		if (strpos($encoding, 'gzip') !== false) {
 			try {
 				$gzip = true;
 				return $folder->getFile($fileName . '.gzip'); # Safari doesn't like .gz

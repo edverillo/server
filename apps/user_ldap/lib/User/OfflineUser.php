@@ -3,6 +3,7 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Morris Jobke <hey@morrisjobke.de>
  *
@@ -18,13 +19,17 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\User_LDAP\User;
 
 use OCA\User_LDAP\Mapping\UserMapping;
+use OCP\IConfig;
+use OCP\IDBConnection;
+use OCP\Share\IManager;
+use OCP\Share\IShare;
 
 class OfflineUser {
 	/**
@@ -52,6 +57,10 @@ class OfflineUser {
 	 */
 	protected $lastLogin;
 	/**
+	 * @var string $foundDeleted the timestamp when the user was detected as unavailable
+	 */
+	protected $foundDeleted;
+	/**
 	 * @var string $email
 	 */
 	protected $email;
@@ -60,37 +69,38 @@ class OfflineUser {
 	 */
 	protected $hasActiveShares;
 	/**
-	 * @var \OCP\IConfig $config
+	 * @var IConfig $config
 	 */
 	protected $config;
 	/**
-	 * @var \OCP\IDBConnection $db
+	 * @var IDBConnection $db
 	 */
 	protected $db;
 	/**
 	 * @var \OCA\User_LDAP\Mapping\UserMapping
 	 */
 	protected $mapping;
+	/** @var IManager */
+	private $shareManager;
 
-	/**
-	 * @param string $ocName
-	 * @param \OCP\IConfig $config
-	 * @param \OCP\IDBConnection $db
-	 * @param \OCA\User_LDAP\Mapping\UserMapping $mapping
-	 */
-	public function __construct($ocName, \OCP\IConfig $config, \OCP\IDBConnection $db, UserMapping $mapping) {
+	public function __construct(
+		$ocName,
+		IConfig $config,
+		UserMapping $mapping,
+		IManager $shareManager
+	) {
 		$this->ocName = $ocName;
 		$this->config = $config;
-		$this->db = $db;
 		$this->mapping = $mapping;
-		$this->fetchDetails();
+		$this->shareManager = $shareManager;
 	}
 
 	/**
 	 * remove the Delete-flag from the user.
 	 */
 	public function unmark() {
-		$this->config->setUserValue($this->ocName, 'user_ldap', 'isDeleted', '0');
+		$this->config->deleteUserValue($this->ocName, 'user_ldap', 'isDeleted');
+		$this->config->deleteUserValue($this->ocName, 'user_ldap', 'foundDeleted');
 	}
 
 	/**
@@ -98,7 +108,7 @@ class OfflineUser {
 	 * @return array
 	 */
 	public function export() {
-		$data = array();
+		$data = [];
 		$data['ocName'] = $this->getOCName();
 		$data['dn'] = $this->getDN();
 		$data['uid'] = $this->getUID();
@@ -112,7 +122,7 @@ class OfflineUser {
 	}
 
 	/**
-	 * getter for ownCloud internal name
+	 * getter for Nextcloud internal name
 	 * @return string
 	 */
 	public function getOCName() {
@@ -124,6 +134,9 @@ class OfflineUser {
 	 * @return string
 	 */
 	public function getUID() {
+		if (!isset($this->uid)) {
+			$this->fetchDetails();
+		}
 		return $this->uid;
 	}
 
@@ -132,6 +145,9 @@ class OfflineUser {
 	 * @return string
 	 */
 	public function getDN() {
+		if (!isset($this->dn)) {
+			$this->fetchDetails();
+		}
 		return $this->dn;
 	}
 
@@ -140,6 +156,9 @@ class OfflineUser {
 	 * @return string
 	 */
 	public function getDisplayName() {
+		if (!isset($this->displayName)) {
+			$this->fetchDetails();
+		}
 		return $this->displayName;
 	}
 
@@ -148,6 +167,9 @@ class OfflineUser {
 	 * @return string
 	 */
 	public function getEmail() {
+		if (!isset($this->email)) {
+			$this->fetchDetails();
+		}
 		return $this->email;
 	}
 
@@ -156,6 +178,9 @@ class OfflineUser {
 	 * @return string
 	 */
 	public function getHomePath() {
+		if (!isset($this->homePath)) {
+			$this->fetchDetails();
+		}
 		return $this->homePath;
 	}
 
@@ -164,7 +189,21 @@ class OfflineUser {
 	 * @return int
 	 */
 	public function getLastLogin() {
-		return intval($this->lastLogin);
+		if (!isset($this->lastLogin)) {
+			$this->fetchDetails();
+		}
+		return (int)$this->lastLogin;
+	}
+
+	/**
+	 * getter for the detection timestamp
+	 * @return int
+	 */
+	public function getDetectedOn() {
+		if (!isset($this->foundDeleted)) {
+			$this->fetchDetails();
+		}
+		return (int)$this->foundDeleted;
 	}
 
 	/**
@@ -172,6 +211,9 @@ class OfflineUser {
 	 * @return bool
 	 */
 	public function getHasActiveShares() {
+		if (!isset($this->hasActiveShares)) {
+			$this->fetchDetails();
+		}
 		return $this->hasActiveShares;
 	}
 
@@ -179,14 +221,15 @@ class OfflineUser {
 	 * reads the user details
 	 */
 	protected function fetchDetails() {
-		$properties = array (
+		$properties = [
 			'displayName' => 'user_ldap',
-			'uid'         => 'user_ldap',
-			'homePath'    => 'user_ldap',
-			'email'       => 'settings',
-			'lastLogin'   => 'login'
-		);
-		foreach($properties as $property => $app) {
+			'uid' => 'user_ldap',
+			'homePath' => 'user_ldap',
+			'foundDeleted' => 'user_ldap',
+			'email' => 'settings',
+			'lastLogin' => 'login',
+		];
+		foreach ($properties as $property => $app) {
 			$this->$property = $this->config->getUserValue($this->ocName, $app, $property, '');
 		}
 
@@ -196,34 +239,31 @@ class OfflineUser {
 		$this->determineShares();
 	}
 
-
 	/**
 	 * finds out whether the user has active shares. The result is stored in
 	 * $this->hasActiveShares
 	 */
 	protected function determineShares() {
-		$query = $this->db->prepare('
-			SELECT COUNT(`uid_owner`)
-			FROM `*PREFIX*share`
-			WHERE `uid_owner` = ?
-		', 1);
-		$query->execute(array($this->ocName));
-		$sResult = $query->fetchColumn(0);
-		if(intval($sResult) === 1) {
-			$this->hasActiveShares = true;
-			return;
-		}
+		$shareInterface = new \ReflectionClass(IShare::class);
+		$shareConstants = $shareInterface->getConstants();
 
-		$query = $this->db->prepare('
-			SELECT COUNT(`owner`)
-			FROM `*PREFIX*share_external`
-			WHERE `owner` = ?
-		', 1);
-		$query->execute(array($this->ocName));
-		$sResult = $query->fetchColumn(0);
-		if(intval($sResult) === 1) {
-			$this->hasActiveShares = true;
-			return;
+		foreach ($shareConstants as $constantName => $constantValue) {
+			if (strpos($constantName, 'TYPE_') !== 0
+				|| $constantValue === IShare::TYPE_USERGROUP
+			) {
+				continue;
+			}
+			$shares = $this->shareManager->getSharesBy(
+				$this->ocName,
+				$constantValue,
+				null,
+				false,
+				1
+			);
+			if (!empty($shares)) {
+				$this->hasActiveShares = true;
+				return;
+			}
 		}
 
 		$this->hasActiveShares = false;

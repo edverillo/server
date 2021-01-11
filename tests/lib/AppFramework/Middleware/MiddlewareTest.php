@@ -21,14 +21,15 @@
  *
  */
 
-
 namespace Test\AppFramework\Middleware;
 
 use OC\AppFramework\Http\Request;
-use OCP\AppFramework\Middleware;
 use OCP\AppFramework\Http\Response;
+use OCP\AppFramework\Middleware;
+use OCP\IConfig;
 
-class ChildMiddleware extends Middleware {};
+class ChildMiddleware extends Middleware {
+};
 
 
 class MiddlewareTest extends \Test\TestCase {
@@ -43,7 +44,7 @@ class MiddlewareTest extends \Test\TestCase {
 	/** @var Response */
 	private $response;
 
-	protected function setUp(){
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->middleware = new ChildMiddleware();
@@ -59,7 +60,7 @@ class MiddlewareTest extends \Test\TestCase {
 				new Request(
 					[],
 					$this->getMockBuilder('\OCP\Security\ISecureRandom')->getMock(),
-					$this->getMockBuilder('\OCP\IConfig')->getMock()
+					$this->getMockBuilder(IConfig::class)->getMock()
 				)
 			])->getMock();
 		$this->exception = new \Exception();
@@ -74,8 +75,8 @@ class MiddlewareTest extends \Test\TestCase {
 
 
 	public function testAfterExceptionRaiseAgainWhenUnhandled() {
-		$this->setExpectedException('Exception');
-		$afterEx = $this->middleware->afterException($this->controller, null, $this->exception);
+		$this->expectException(\Exception::class);
+		$this->middleware->afterException($this->controller, null, $this->exception);
 	}
 
 
@@ -91,6 +92,4 @@ class MiddlewareTest extends \Test\TestCase {
 
 		$this->assertEquals('test', $output);
 	}
-
-
 }

@@ -2,6 +2,7 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
  * @author Bernhard Posselt <dev@bernhard-posselt.com>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Jörn Friedrich Dreyer <jfd@butonic.de>
@@ -9,6 +10,7 @@
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
+ * @author Vinicius Cubas Brand <vinicius@eita.org.br>
  *
  * @license AGPL-3.0
  *
@@ -22,7 +24,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -41,7 +43,6 @@ namespace OCP;
  * - preCreate(string $groupId)
  * - postCreate(\OC\Group\Group $group)
  *
- * @package OC\Group
  * @since 8.0.0
  */
 interface IGroupManager {
@@ -66,8 +67,15 @@ interface IGroupManager {
 	public function clearBackends();
 
 	/**
+	 * Get the active backends
+	 * @return \OCP\GroupInterface[]
+	 * @since 13.0.0
+	 */
+	public function getBackends();
+
+	/**
 	 * @param string $gid
-	 * @return \OCP\IGroup
+	 * @return \OCP\IGroup|null
 	 * @since 8.0.0
 	 */
 	public function get($gid);
@@ -81,7 +89,7 @@ interface IGroupManager {
 
 	/**
 	 * @param string $gid
-	 * @return \OCP\IGroup
+	 * @return \OCP\IGroup|null
 	 * @since 8.0.0
 	 */
 	public function createGroup($gid);
@@ -100,14 +108,14 @@ interface IGroupManager {
 	 * @return \OCP\IGroup[]
 	 * @since 8.0.0
 	 */
-	public function getUserGroups($user);
+	public function getUserGroups(IUser $user = null);
 
 	/**
 	 * @param \OCP\IUser $user
 	 * @return array with group names
 	 * @since 8.0.0
 	 */
-	public function getUserGroupIds($user);
+	public function getUserGroupIds(IUser $user);
 
 	/**
 	 * get a list of all display names in a group

@@ -2,65 +2,68 @@
 
 namespace Test;
 
+use OCP\IAddressBook;
+
 class ContactsManagerTest extends \Test\TestCase {
 
 	/** @var \OC\ContactsManager */
 	private $cm;
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 		$this->cm = new \OC\ContactsManager();
 	}
 
-	public function searchProvider(){
-		$search1 = array(
-			0 => array(
-				'N' => array(0 => '', 1 => 'Jan', 2 => 'Jansen', 3 => '', 4 => '',),
+	public function searchProvider() {
+		$search1 = [
+			0 => [
+				'N' => [0 => '', 1 => 'Jan', 2 => 'Jansen', 3 => '', 4 => '',],
 				'UID' => '04ada7f5-01f9-4309-9c82-6b555b2170ed',
 				'FN' => 'Jan Jansen',
 				'id' => '1',
 				'addressbook-key' => 'simple:1',
-			),
-			0 => array(
-				'N' => array(0 => '', 1 => 'Tom', 2 => 'Peeters', 3 => '', 4 => '',),
+			],
+			0 => [
+				'N' => [0 => '', 1 => 'Tom', 2 => 'Peeters', 3 => '', 4 => '',],
 				'UID' => '04ada7f5-01f9-4309-9c82-2345-2345--6b555b2170ed',
 				'FN' => 'Tom Peeters',
 				'id' => '2',
 				'addressbook-key' => 'simple:1',
-			),
-		);
+			],
+		];
 
-		$search2 = array(
-			0 => array(
-				'N' => array(0 => '', 1 => 'fg', 2 => '', 3 => '', 4 => '',),
+		$search2 = [
+			0 => [
+				'N' => [0 => '', 1 => 'fg', 2 => '', 3 => '', 4 => '',],
 				'UID' => '04ada234h5jh357f5-01f9-4309-9c82-6b555b2170ed',
 				'FN' => 'Jan Rompuy',
 				'id' => '1',
 				'addressbook-key' => 'simple:2',
-			),
-			0 => array(
-				'N' => array(0 => '', 1 => 'fg', 2 => '', 3 => '', 4 => '',),
+			],
+			0 => [
+				'N' => [0 => '', 1 => 'fg', 2 => '', 3 => '', 4 => '',],
 				'UID' => '04ada7f5-01f9-4309-345kj345j9c82-2345-2345--6b555b2170ed',
 				'FN' => 'Tim Peeters',
 				'id' => '2',
 				'addressbook-key' => 'simple:2',
-			),
-		);
+			],
+		];
 
-		$expectedResult =  array_merge($search1, $search2);
-		return array(
-			array(
+		$expectedResult = array_merge($search1, $search2);
+		return [
+			[
 				$search1,
 				$search2,
 				$expectedResult
-			)
-		);
+			]
+		];
 	}
 
 	/**
 	 * @dataProvider searchProvider
 	 */
-	public function testSearch($search1, $search2, $expectedResult ){
+	public function testSearch($search1, $search2, $expectedResult) {
+		/** @var \PHPUnit\Framework\MockObject\MockObject|IAddressBook $addressbook */
 		$addressbook1 = $this->getMockBuilder('\OCP\IAddressBook')
 			->disableOriginalConstructor()
 			->getMock();
@@ -88,12 +91,13 @@ class ContactsManagerTest extends \Test\TestCase {
 
 		$this->cm->registerAddressBook($addressbook1);
 		$this->cm->registerAddressBook($addressbook2);
-		$result =  $this->cm->search('');
+		$result = $this->cm->search('');
 		$this->assertEquals($expectedResult, $result);
 	}
-	
 
-	public function testDeleteHavePermission(){
+
+	public function testDeleteHavePermission() {
+		/** @var \PHPUnit\Framework\MockObject\MockObject|IAddressBook $addressbook */
 		$addressbook = $this->getMockBuilder('\OCP\IAddressBook')
 			->disableOriginalConstructor()
 			->getMock();
@@ -112,7 +116,8 @@ class ContactsManagerTest extends \Test\TestCase {
 		$this->assertEquals($result, 'returnMe');
 	}
 
-	public function testDeleteNoPermission(){
+	public function testDeleteNoPermission() {
+		/** @var \PHPUnit\Framework\MockObject\MockObject|IAddressBook $addressbook */
 		$addressbook = $this->getMockBuilder('\OCP\IAddressBook')
 			->disableOriginalConstructor()
 			->getMock();
@@ -129,7 +134,8 @@ class ContactsManagerTest extends \Test\TestCase {
 		$this->assertEquals($result, null);
 	}
 
-	public function testDeleteNoAddressbook(){
+	public function testDeleteNoAddressbook() {
+		/** @var \PHPUnit\Framework\MockObject\MockObject|IAddressBook $addressbook */
 		$addressbook = $this->getMockBuilder('\OCP\IAddressBook')
 			->disableOriginalConstructor()
 			->getMock();
@@ -140,10 +146,10 @@ class ContactsManagerTest extends \Test\TestCase {
 		$this->cm->registerAddressBook($addressbook);
 		$result = $this->cm->delete(1, 'noaddressbook');
 		$this->assertEquals($result, null);
-
 	}
 
-	public function testCreateOrUpdateHavePermission(){
+	public function testCreateOrUpdateHavePermission() {
+		/** @var \PHPUnit\Framework\MockObject\MockObject|IAddressBook $addressbook */
 		$addressbook = $this->getMockBuilder('\OCP\IAddressBook')
 			->disableOriginalConstructor()
 			->getMock();
@@ -157,11 +163,12 @@ class ContactsManagerTest extends \Test\TestCase {
 			->willReturn('returnMe');
 
 		$this->cm->registerAddressBook($addressbook);
-		$result = $this->cm->createOrUpdate(array(), $addressbook->getKey());
+		$result = $this->cm->createOrUpdate([], $addressbook->getKey());
 		$this->assertEquals($result, 'returnMe');
 	}
 
-	public function testCreateOrUpdateNoPermission(){
+	public function testCreateOrUpdateNoPermission() {
+		/** @var \PHPUnit\Framework\MockObject\MockObject|IAddressBook $addressbook */
 		$addressbook = $this->getMockBuilder('\OCP\IAddressBook')
 			->disableOriginalConstructor()
 			->getMock();
@@ -174,12 +181,12 @@ class ContactsManagerTest extends \Test\TestCase {
 			->method('createOrUpdate');
 
 		$this->cm->registerAddressBook($addressbook);
-		$result = $this->cm->createOrUpdate(array(), $addressbook->getKey());
+		$result = $this->cm->createOrUpdate([], $addressbook->getKey());
 		$this->assertEquals($result, null);
-
 	}
 
-	public function testCreateOrUpdateNOAdressbook(){
+	public function testCreateOrUpdateNOAdressbook() {
+		/** @var \PHPUnit\Framework\MockObject\MockObject|IAddressBook $addressbook */
 		$addressbook = $this->getMockBuilder('\OCP\IAddressBook')
 			->disableOriginalConstructor()
 			->getMock();
@@ -188,16 +195,17 @@ class ContactsManagerTest extends \Test\TestCase {
 			->method('createOrUpdate');
 
 		$this->cm->registerAddressBook($addressbook);
-		$result = $this->cm->createOrUpdate(array(), 'noaddressbook');
+		$result = $this->cm->createOrUpdate([], 'noaddressbook');
 		$this->assertEquals($result, null);
 	}
 
-	public function testIsEnabledIfNot(){
+	public function testIsEnabledIfNot() {
 		$result = $this->cm->isEnabled();
 		$this->assertFalse($result);
 	}
 
-	public function testIsEnabledIfSo(){
+	public function testIsEnabledIfSo() {
+		/** @var \PHPUnit\Framework\MockObject\MockObject|IAddressBook $addressbook */
 		$addressbook = $this->getMockBuilder('\OCP\IAddressBook')
 			->disableOriginalConstructor()
 			->getMock();
@@ -207,4 +215,26 @@ class ContactsManagerTest extends \Test\TestCase {
 		$this->assertTrue($result);
 	}
 
+	public function testAddressBookEnumeration() {
+		// create mock for the addressbook
+		/** @var \PHPUnit\Framework\MockObject\MockObject|IAddressBook $addressbook */
+		$addressbook = $this->getMockBuilder('\OCP\IAddressBook')
+			->disableOriginalConstructor()
+			->getMock();
+
+		// setup return for method calls
+		$addressbook->expects($this->any())
+			->method('getKey')
+			->willReturn('SIMPLE_ADDRESS_BOOK');
+		$addressbook->expects($this->any())
+			->method('getDisplayName')
+			->willReturn('A very simple Addressbook');
+
+		// register the address book
+		$this->cm->registerAddressBook($addressbook);
+		$all_books = $this->cm->getAddressBooks();
+
+		$this->assertEquals(1, count($all_books));
+		$this->assertEquals('A very simple Addressbook', $all_books['SIMPLE_ADDRESS_BOOK']);
+	}
 }

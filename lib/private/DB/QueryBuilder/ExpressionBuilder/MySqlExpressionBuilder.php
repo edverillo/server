@@ -3,6 +3,7 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Robin Appelman <robin@icewind.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -17,15 +18,14 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\DB\QueryBuilder\ExpressionBuilder;
 
-
-use OC\DB\Connection;
-use OCP\IDBConnection;
+use OC\DB\ConnectionAdapter;
+use OCP\DB\QueryBuilder\IQueryBuilder;
 
 class MySqlExpressionBuilder extends ExpressionBuilder {
 
@@ -33,12 +33,13 @@ class MySqlExpressionBuilder extends ExpressionBuilder {
 	protected $charset;
 
 	/**
-	 * @param \OCP\IDBConnection|Connection $connection
+	 * @param ConnectionAdapter $connection
+	 * @param IQueryBuilder $queryBuilder
 	 */
-	public function __construct(IDBConnection $connection) {
-		parent::__construct($connection);
+	public function __construct(ConnectionAdapter $connection, IQueryBuilder $queryBuilder) {
+		parent::__construct($connection, $queryBuilder);
 
-		$params = $connection->getParams();
+		$params = $connection->getInner()->getParams();
 		$this->charset = isset($params['charset']) ? $params['charset'] : 'utf8';
 	}
 
@@ -50,5 +51,4 @@ class MySqlExpressionBuilder extends ExpressionBuilder {
 		$y = $this->helper->quoteColumnName($y);
 		return $this->expressionBuilder->comparison($x, ' COLLATE ' . $this->charset . '_general_ci LIKE', $y);
 	}
-
 }

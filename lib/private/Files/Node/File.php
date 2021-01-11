@@ -2,11 +2,14 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Julius Härtl <jus@bitgrid.net>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -20,13 +23,15 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\Files\Node;
 
+use OCP\Files\GenericFileException;
 use OCP\Files\NotPermittedException;
+use OCP\Lock\LockedException;
 
 class File extends Node implements \OCP\Files\File {
 	/**
@@ -41,7 +46,8 @@ class File extends Node implements \OCP\Files\File {
 
 	/**
 	 * @return string
-	 * @throws \OCP\Files\NotPermittedException
+	 * @throws NotPermittedException
+	 * @throws LockedException
 	 */
 	public function getContent() {
 		if ($this->checkPermissions(\OCP\Constants::PERMISSION_READ)) {
@@ -55,15 +61,19 @@ class File extends Node implements \OCP\Files\File {
 	}
 
 	/**
-	 * @param string $data
-	 * @throws \OCP\Files\NotPermittedException
+	 * @param string|resource $data
+	 * @throws NotPermittedException
+	 * @throws \OCP\Files\GenericFileException
+	 * @throws LockedException
 	 */
 	public function putContent($data) {
 		if ($this->checkPermissions(\OCP\Constants::PERMISSION_UPDATE)) {
-			$this->sendHooks(array('preWrite'));
-			$this->view->file_put_contents($this->path, $data);
+			$this->sendHooks(['preWrite']);
+			if ($this->view->file_put_contents($this->path, $data) === false) {
+				throw new GenericFileException('file_put_contents failed');
+			}
 			$this->fileInfo = null;
-			$this->sendHooks(array('postWrite'));
+			$this->sendHooks(['postWrite']);
 		} else {
 			throw new NotPermittedException();
 		}
@@ -72,11 +82,12 @@ class File extends Node implements \OCP\Files\File {
 	/**
 	 * @param string $mode
 	 * @return resource
-	 * @throws \OCP\Files\NotPermittedException
+	 * @throws NotPermittedException
+	 * @throws LockedException
 	 */
 	public function fopen($mode) {
-		$preHooks = array();
-		$postHooks = array();
+		$preHooks = [];
+		$postHooks = [];
 		$requiredPermissions = \OCP\Constants::PERMISSION_READ;
 		switch ($mode) {
 			case 'r+':
@@ -109,13 +120,18 @@ class File extends Node implements \OCP\Files\File {
 		}
 	}
 
+	/**
+	 * @throws NotPermittedException
+	 * @throws \OCP\Files\InvalidPathException
+	 * @throws \OCP\Files\NotFoundException
+	 */
 	public function delete() {
 		if ($this->checkPermissions(\OCP\Constants::PERMISSION_DELETE)) {
-			$this->sendHooks(array('preDelete'));
+			$this->sendHooks(['preDelete']);
 			$fileInfo = $this->getFileInfo();
 			$this->view->unlink($this->path);
 			$nonExisting = new NonExistingFile($this->root, $this->view, $this->path, $fileInfo);
-			$this->root->emit('\OC\Files', 'postDelete', array($nonExisting));
+			$this->sendHooks(['postDelete'], [$nonExisting]);
 			$this->exists = false;
 			$this->fileInfo = null;
 		} else {
@@ -137,5 +153,9 @@ class File extends Node implements \OCP\Files\File {
 	 */
 	public function getChecksum() {
 		return $this->getFileInfo()->getChecksum();
+	}
+
+	public function getExtension(): string {
+		return $this->getFileInfo()->getExtension();
 	}
 }

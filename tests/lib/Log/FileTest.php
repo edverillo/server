@@ -18,40 +18,41 @@
 namespace Test\Log;
 
 use OC\Log\File;
+use OCP\ILogger;
 use Test\TestCase;
 
 /**
  * Class FileTest
- *
- * @group DB
  */
-class FileTest extends TestCase
-{
+class FileTest extends TestCase {
 	private $restore_logfile;
 	private $restore_logdateformat;
 
-	protected function setUp() {
+	/** @var File */
+	protected $logFile;
+
+	protected function setUp(): void {
 		parent::setUp();
-		$config = \OC::$server->getConfig();
-		$this->restore_logfile = $config->getSystemValue("logfile");
-		$this->restore_logdateformat = $config->getSystemValue('logdateformat');
+		$config = \OC::$server->getSystemConfig();
+		$this->restore_logfile = $config->getValue("logfile");
+		$this->restore_logdateformat = $config->getValue('logdateformat');
 		
-		$config->setSystemValue("logfile", $config->getSystemValue('datadirectory') . "/logtest");
-		File::init();
+		$config->setValue("logfile", $config->getValue('datadirectory') . "/logtest.log");
+		$this->logFile = new File($config->getValue('datadirectory') . '/logtest.log', '', $config);
 	}
-	protected function tearDown() {
-		$config = \OC::$server->getConfig();
+	protected function tearDown(): void {
+		$config = \OC::$server->getSystemConfig();
 		if (isset($this->restore_logfile)) {
-			$config->getSystemValue("logfile", $this->restore_logfile);
+			$config->getValue("logfile", $this->restore_logfile);
 		} else {
-			$config->deleteSystemValue("logfile");
-		}		
+			$config->deleteValue("logfile");
+		}
 		if (isset($this->restore_logdateformat)) {
-			$config->getSystemValue("logdateformat", $this->restore_logdateformat);
+			$config->getValue("logdateformat", $this->restore_logdateformat);
 		} else {
-			$config->deleteSystemValue("restore_logdateformat");
-		}		
-		File::init();
+			$config->deleteValue("logdateformat");
+		}
+		$this->logFile = new File($this->restore_logfile, '', $config);
 		parent::tearDown();
 	}
 	
@@ -62,8 +63,8 @@ class FileTest extends TestCase
 
 		# set format & write log line
 		$config->setSystemValue('logdateformat', 'u');
-		File::write('test', 'message', \OCP\Util::ERROR);
-		
+		$this->logFile->write('test', 'message', ILogger::ERROR);
+
 		# read log line
 		$handle = @fopen($config->getSystemValue('logfile'), 'r');
 		$line = fread($handle, 1000);
@@ -73,8 +74,5 @@ class FileTest extends TestCase
 		$values = (array) json_decode($line);
 		$microseconds = $values['time'];
 		$this->assertNotEquals(0, $microseconds);
-		
 	}
-
-
 }

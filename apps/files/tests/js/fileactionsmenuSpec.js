@@ -113,8 +113,11 @@ describe('OCA.Files.FileActionsMenu tests', function() {
 		it('does not render default actions', function() {
 			expect(menu.$el.find('a[data-action=Testdefault]').length).toEqual(0);
 		});
-		it('does not render inline actions', function() {
-			expect(menu.$el.find('a[data-action=Testinline]').length).toEqual(0);
+		it('render inline actions', function() {
+			expect(menu.$el.find('a[data-action=Testinline]').length).toEqual(1);
+		});
+		it('render inline actions but it is hidden', function() {
+			expect(menu.$el.find('a[data-action=Testinline]').parent().hasClass('hidden')).toEqual(true);
 		});
 		it('only renders actions relevant to the mime type', function() {
 			fileActions.registerAction({
@@ -203,7 +206,35 @@ describe('OCA.Files.FileActionsMenu tests', function() {
 
 			expect(displayNameStub.calledOnce).toEqual(true);
 			expect(displayNameStub.calledWith(menuContext)).toEqual(true);
-			expect(menu.$el.find('a[data-action=Something]').text()).toEqual('Test');
+			expect(menu.$el.find('a[data-action=Something] span:not(.icon)').text()).toEqual('Test');
+		});
+		it('uses plain iconClass', function() {
+			fileActions.registerAction({
+				name: 'Something',
+				mime: 'text/plain',
+				permissions: OC.PERMISSION_ALL,
+				iconClass: 'test'
+			});
+
+			menu.render();
+
+			expect(menu.$el.find('a[data-action=Something]').children('span.icon').hasClass('test')).toEqual(true);
+		});
+		it('calls iconClass function', function() {
+			var iconClassStub = sinon.stub().returns('test');
+
+			fileActions.registerAction({
+				name: 'Something',
+				mime: 'text/plain',
+				permissions: OC.PERMISSION_ALL,
+				iconClass: iconClassStub
+			});
+
+			menu.render();
+
+			expect(iconClassStub.calledOnce).toEqual(true);
+			expect(iconClassStub.calledWith(menuContext.$file.attr('data-file'), menuContext)).toEqual(true);
+			expect(menu.$el.find('a[data-action=Something]').children('span.icon').hasClass('test')).toEqual(true);
 		});
 	});
 
@@ -243,6 +274,7 @@ describe('OCA.Files.FileActionsMenu tests', function() {
 				$file: $tr,
 				fileList: fileList,
 				fileActions: fileActions,
+				fileInfoModel: new OCA.Files.FileInfoModel(fileData),
 				dir: fileList.getCurrentDirectory()
 			};
 			menu = new OCA.Files.FileActionsMenu();
@@ -252,7 +284,7 @@ describe('OCA.Files.FileActionsMenu tests', function() {
 
 			expect(redirectStub.calledOnce).toEqual(true);
 			expect(redirectStub.getCall(0).args[0]).toContain(
-				OC.webroot +
+				OC.getRootPath() +
 				'/remote.php/webdav/subdir/testName.txt'
 			);
 			redirectStub.restore();
@@ -276,6 +308,7 @@ describe('OCA.Files.FileActionsMenu tests', function() {
 				$file: $tr,
 				fileList: fileList,
 				fileActions: fileActions,
+				fileInfoModel: new OCA.Files.FileInfoModel(fileData),
 				dir: '/anotherpath/there'
 			};
 			menu = new OCA.Files.FileActionsMenu();
@@ -285,7 +318,7 @@ describe('OCA.Files.FileActionsMenu tests', function() {
 
 			expect(redirectStub.calledOnce).toEqual(true);
 			expect(redirectStub.getCall(0).args[0]).toContain(
-				OC.webroot + '/remote.php/webdav/anotherpath/there/testName.txt'
+				OC.getRootPath() + '/remote.php/webdav/anotherpath/there/testName.txt'
 			);
 			redirectStub.restore();
 		});
@@ -308,6 +341,7 @@ describe('OCA.Files.FileActionsMenu tests', function() {
 				$file: $tr,
 				fileList: fileList,
 				fileActions: fileActions,
+				fileInfoModel: new OCA.Files.FileInfoModel(fileData),
 				dir: '/somepath/dir'
 			};
 			menu = new OCA.Files.FileActionsMenu();

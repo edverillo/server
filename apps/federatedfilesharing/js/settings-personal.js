@@ -1,4 +1,4 @@
-$(document).ready(function() {
+window.addEventListener('DOMContentLoaded', function() {
 
 	$('#fileSharingSettings button.pop-up').click(function() {
 		var url = $(this).data('url');
@@ -20,12 +20,15 @@ $(document).ready(function() {
 		}
 	});
 
+	/* Verification icon tooltip */
+	$('#personal-settings-container .verify img').tooltip({placement: 'bottom', trigger: 'hover'});
+
 	$('#fileSharingSettings .clipboardButton').tooltip({placement: 'bottom', title: t('core', 'Copy'), trigger: 'hover'});
 
 	// Clipboard!
 	var clipboard = new Clipboard('.clipboardButton');
 	clipboard.on('success', function(e) {
-		$input = $(e.trigger);
+		var $input = $(e.trigger);
 		$input.tooltip('hide')
 			.attr('data-original-title', t('core', 'Copied!'))
 			.tooltip('fixTitle')
@@ -38,7 +41,7 @@ $(document).ready(function() {
 		}, 3000);
 	});
 	clipboard.on('error', function (e) {
-		$input = $(e.trigger);
+		var $input = $(e.trigger);
 		var actionMsg = '';
 		if (/iPhone|iPad/i.test(navigator.userAgent)) {
 			actionMsg = t('core', 'Not supported!');

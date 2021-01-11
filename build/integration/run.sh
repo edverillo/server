@@ -2,6 +2,12 @@
 
 OC_PATH=../../
 OCC=${OC_PATH}occ
+TAGS=""
+if [ "$1" = "--tags" ]; then
+	TAGS="--tags=$2"
+
+	shift 2
+fi
 SCENARIO_TO_RUN=$1
 HIDE_OC_LOGS=$2
 
@@ -10,12 +16,15 @@ INSTALLED=$($OCC status | grep installed: | cut -d " " -f 5)
 if [ "$INSTALLED" == "true" ]; then
     # Disable bruteforce protection because the integration tests do trigger them
     $OCC config:system:set auth.bruteforce.protection.enabled --value false --type bool
+    # Allow local remote urls otherwise we can not share
+    $OCC config:system:set allow_local_remote_servers --value true --type bool
 else
     if [ "$SCENARIO_TO_RUN" != "setup_features/setup.feature" ]; then
         echo "Nextcloud instance needs to be installed" >&2
         exit 1
     fi
 fi
+NC_DATADIR=$($OCC config:system:get datadirectory)
 
 composer install
 
@@ -41,7 +50,7 @@ export TEST_SERVER_FED_URL="http://localhost:$PORT_FED/ocs/"
 if [ "$INSTALLED" == "true" ]; then
 
     #Enable external storage app
-    $OCC app:enable files_external
+    $OCC app:enable files_external user_ldap
 
     mkdir -p work/local_storage
     OUTPUT_CREATE_STORAGE=`$OCC files_external:create local_storage local null::null -c datadir=$PWD/work/local_storage`
@@ -52,7 +61,7 @@ if [ "$INSTALLED" == "true" ]; then
 
 fi
 
-vendor/bin/behat --strict -f junit -f pretty $SCENARIO_TO_RUN
+vendor/bin/behat --strict -f junit -f pretty $TAGS $SCENARIO_TO_RUN
 RESULT=$?
 
 kill $PHPPID
@@ -63,11 +72,11 @@ if [ "$INSTALLED" == "true" ]; then
     $OCC files_external:delete -y $ID_STORAGE
 
     #Disable external storage app
-    $OCC app:disable files_external
+    $OCC app:disable files_external user_ldap
 fi
 
 if [ -z $HIDE_OC_LOGS ]; then
-	tail "${OC_PATH}/data/nextcloud.log"
+	tail "${NC_DATADIR}/nextcloud.log"
 fi
 
 echo "runsh: Exit code: $RESULT"

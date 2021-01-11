@@ -1,31 +1,20 @@
-<div class="outoftheway">
-	<!-- Hack for Safari and Chromium/Chrome which ignore autocomplete="off" -->
-	<input type="text" id="fake_user" name="fake_user" autocomplete="off" />
-	<input type="password" id="fake_password" name="fake_password"
-				autocomplete="off" />
-</div>
-
 <fieldset id="ldapWizard1">
 		<p>
 		<select id="ldap_serverconfig_chooser" name="ldap_serverconfig_chooser">
-		<?php if(count($_['serverConfigurationPrefixes']) === 0 ) {
+		<?php
+		$i = 1;
+		$sel = ' selected';
+		foreach ($_['serverConfigurationPrefixes'] as $prefix) {
 			?>
-				<option value="" selected><?php p($l->t('1. Server'));?></option>');
+			<option value="<?php p($prefix); ?>"<?php p($sel);
+			$sel = ''; ?>><?php p($l->t('%s. Server:', [$i++])); ?> <?php p(' '.$_['serverConfigurationHosts'][$prefix]); ?></option>
 			<?php
-		} else {
-			$i = 1;
-			$sel = ' selected';
-			foreach($_['serverConfigurationPrefixes'] as $prefix) {
-				?>
-				<option value="<?php p($prefix); ?>"<?php p($sel); $sel = ''; ?>><?php p($l->t('%s. Server:', array($i++)));?> <?php p(' '.$_['serverConfigurationHosts'][$prefix]); ?></option>
-				<?php
-			}
 		}
 		?>
 		</select>
 		<button type="button" id="ldap_action_add_configuration"
 			name="ldap_action_add_configuration" class="icon-add icon-default-style"
-			title="<?php p($l->t('Add a new and blank configuration'));?>">&nbsp;</button>
+			title="<?php p($l->t('Add a new configuration'));?>">&nbsp;</button>
 		<button type="button" id="ldap_action_copy_configuration"
 			name="ldap_action_copy_configuration"
 			class="ldapIconCopy icon-default-style"
@@ -42,7 +31,7 @@
 						<input type="text" class="host" id="ldap_host"
 							name="ldap_host"
 							placeholder="<?php p($l->t('Host'));?>"
-							title="<?php p($l->t('You can omit the protocol, except you require SSL. Then start with ldaps://'));?>"
+							title="<?php p($l->t('You can omit the protocol, unless you require SSL. If so, start with ldaps://'));?>"
 							/>
 						<span class="hostPortCombinatorSpan">
 							<input type="number" id="ldap_port" name="ldap_port"
@@ -54,6 +43,7 @@
 					</div>
 				</div>
 			</div>
+			<div class="tablerow">&nbsp;</div>
 			<div class="tablerow">
 				<input type="text" id="ldap_dn" name="ldap_dn"
 				class="tablecell"
@@ -68,7 +58,11 @@
 				placeholder="<?php p($l->t('Password'));?>" autocomplete="off"
 				title="<?php p($l->t('For anonymous access, leave DN and Password empty.'));?>"
 				/>
+				<button class="ldapSaveAgentCredentials" name="ldapSaveAgentCredentials" type="button">
+					<?php p($l->t('Save Credentials'));?>
+				</button>
 			</div>
+			<div class="tablerow">&nbsp;</div>
 
 			<div class="tablerow">
 				<textarea id="ldap_base" name="ldap_base"

@@ -2,7 +2,14 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
  * @author Björn Schießle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Daniel Calviño Sánchez <danxuliu@gmail.com>
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author John Molakvoæ (skjnldsv) <skjnldsv@protonmail.com>
+ * @author Maxence Lange <maxence@nextcloud.com>
+ * @author Robin Appelman <robin@icewind.nl>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
@@ -17,9 +24,10 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
+
 namespace OC\Share20;
 
 use OCP\Files\Cache\ICacheEntry;
@@ -29,6 +37,7 @@ use OCP\Files\Node;
 use OCP\Files\NotFoundException;
 use OCP\IUserManager;
 use OCP\Share\Exceptions\IllegalIDChangeException;
+use OCP\Share\IShare;
 
 class Share implements \OCP\Share\IShare {
 
@@ -47,15 +56,25 @@ class Share implements \OCP\Share\IShare {
 	/** @var string */
 	private $sharedWith;
 	/** @var string */
+	private $sharedWithDisplayName;
+	/** @var string */
+	private $sharedWithAvatar;
+	/** @var string */
 	private $sharedBy;
 	/** @var string */
 	private $shareOwner;
 	/** @var int */
 	private $permissions;
+	/** @var int */
+	private $status;
+	/** @var string */
+	private $note = '';
 	/** @var \DateTime */
 	private $expireDate;
 	/** @var string */
 	private $password;
+	/** @var bool */
+	private $sendPasswordByTalk = false;
 	/** @var string */
 	private $token;
 	/** @var int */
@@ -66,6 +85,8 @@ class Share implements \OCP\Share\IShare {
 	private $shareTime;
 	/** @var bool */
 	private $mailSend;
+	/** @var string */
+	private $label = '';
 
 	/** @var IRootFolder */
 	private $rootFolder;
@@ -75,6 +96,9 @@ class Share implements \OCP\Share\IShare {
 
 	/** @var ICacheEntry|null */
 	private $nodeCacheEntry;
+
+	/** @var bool */
+	private $hideDownload = false;
 
 	public function __construct(IRootFolder $rootFolder, IUserManager $userManager) {
 		$this->rootFolder = $rootFolder;
@@ -89,7 +113,7 @@ class Share implements \OCP\Share\IShare {
 			$id = (string)$id;
 		}
 
-		if(!is_string($id)) {
+		if (!is_string($id)) {
 			throw new \InvalidArgumentException('String expected.');
 		}
 
@@ -122,7 +146,7 @@ class Share implements \OCP\Share\IShare {
 	 * @inheritdoc
 	 */
 	public function setProviderId($id) {
-		if(!is_string($id)) {
+		if (!is_string($id)) {
 			throw new \InvalidArgumentException('String expected.');
 		}
 
@@ -149,14 +173,13 @@ class Share implements \OCP\Share\IShare {
 	 */
 	public function getNode() {
 		if ($this->node === null) {
-
 			if ($this->shareOwner === null || $this->fileId === null) {
 				throw new NotFoundException();
 			}
 
 			// for federated shares the owner can be a remote user, in this
 			// case we use the initiator
-			if($this->userManager->userExists($this->shareOwner)) {
+			if ($this->userManager->userExists($this->shareOwner)) {
 				$userFolder = $this->rootFolder->getUserFolder($this->shareOwner);
 			} else {
 				$userFolder = $this->rootFolder->getUserFolder($this->sharedBy);
@@ -253,6 +276,42 @@ class Share implements \OCP\Share\IShare {
 	/**
 	 * @inheritdoc
 	 */
+	public function setSharedWithDisplayName($displayName) {
+		if (!is_string($displayName)) {
+			throw new \InvalidArgumentException();
+		}
+		$this->sharedWithDisplayName = $displayName;
+		return $this;
+	}
+
+	/**
+	 * @inheritdoc
+	 */
+	public function getSharedWithDisplayName() {
+		return $this->sharedWithDisplayName;
+	}
+
+	/**
+	 * @inheritdoc
+	 */
+	public function setSharedWithAvatar($src) {
+		if (!is_string($src)) {
+			throw new \InvalidArgumentException();
+		}
+		$this->sharedWithAvatar = $src;
+		return $this;
+	}
+
+	/**
+	 * @inheritdoc
+	 */
+	public function getSharedWithAvatar() {
+		return $this->sharedWithAvatar;
+	}
+
+	/**
+	 * @inheritdoc
+	 */
 	public function setPermissions($permissions) {
 		//TODO checkes
 
@@ -270,6 +329,54 @@ class Share implements \OCP\Share\IShare {
 	/**
 	 * @inheritdoc
 	 */
+	public function setStatus(int $status): IShare {
+		$this->status = $status;
+		return $this;
+	}
+
+	/**
+	 * @inheritdoc
+	 */
+	public function getStatus(): int {
+		return $this->status;
+	}
+
+	/**
+	 * @inheritdoc
+	 */
+	public function setNote($note) {
+		$this->note = $note;
+		return $this;
+	}
+
+	/**
+	 * @inheritdoc
+	 */
+	public function getNote() {
+		if (is_string($this->note)) {
+			return $this->note;
+		}
+		return '';
+	}
+
+	/**
+	 * @inheritdoc
+	 */
+	public function setLabel($label) {
+		$this->label = $label;
+		return $this;
+	}
+
+	/**
+	 * @inheritdoc
+	 */
+	public function getLabel() {
+		return $this->label;
+	}
+
+	/**
+	 * @inheritdoc
+	 */
 	public function setExpirationDate($expireDate) {
 		//TODO checks
 
@@ -282,6 +389,14 @@ class Share implements \OCP\Share\IShare {
 	 */
 	public function getExpirationDate() {
 		return $this->expireDate;
+	}
+
+	/**
+	 * @inheritdoc
+	 */
+	public function isExpired() {
+		return $this->getExpirationDate() !== null &&
+			$this->getExpirationDate() <= new \DateTime();
 	}
 
 	/**
@@ -339,6 +454,21 @@ class Share implements \OCP\Share\IShare {
 	 */
 	public function getPassword() {
 		return $this->password;
+	}
+
+	/**
+	 * @inheritdoc
+	 */
+	public function setSendPasswordByTalk(bool $sendPasswordByTalk) {
+		$this->sendPasswordByTalk = $sendPasswordByTalk;
+		return $this;
+	}
+
+	/**
+	 * @inheritdoc
+	 */
+	public function getSendPasswordByTalk(): bool {
+		return $this->sendPasswordByTalk;
 	}
 
 	/**
@@ -435,5 +565,14 @@ class Share implements \OCP\Share\IShare {
 	 */
 	public function getNodeCacheEntry() {
 		return $this->nodeCacheEntry;
+	}
+
+	public function setHideDownload(bool $hide): IShare {
+		$this->hideDownload = $hide;
+		return $this;
+	}
+
+	public function getHideDownload(): bool {
+		return $this->hideDownload;
 	}
 }

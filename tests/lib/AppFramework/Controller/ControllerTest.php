@@ -21,18 +21,15 @@
  *
  */
 
-
 namespace Test\AppFramework\Controller;
 
 use OC\AppFramework\Http\Request;
 use OCP\AppFramework\Controller;
-use OCP\AppFramework\Http\TemplateResponse;
-use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\DataResponse;
-
+use OCP\AppFramework\Http\JSONResponse;
+use OCP\IConfig;
 
 class ChildController extends Controller {
-
 	public function __construct($appName, $request) {
 		parent::__construct($appName, $request);
 		$this->registerResponder('tom', function ($respone) {
@@ -42,7 +39,7 @@ class ChildController extends Controller {
 
 	public function custom($in) {
 		$this->registerResponder('json', function ($response) {
-			return new JSONResponse(array(strlen($response)));
+			return new JSONResponse([strlen($response)]);
 		});
 
 		return $in;
@@ -63,7 +60,7 @@ class ControllerTest extends \Test\TestCase {
 	private $controller;
 	private $app;
 
-	protected function setUp(){
+	protected function setUp(): void {
 		parent::setUp();
 
 		$request = new Request(
@@ -79,7 +76,7 @@ class ControllerTest extends \Test\TestCase {
 			$this->getMockBuilder('\OCP\Security\ISecureRandom')
 				->disableOriginalConstructor()
 				->getMock(),
-			$this->getMockBuilder('\OCP\IConfig')
+			$this->getMockBuilder(IConfig::class)
 				->disableOriginalConstructor()
 				->getMock()
 		);
@@ -90,92 +87,23 @@ class ControllerTest extends \Test\TestCase {
 			->getMock();
 		$this->app->expects($this->any())
 				->method('getAppName')
-				->will($this->returnValue('apptemplate_advanced'));
+				->willReturn('apptemplate_advanced');
 
 		$this->controller = new ChildController($this->app, $request);
 	}
 
 
-	public function testParamsGet(){
-		$this->assertEquals('Johnny Weissmüller', $this->controller->params('name', 'Tarzan'));
-	}
-
-
-	public function testParamsGetDefault(){
-		$this->assertEquals('Tarzan', $this->controller->params('Ape Man', 'Tarzan'));
-	}
-
-
-	public function testParamsFile(){
-		$this->assertEquals('filevalue', $this->controller->params('file', 'filevalue'));
-	}
-
-
-	public function testGetUploadedFile(){
-		$this->assertEquals('filevalue', $this->controller->getUploadedFile('file'));
-	}
-
-
-
-	public function testGetUploadedFileDefault(){
-		$this->assertEquals('default', $this->controller->params('files', 'default'));
-	}
-
-
-	public function testGetParams(){
-		$params = array(
-				'name' => 'Johnny Weissmüller',
-				'nickname' => 'Janey',
-			);
-
-		$this->assertEquals($params, $this->controller->getParams());
-	}
-
-
-	public function testRender(){
-		$this->assertTrue($this->controller->render('') instanceof TemplateResponse);
-	}
-
-
-	public function testSetParams(){
-		$params = array('john' => 'foo');
-		$response = $this->controller->render('home', $params);
-
-		$this->assertEquals($params, $response->getParams());
-	}
-
-
-	public function testRenderHeaders(){
-		$headers = array('one', 'two');
-		$response = $this->controller->render('', array(), '', $headers);
-
-		$this->assertTrue(in_array($headers[0], $response->getHeaders()));
-		$this->assertTrue(in_array($headers[1], $response->getHeaders()));
-	}
-
-
-	public function testGetRequestMethod(){
-		$this->assertEquals('hi', $this->controller->method());
-	}
-
-
-	public function testGetEnvVariable(){
-		$this->assertEquals('daheim', $this->controller->env('PATH'));
-	}
-
-
-	/**
-	 * @expectedException \DomainException
-	 */
 	public function testFormatResonseInvalidFormat() {
+		$this->expectException(\DomainException::class);
+
 		$this->controller->buildResponse(null, 'test');
 	}
 
 
 	public function testFormat() {
-		$response = $this->controller->buildResponse(array('hi'), 'json');
+		$response = $this->controller->buildResponse(['hi'], 'json');
 
-		$this->assertEquals(array('hi'), $response->getData());
+		$this->assertEquals(['hi'], $response->getData());
 	}
 
 
@@ -184,13 +112,15 @@ class ControllerTest extends \Test\TestCase {
 			'test' => 'something',
 			'Cache-Control' => 'no-cache, no-store, must-revalidate',
 			'Content-Type' => 'application/json; charset=utf-8',
-			'Content-Security-Policy' => "default-src 'none';base-uri 'none';manifest-src 'self';script-src 'self' 'unsafe-eval';style-src 'self' 'unsafe-inline';img-src 'self' data: blob:;font-src 'self';connect-src 'self';media-src 'self'",
+			'Content-Security-Policy' => "default-src 'none';base-uri 'none';manifest-src 'self';frame-ancestors 'none'",
+			'Feature-Policy' => "autoplay 'none';camera 'none';fullscreen 'none';geolocation 'none';microphone 'none';payment 'none'",
+			'X-Robots-Tag' => 'none',
 		];
 
-		$response = $this->controller->customDataResponse(array('hi'));
+		$response = $this->controller->customDataResponse(['hi']);
 		$response = $this->controller->buildResponse($response, 'json');
 
-		$this->assertEquals(array('hi'), $response->getData());
+		$this->assertEquals(['hi'], $response->getData());
 		$this->assertEquals(300, $response->getStatus());
 		$this->assertEquals($expectedHeaders, $response->getHeaders());
 	}
@@ -200,7 +130,7 @@ class ControllerTest extends \Test\TestCase {
 		$response = $this->controller->custom('hi');
 		$response = $this->controller->buildResponse($response, 'json');
 
-		$this->assertEquals(array(2), $response->getData());
+		$this->assertEquals([2], $response->getData());
 	}
 
 
@@ -227,6 +157,4 @@ class ControllerTest extends \Test\TestCase {
 
 		$this->assertEquals('tom', $responder);
 	}
-
-
 }

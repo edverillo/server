@@ -4,10 +4,12 @@
  *
  * @author Bjoern Schiessle <bjoern@schiessle.org>
  * @author Björn Schießle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -21,7 +23,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -31,16 +33,12 @@ use OC\Files\Filesystem;
 use OCP\ICertificateManager;
 use OCP\IConfig;
 use OCP\ILogger;
+use OCP\Security\ISecureRandom;
 
 /**
  * Manage trusted certificates for users
  */
 class CertificateManager implements ICertificateManager {
-	/**
-	 * @var string
-	 */
-	protected $uid;
-
 	/**
 	 * @var \OC\Files\View
 	 */
@@ -56,17 +54,23 @@ class CertificateManager implements ICertificateManager {
 	 */
 	protected $logger;
 
+	/** @var ISecureRandom */
+	protected $random;
+
 	/**
-	 * @param string $uid
 	 * @param \OC\Files\View $view relative to data/
 	 * @param IConfig $config
 	 * @param ILogger $logger
+	 * @param ISecureRandom $random
 	 */
-	public function __construct($uid, \OC\Files\View $view, IConfig $config, ILogger $logger) {
-		$this->uid = $uid;
+	public function __construct(\OC\Files\View $view,
+								IConfig $config,
+								ILogger $logger,
+								ISecureRandom $random) {
 		$this->view = $view;
 		$this->config = $config;
 		$this->logger = $logger;
+		$this->random = $random;
 	}
 
 	/**
@@ -75,19 +79,18 @@ class CertificateManager implements ICertificateManager {
 	 * @return \OCP\ICertificate[]
 	 */
 	public function listCertificates() {
-
 		if (!$this->config->getSystemValue('installed', false)) {
-			return array();
+			return [];
 		}
 
 		$path = $this->getPathToCertificates() . 'uploads/';
 		if (!$this->view->is_dir($path)) {
-			return array();
+			return [];
 		}
-		$result = array();
+		$result = [];
 		$handle = $this->view->opendir($path);
 		if (!is_resource($handle)) {
-			return array();
+			return [];
 		}
 		while (false !== ($file = readdir($handle))) {
 			if ($file != '.' && $file != '..') {
@@ -99,6 +102,29 @@ class CertificateManager implements ICertificateManager {
 		}
 		closedir($handle);
 		return $result;
+	}
+
+	private function hasCertificates(): bool {
+		if (!$this->config->getSystemValue('installed', false)) {
+			return false;
+		}
+
+		$path = $this->getPathToCertificates() . 'uploads/';
+		if (!$this->view->is_dir($path)) {
+			return false;
+		}
+		$result = [];
+		$handle = $this->view->opendir($path);
+		if (!is_resource($handle)) {
+			return false;
+		}
+		while (false !== ($file = readdir($handle))) {
+			if ($file !== '.' && $file !== '..') {
+				return true;
+			}
+		}
+		closedir($handle);
+		return false;
 	}
 
 	/**
@@ -119,7 +145,9 @@ class CertificateManager implements ICertificateManager {
 			return;
 		}
 
-		$fhCerts = $this->view->fopen($path . '/rootcerts.crt', 'w');
+		$certPath = $path . 'rootcerts.crt';
+		$tmpPath = $certPath . '.tmp' . $this->random->generate(10, ISecureRandom::CHAR_DIGITS);
+		$fhCerts = $this->view->fopen($tmpPath, 'w');
 
 		// Write user certificates
 		foreach ($certs as $cert) {
@@ -135,13 +163,15 @@ class CertificateManager implements ICertificateManager {
 		fwrite($fhCerts, $defaultCertificates);
 
 		// Append the system certificate bundle
-		$systemBundle = $this->getCertificateBundle(null);
-		if ($this->view->file_exists($systemBundle)) {
+		$systemBundle = $this->getCertificateBundle();
+		if ($systemBundle !== $certPath && $this->view->file_exists($systemBundle)) {
 			$systemCertificates = $this->view->file_get_contents($systemBundle);
 			fwrite($fhCerts, $systemCertificates);
 		}
 
 		fclose($fhCerts);
+
+		$this->view->rename($tmpPath, $certPath);
 	}
 
 	/**
@@ -171,7 +201,6 @@ class CertificateManager implements ICertificateManager {
 		} catch (\Exception $e) {
 			throw $e;
 		}
-
 	}
 
 	/**
@@ -193,75 +222,50 @@ class CertificateManager implements ICertificateManager {
 	}
 
 	/**
-	 * Get the path to the certificate bundle for this user
+	 * Get the path to the certificate bundle
 	 *
-	 * @param string $uid (optional) user to get the certificate bundle for, use `null` to get the system bundle
 	 * @return string
 	 */
-	public function getCertificateBundle($uid = '') {
-		if ($uid === '') {
-			$uid = $this->uid;
-		}
-		return $this->getPathToCertificates($uid) . 'rootcerts.crt';
+	public function getCertificateBundle() {
+		return $this->getPathToCertificates() . 'rootcerts.crt';
 	}
 
 	/**
-	 * Get the full local path to the certificate bundle for this user
+	 * Get the full local path to the certificate bundle
 	 *
-	 * @param string $uid (optional) user to get the certificate bundle for, use `null` to get the system bundle
 	 * @return string
 	 */
-	public function getAbsoluteBundlePath($uid = '') {
-		if ($uid === '') {
-			$uid = $this->uid;
+	public function getAbsoluteBundlePath() {
+		if (!$this->hasCertificates()) {
+			return \OC::$SERVERROOT . '/resources/config/ca-bundle.crt';
 		}
-		if ($this->needsRebundling($uid)) {
-			if (is_null($uid)) {
-				$manager = new CertificateManager(null, $this->view, $this->config, $this->logger);
-				$manager->createCertificateBundle();
-			} else {
-				$this->createCertificateBundle();
-			}
+
+		if ($this->needsRebundling()) {
+			$this->createCertificateBundle();
 		}
-		return $this->view->getLocalFile($this->getCertificateBundle($uid));
+
+		return $this->view->getLocalFile($this->getCertificateBundle());
 	}
 
 	/**
-	 * @param string $uid (optional) user to get the certificate path for, use `null` to get the system path
 	 * @return string
 	 */
-	private function getPathToCertificates($uid = '') {
-		if ($uid === '') {
-			$uid = $this->uid;
-		}
-		$path = is_null($uid) ? '/files_external/' : '/' . $uid . '/files_external/';
-
-		return $path;
+	private function getPathToCertificates() {
+		return '/files_external/';
 	}
 
 	/**
 	 * Check if we need to re-bundle the certificates because one of the sources has updated
 	 *
-	 * @param string $uid (optional) user to get the certificate path for, use `null` to get the system path
 	 * @return bool
 	 */
-	private function needsRebundling($uid = '') {
-		if ($uid === '') {
-			$uid = $this->uid;
-		}
-		$sourceMTimes = [$this->getFilemtimeOfCaBundle()];
-		$targetBundle = $this->getCertificateBundle($uid);
+	private function needsRebundling() {
+		$targetBundle = $this->getCertificateBundle();
 		if (!$this->view->file_exists($targetBundle)) {
 			return true;
 		}
 
-		if (!is_null($uid)) { // also depend on the system bundle
-			$sourceMTimes[] = $this->view->filemtime($this->getCertificateBundle(null));
-		}
-
-		$sourceMTime = array_reduce($sourceMTimes, function ($max, $mtime) {
-			return max($max, $mtime);
-		}, 0);
+		$sourceMTime = $this->getFilemtimeOfCaBundle();
 		return $sourceMTime > $this->view->filemtime($targetBundle);
 	}
 
@@ -273,5 +277,4 @@ class CertificateManager implements ICertificateManager {
 	protected function getFilemtimeOfCaBundle() {
 		return filemtime(\OC::$SERVERROOT . '/resources/config/ca-bundle.crt');
 	}
-
 }

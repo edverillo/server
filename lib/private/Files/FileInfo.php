@@ -2,15 +2,18 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Julius Härtl <jus@bitgrid.net>
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Piotr M <mrow4a@yahoo.com>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author tbartenstein <tbartenstein@users.noreply.github.com>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -24,7 +27,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -32,8 +35,6 @@ namespace OC\Files;
 
 use OCP\Files\Cache\ICacheEntry;
 use OCP\Files\Mount\IMountPoint;
-use OCP\Files\Storage\IStorage;
-use OCP\Files\IHomeStorage;
 use OCP\IUser;
 
 class FileInfo implements \OCP\Files\FileInfo, \ArrayAccess {
@@ -80,6 +81,13 @@ class FileInfo implements \OCP\Files\FileInfo, \ArrayAccess {
 	private $subMountsUsed = false;
 
 	/**
+	 * The size of the file/folder without any sub mount
+	 *
+	 * @var int
+	 */
+	private $rawSize = 0;
+
+	/**
 	 * @param string|boolean $path
 	 * @param Storage\Storage $storage
 	 * @param string $internalPath
@@ -87,13 +95,14 @@ class FileInfo implements \OCP\Files\FileInfo, \ArrayAccess {
 	 * @param \OCP\Files\Mount\IMountPoint $mount
 	 * @param \OCP\IUser|null $owner
 	 */
-	public function __construct($path, $storage, $internalPath, $data, $mount, $owner= null) {
+	public function __construct($path, $storage, $internalPath, $data, $mount, $owner = null) {
 		$this->path = $path;
 		$this->storage = $storage;
 		$this->internalPath = $internalPath;
 		$this->data = $data;
 		$this->mount = $mount;
 		$this->owner = $owner;
+		$this->rawSize = $this->data['size'] ?? 0;
 	}
 
 	public function offsetSet($offset, $value) {
@@ -111,11 +120,11 @@ class FileInfo implements \OCP\Files\FileInfo, \ArrayAccess {
 	public function offsetGet($offset) {
 		if ($offset === 'type') {
 			return $this->getType();
-		} else if ($offset === 'etag') {
+		} elseif ($offset === 'etag') {
 			return $this->getEtag();
-		} else if ($offset === 'size') {
+		} elseif ($offset === 'size') {
 			return $this->getSize();
-		} else if ($offset === 'mtime') {
+		} elseif ($offset === 'mtime') {
 			return $this->getMTime();
 		} elseif ($offset === 'permissions') {
 			return $this->getPermissions();
@@ -174,7 +183,7 @@ class FileInfo implements \OCP\Files\FileInfo, \ArrayAccess {
 	 * @return string
 	 */
 	public function getName() {
-		return basename($this->getPath());
+		return isset($this->data['name']) ? $this->data['name'] : basename($this->getPath());
 	}
 
 	/**
@@ -193,9 +202,13 @@ class FileInfo implements \OCP\Files\FileInfo, \ArrayAccess {
 	/**
 	 * @return int
 	 */
-	public function getSize() {
-		$this->updateEntryfromSubMounts();
-		return isset($this->data['size']) ? (int) $this->data['size'] : 0;
+	public function getSize($includeMounts = true) {
+		if ($includeMounts) {
+			$this->updateEntryfromSubMounts();
+			return isset($this->data['size']) ? 0 + $this->data['size'] : 0;
+		} else {
+			return $this->rawSize;
+		}
 	}
 
 	/**
@@ -230,11 +243,11 @@ class FileInfo implements \OCP\Files\FileInfo, \ArrayAccess {
 		if (\OCP\Util::isSharingDisabledForUser() || ($this->isShared() && !\OC\Share\Share::isResharingAllowed())) {
 			$perms = $perms & ~\OCP\Constants::PERMISSION_SHARE;
 		}
-		return (int) $perms;
+		return $perms;
 	}
 
 	/**
-	 * @return \OCP\Files\FileInfo::TYPE_FILE|\OCP\Files\FileInfo::TYPE_FOLDER
+	 * @return string \OCP\Files\FileInfo::TYPE_FILE|\OCP\Files\FileInfo::TYPE_FOLDER
 	 */
 	public function getType() {
 		if (!isset($this->data['type'])) {
@@ -388,5 +401,17 @@ class FileInfo implements \OCP\Files\FileInfo, \ArrayAccess {
 	 */
 	public function getChecksum() {
 		return $this->data['checksum'];
+	}
+
+	public function getExtension(): string {
+		return pathinfo($this->getName(), PATHINFO_EXTENSION);
+	}
+
+	public function getCreationTime(): int {
+		return (int) $this->data['creation_time'];
+	}
+
+	public function getUploadTime(): int {
+		return (int) $this->data['upload_time'];
 	}
 }

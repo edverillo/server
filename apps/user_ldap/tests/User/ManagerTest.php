@@ -3,9 +3,12 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Philippe Jung <phil.jung@free.fr>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Roger Szabo <roger.szabo@web.de>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -20,22 +23,26 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\User_LDAP\Tests\User;
 
+use OCA\User_LDAP\Access;
+use OCA\User_LDAP\Connection;
 use OCA\User_LDAP\FilesystemHelper;
 use OCA\User_LDAP\ILDAPWrapper;
 use OCA\User_LDAP\LogWrapper;
-use OCA\User_LDAP\User\IUserTools;
 use OCA\User_LDAP\User\Manager;
+use OCA\User_LDAP\User\User;
 use OCP\IAvatarManager;
 use OCP\IConfig;
 use OCP\IDBConnection;
 use OCP\Image;
 use OCP\IUserManager;
+use OCP\Notification\IManager as INotificationManager;
+use OCP\Share\IManager;
 
 /**
  * Class Test_User_Manager
@@ -45,225 +52,206 @@ use OCP\IUserManager;
  * @package OCA\User_LDAP\Tests\User
  */
 class ManagerTest extends \Test\TestCase {
+	/** @var Access|\PHPUnit\Framework\MockObject\MockObject */
+	protected $access;
 
-	private function getTestInstances() {
-		$access = $this->createMock(IUserTools::class);
-		$config = $this->createMock(IConfig::class);
-		$filesys = $this->createMock(FilesystemHelper::class);
-		$log = $this->createMock(LogWrapper::class);
-		$avaMgr = $this->createMock(IAvatarManager::class);
-		$image = $this->createMock(Image::class);
-		$dbc = $this->createMock(IDBConnection::class);
-		$userMgr = $this->createMock(IUserManager::class);
+	/** @var IConfig|\PHPUnit\Framework\MockObject\MockObject */
+	protected $config;
 
-		$connection = new \OCA\User_LDAP\Connection(
-			$lw  = $this->createMock(ILDAPWrapper::class),
-			'',
-			null
+	/** @var FilesystemHelper|\PHPUnit\Framework\MockObject\MockObject */
+	protected $fileSystemHelper;
+
+	/** @var LogWrapper|\PHPUnit\Framework\MockObject\MockObject */
+	protected $log;
+
+	/** @var IAvatarManager|\PHPUnit\Framework\MockObject\MockObject */
+	protected $avatarManager;
+
+	/** @var Image|\PHPUnit\Framework\MockObject\MockObject */
+	protected $image;
+
+	/** @var IDBConnection|\PHPUnit\Framework\MockObject\MockObject */
+	protected $dbc;
+
+	/** @var IUserManager|\PHPUnit\Framework\MockObject\MockObject */
+	protected $ncUserManager;
+
+	/** @var INotificationManager|\PHPUnit\Framework\MockObject\MockObject */
+	protected $notificationManager;
+
+	/** @var ILDAPWrapper|\PHPUnit\Framework\MockObject\MockObject */
+	protected $ldapWrapper;
+
+	/** @var Connection */
+	protected $connection;
+
+	/** @var Manager */
+	protected $manager;
+	/** @var IManager|\PHPUnit\Framework\MockObject\MockObject */
+	protected $shareManager;
+
+	protected function setUp(): void {
+		parent::setUp();
+
+		$this->access = $this->createMock(Access::class);
+		$this->config = $this->createMock(IConfig::class);
+		$this->fileSystemHelper = $this->createMock(FilesystemHelper::class);
+		$this->log = $this->createMock(LogWrapper::class);
+		$this->avatarManager = $this->createMock(IAvatarManager::class);
+		$this->image = $this->createMock(Image::class);
+		$this->ncUserManager = $this->createMock(IUserManager::class);
+		$this->notificationManager = $this->createMock(INotificationManager::class);
+		$this->ldapWrapper = $this->createMock(ILDAPWrapper::class);
+		$this->shareManager = $this->createMock(IManager::class);
+
+		$this->connection = new Connection($this->ldapWrapper, '', null);
+
+		$this->access->expects($this->any())
+			->method('getConnection')
+			->willReturn($this->connection);
+
+		/** @noinspection PhpUnhandledExceptionInspection */
+		$this->manager = new Manager(
+			$this->config,
+			$this->fileSystemHelper,
+			$this->log,
+			$this->avatarManager,
+			$this->image,
+			$this->ncUserManager,
+			$this->notificationManager,
+			$this->shareManager
 		);
 
-		$access->expects($this->any())
-			->method('getConnection')
-			->will($this->returnValue($connection));
-
-		return array($access, $config, $filesys, $image, $log, $avaMgr, $dbc, $userMgr);
+		$this->manager->setLdapAccess($this->access);
 	}
 
-	public function testGetByDNExisting() {
-		list($access, $config, $filesys, $image, $log, $avaMgr, $dbc, $userMgr) =
-			$this->getTestInstances();
+	public function dnProvider() {
+		return [
+			['cn=foo,dc=foobar,dc=bar'],
+			['uid=foo,o=foobar,c=bar'],
+			['ab=cde,f=ghei,mno=pq'],
+		];
+	}
 
-		$inputDN = 'cn=foo,dc=foobar,dc=bar';
+	/**
+	 * @dataProvider dnProvider
+	 */
+	public function testGetByDNExisting(string $inputDN) {
 		$uid = '563418fc-423b-1033-8d1c-ad5f418ee02e';
 
-		$access->expects($this->once())
+		$this->access->expects($this->once())
 			->method('stringResemblesDN')
 			->with($this->equalTo($inputDN))
-			->will($this->returnValue(true));
-
-		$access->expects($this->once())
+			->willReturn(true);
+		$this->access->expects($this->once())
 			->method('dn2username')
 			->with($this->equalTo($inputDN))
-			->will($this->returnValue($uid));
-
-		$access->expects($this->never())
+			->willReturn($uid);
+		$this->access->expects($this->never())
 			->method('username2dn');
 
-		$manager = new Manager($config, $filesys, $log, $avaMgr, $image, $dbc, $userMgr);
-		$manager->setLdapAccess($access);
-		$user = $manager->get($inputDN);
+		/** @noinspection PhpUnhandledExceptionInspection */
+		$this->manager->get($inputDN);
 
 		// Now we fetch the user again. If this leads to a failing test,
 		// runtime caching the manager is broken.
-		$user = $manager->get($inputDN);
+		/** @noinspection PhpUnhandledExceptionInspection */
+		$user = $this->manager->get($inputDN);
 
-		$this->assertInstanceOf('\OCA\User_LDAP\User\User', $user);
-	}
-
-	public function testGetByEDirectoryDN() {
-		list($access, $config, $filesys, $image, $log, $avaMgr, $dbc, $userMgr) =
-			$this->getTestInstances();
-
-		$inputDN = 'uid=foo,o=foobar,c=bar';
-		$uid = '563418fc-423b-1033-8d1c-ad5f418ee02e';
-
-		$access->expects($this->once())
-			->method('stringResemblesDN')
-			->with($this->equalTo($inputDN))
-			->will($this->returnValue(true));
-
-		$access->expects($this->once())
-			->method('dn2username')
-			->with($this->equalTo($inputDN))
-			->will($this->returnValue($uid));
-
-		$access->expects($this->never())
-			->method('username2dn');
-
-		$manager = new Manager($config, $filesys, $log, $avaMgr, $image, $dbc, $userMgr);
-		$manager->setLdapAccess($access);
-		$user = $manager->get($inputDN);
-
-		$this->assertInstanceOf('\OCA\User_LDAP\User\User', $user);
-	}
-
-	public function testGetByExoticDN() {
-		list($access, $config, $filesys, $image, $log, $avaMgr, $dbc, $userMgr) =
-			$this->getTestInstances();
-
-		$inputDN = 'ab=cde,f=ghei,mno=pq';
-		$uid = '563418fc-423b-1033-8d1c-ad5f418ee02e';
-
-		$access->expects($this->once())
-			->method('stringResemblesDN')
-			->with($this->equalTo($inputDN))
-			->will($this->returnValue(true));
-
-		$access->expects($this->once())
-			->method('dn2username')
-			->with($this->equalTo($inputDN))
-			->will($this->returnValue($uid));
-
-		$access->expects($this->never())
-			->method('username2dn');
-
-		$manager = new Manager($config, $filesys, $log, $avaMgr, $image, $dbc, $userMgr);
-		$manager->setLdapAccess($access);
-		$user = $manager->get($inputDN);
-
-		$this->assertInstanceOf('\OCA\User_LDAP\User\User', $user);
+		$this->assertInstanceOf(User::class, $user);
 	}
 
 	public function testGetByDNNotExisting() {
-		list($access, $config, $filesys, $image, $log, $avaMgr, $dbc, $userMgr) =
-			$this->getTestInstances();
-
 		$inputDN = 'cn=gone,dc=foobar,dc=bar';
 
-		$access->expects($this->once())
+		$this->access->expects($this->once())
 			->method('stringResemblesDN')
 			->with($this->equalTo($inputDN))
-			->will($this->returnValue(true));
-
-		$access->expects($this->once())
+			->willReturn(true);
+		$this->access->expects($this->once())
 			->method('dn2username')
 			->with($this->equalTo($inputDN))
-			->will($this->returnValue(false));
-
-		$access->expects($this->once())
+			->willReturn(false);
+		$this->access->expects($this->once())
 			->method('username2dn')
 			->with($this->equalTo($inputDN))
-			->will($this->returnValue(false));
+			->willReturn(false);
 
-		$manager = new Manager($config, $filesys, $log, $avaMgr, $image, $dbc, $userMgr);
-		$manager->setLdapAccess($access);
-		$user = $manager->get($inputDN);
+		/** @noinspection PhpUnhandledExceptionInspection */
+		$user = $this->manager->get($inputDN);
 
 		$this->assertNull($user);
 	}
 
 	public function testGetByUidExisting() {
-		list($access, $config, $filesys, $image, $log, $avaMgr, $dbc, $userMgr) =
-			$this->getTestInstances();
-
 		$dn = 'cn=foo,dc=foobar,dc=bar';
 		$uid = '563418fc-423b-1033-8d1c-ad5f418ee02e';
 
-		$access->expects($this->never())
+		$this->access->expects($this->never())
 			->method('dn2username');
-
-		$access->expects($this->once())
+		$this->access->expects($this->once())
 			->method('username2dn')
 			->with($this->equalTo($uid))
-			->will($this->returnValue($dn));
-
-		$access->expects($this->once())
+			->willReturn($dn);
+		$this->access->expects($this->once())
 			->method('stringResemblesDN')
 			->with($this->equalTo($uid))
-			->will($this->returnValue(false));
+			->willReturn(false);
 
-		$manager = new Manager($config, $filesys, $log, $avaMgr, $image, $dbc, $userMgr);
-		$manager->setLdapAccess($access);
-		$user = $manager->get($uid);
+		/** @noinspection PhpUnhandledExceptionInspection */
+		$this->manager->get($uid);
 
 		// Now we fetch the user again. If this leads to a failing test,
 		// runtime caching the manager is broken.
-		$user = $manager->get($uid);
+		/** @noinspection PhpUnhandledExceptionInspection */
+		$user = $this->manager->get($uid);
 
-		$this->assertInstanceOf('\OCA\User_LDAP\User\User', $user);
+		$this->assertInstanceOf(User::class, $user);
 	}
 
 	public function testGetByUidNotExisting() {
-		list($access, $config, $filesys, $image, $log, $avaMgr, $dbc, $userMgr) =
-			$this->getTestInstances();
-
 		$uid = 'gone';
 
-		$access->expects($this->never())
+		$this->access->expects($this->never())
 			->method('dn2username');
-
-		$access->expects($this->exactly(1))
+		$this->access->expects($this->exactly(1))
 			->method('username2dn')
 			->with($this->equalTo($uid))
-			->will($this->returnValue(false));
+			->willReturn(false);
 
-		$manager = new Manager($config, $filesys, $log, $avaMgr, $image, $dbc, $userMgr);
-		$manager->setLdapAccess($access);
-		$user = $manager->get($uid);
+		/** @noinspection PhpUnhandledExceptionInspection */
+		$user = $this->manager->get($uid);
 
 		$this->assertNull($user);
 	}
 
-	public function testGetAttributesAll() {
-		list($access, $config, $filesys, $image, $log, $avaMgr, $dbc, $userMgr) =
-			$this->getTestInstances();
-
-		$manager = new Manager($config, $filesys, $log, $avaMgr, $image, $dbc, $userMgr);
-		$manager->setLdapAccess($access);
-
-		$connection = $access->getConnection();
-		$connection->setConfiguration(array('ldapEmailAttribute' => 'mail'));
-
-		$attributes = $manager->getAttributes();
-
-		$this->assertTrue(in_array('dn', $attributes));
-		$this->assertTrue(in_array($access->getConnection()->ldapEmailAttribute, $attributes));
-		$this->assertTrue(in_array('jpegphoto', $attributes));
-		$this->assertTrue(in_array('thumbnailphoto', $attributes));
+	public function attributeRequestProvider() {
+		return [
+			[false],
+			[true],
+		];
 	}
 
-	public function testGetAttributesMinimal() {
-		list($access, $config, $filesys, $image, $log, $avaMgr, $dbc, $userMgr) =
-			$this->getTestInstances();
+	/**
+	 * @dataProvider attributeRequestProvider
+	 */
+	public function testGetAttributes($minimal) {
+		$this->connection->setConfiguration([
+			'ldapEmailAttribute' => 'MAIL',
+			'ldapUserAvatarRule' => 'default',
+			'ldapQuotaAttribute' => '',
+			'ldapUserDisplayName2' => 'Mail',
+		]);
 
-		$manager = new Manager($config, $filesys, $log, $avaMgr, $image, $dbc, $userMgr);
-		$manager->setLdapAccess($access);
-
-		$attributes = $manager->getAttributes(true);
+		$attributes = $this->manager->getAttributes($minimal);
 
 		$this->assertTrue(in_array('dn', $attributes));
-		$this->assertTrue(!in_array('jpegphoto', $attributes));
-		$this->assertTrue(!in_array('thumbnailphoto', $attributes));
+		$this->assertTrue(in_array(strtolower($this->access->getConnection()->ldapEmailAttribute), $attributes));
+		$this->assertTrue(!in_array($this->access->getConnection()->ldapEmailAttribute, $attributes)); #cases check
+		$this->assertFalse(in_array('', $attributes));
+		$this->assertSame(!$minimal, in_array('jpegphoto', $attributes));
+		$this->assertSame(!$minimal, in_array('thumbnailphoto', $attributes));
+		$valueCounts = array_count_values($attributes);
+		$this->assertSame(1, $valueCounts['mail']);
 	}
-
 }

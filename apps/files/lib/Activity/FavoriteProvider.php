@@ -2,6 +2,9 @@
 /**
  * @copyright Copyright (c) 2016 Joas Schilling <coding@schilljs.com>
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
+ *
  * @license GNU AGPL version 3 or any later version
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,7 +18,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
@@ -30,9 +33,8 @@ use OCP\IURLGenerator;
 use OCP\L10N\IFactory;
 
 class FavoriteProvider implements IProvider {
-
-	const SUBJECT_ADDED = 'added_favorite';
-	const SUBJECT_REMOVED = 'removed_favorite';
+	public const SUBJECT_ADDED = 'added_favorite';
+	public const SUBJECT_REMOVED = 'removed_favorite';
 
 	/** @var IFactory */
 	protected $languageFactory;
@@ -95,13 +97,21 @@ class FavoriteProvider implements IProvider {
 	 * @since 11.0.0
 	 */
 	public function parseShortVersion(IEvent $event) {
-
 		if ($event->getSubject() === self::SUBJECT_ADDED) {
-			$event->setParsedSubject($this->l->t('Added to favorites'))
-				->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/starred.svg')));
-		} else if ($event->getSubject() === self::SUBJECT_REMOVED) {
-			$event->setParsedSubject($this->l->t('Removed from favorites'))
-				->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/star.svg')));
+			$event->setParsedSubject($this->l->t('Added to favorites'));
+			if ($this->activityManager->getRequirePNG()) {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/starred.png')));
+			} else {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/starred.svg')));
+			}
+		} elseif ($event->getSubject() === self::SUBJECT_REMOVED) {
+			$event->setType('unfavorite');
+			$event->setParsedSubject($this->l->t('Removed from favorites'));
+			if ($this->activityManager->getRequirePNG()) {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/star.png')));
+			} else {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/star.svg')));
+			}
 		} else {
 			throw new \InvalidArgumentException();
 		}
@@ -117,13 +127,21 @@ class FavoriteProvider implements IProvider {
 	 * @since 11.0.0
 	 */
 	public function parseLongVersion(IEvent $event, IEvent $previousEvent = null) {
-
 		if ($event->getSubject() === self::SUBJECT_ADDED) {
 			$subject = $this->l->t('You added {file} to your favorites');
-			$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/starred.svg')));
-		} else if ($event->getSubject() === self::SUBJECT_REMOVED) {
+			if ($this->activityManager->getRequirePNG()) {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/starred.png')));
+			} else {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/starred.svg')));
+			}
+		} elseif ($event->getSubject() === self::SUBJECT_REMOVED) {
+			$event->setType('unfavorite');
 			$subject = $this->l->t('You removed {file} from your favorites');
-			$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/star.svg')));
+			if ($this->activityManager->getRequirePNG()) {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/star.png')));
+			} else {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/star.svg')));
+			}
 		} else {
 			throw new \InvalidArgumentException();
 		}

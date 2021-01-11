@@ -1,22 +1,24 @@
 <?php
-
 /**
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @copyright Copyright (c) 2016 Christoph Wurst <christoph@winzerhof-wurst.at>
  *
- * Two-factor backup codes
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
  *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
+ * @license GNU AGPL version 3 or any later version
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
@@ -24,8 +26,8 @@ namespace OCA\TwoFactorBackupCodes\Activity;
 
 use InvalidArgumentException;
 use OCP\Activity\IEvent;
+use OCP\Activity\IManager;
 use OCP\Activity\IProvider;
-use OCP\ILogger;
 use OCP\IURLGenerator;
 use OCP\L10N\IFactory as L10nFactory;
 
@@ -37,17 +39,17 @@ class Provider implements IProvider {
 	/** @var IURLGenerator */
 	private $urlGenerator;
 
-	/** @var ILogger */
-	private $logger;
+	/** @var IManager */
+	private $activityManager;
 
 	/**
 	 * @param L10nFactory $l10n
 	 * @param IURLGenerator $urlGenerator
-	 * @param ILogger $logger
+	 * @param IManager $activityManager
 	 */
-	public function __construct(L10nFactory $l10n, IURLGenerator $urlGenerator, ILogger $logger) {
-		$this->logger = $logger;
+	public function __construct(L10nFactory $l10n, IURLGenerator $urlGenerator, IManager $activityManager) {
 		$this->urlGenerator = $urlGenerator;
+		$this->activityManager = $activityManager;
 		$this->l10n = $l10n;
 	}
 
@@ -61,12 +63,16 @@ class Provider implements IProvider {
 		switch ($event->getSubject()) {
 			case 'codes_generated':
 				$event->setParsedSubject($l->t('You created two-factor backup codes for your account'));
-				$event->setIcon($this->urlGenerator->getAbsoluteURL($this->urlGenerator->imagePath('core', 'actions/password.svg')));
+
+				if ($this->activityManager->getRequirePNG()) {
+					$event->setIcon($this->urlGenerator->getAbsoluteURL($this->urlGenerator->imagePath('core', 'actions/password.png')));
+				} else {
+					$event->setIcon($this->urlGenerator->getAbsoluteURL($this->urlGenerator->imagePath('core', 'actions/password.svg')));
+				}
 				break;
 			default:
 				throw new InvalidArgumentException();
 		}
 		return $event;
 	}
-
 }

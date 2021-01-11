@@ -2,10 +2,15 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
  * @author Björn Schießle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -19,33 +24,34 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
-
 
 namespace OCA\Federation\BackgroundJob;
 
 use GuzzleHttp\Exception\ClientException;
-use OC\BackgroundJob\JobList;
-use OC\BackgroundJob\Job;
-use OCA\Federation\DbHandler;
+use GuzzleHttp\Exception\RequestException;
 use OCA\Federation\TrustedServers;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
+use OCP\BackgroundJob\Job;
 use OCP\Http\Client\IClient;
+use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
 use OCP\ILogger;
 use OCP\IURLGenerator;
+use OCP\OCS\IDiscoveryService;
 
 /**
  * Class GetSharedSecret
  *
- * request shared secret from remote ownCloud
+ * request shared secret from remote Nextcloud
  *
  * @package OCA\Federation\Backgroundjob
  */
-class GetSharedSecret extends Job{
+class GetSharedSecret extends Job {
 
 	/** @var IClient */
 	private $httpClient;
@@ -59,8 +65,8 @@ class GetSharedSecret extends Job{
 	/** @var TrustedServers  */
 	private $trustedServers;
 
-	/** @var DbHandler */
-	private $dbHandler;
+	/** @var IDiscoveryService  */
+	private $ocsDiscoveryService;
 
 	/** @var ILogger */
 	private $logger;
@@ -68,68 +74,64 @@ class GetSharedSecret extends Job{
 	/** @var bool */
 	protected $retainJob = false;
 
-	private $endPoint = '/ocs/v2.php/apps/federation/api/v1/shared-secret?format=json';
+	private $defaultEndPoint = '/ocs/v2.php/apps/federation/api/v1/shared-secret';
+
+	/** @var  int  30 day = 2592000sec */
+	private $maxLifespan = 2592000;
 
 	/**
 	 * RequestSharedSecret constructor.
 	 *
-	 * @param IClient $httpClient
+	 * @param IClientService $httpClientService
 	 * @param IURLGenerator $urlGenerator
 	 * @param IJobList $jobList
 	 * @param TrustedServers $trustedServers
 	 * @param ILogger $logger
-	 * @param DbHandler $dbHandler
+	 * @param IDiscoveryService $ocsDiscoveryService
+	 * @param ITimeFactory $timeFactory
 	 */
 	public function __construct(
-		IClient $httpClient = null,
-		IURLGenerator $urlGenerator = null,
-		IJobList $jobList = null,
-		TrustedServers $trustedServers = null,
-		ILogger $logger = null,
-		DbHandler $dbHandler = null
+		IClientService $httpClientService,
+		IURLGenerator $urlGenerator,
+		IJobList $jobList,
+		TrustedServers $trustedServers,
+		ILogger $logger,
+		IDiscoveryService $ocsDiscoveryService,
+		ITimeFactory $timeFactory
 	) {
-		$this->logger = $logger ? $logger : \OC::$server->getLogger();
-		$this->httpClient = $httpClient ? $httpClient : \OC::$server->getHTTPClientService()->newClient();
-		$this->jobList = $jobList ? $jobList : \OC::$server->getJobList();
-		$this->urlGenerator = $urlGenerator ? $urlGenerator : \OC::$server->getURLGenerator();
-		$this->dbHandler = $dbHandler ? $dbHandler : new DbHandler(\OC::$server->getDatabaseConnection(), \OC::$server->getL10N('federation'));
-		if ($trustedServers) {
-			$this->trustedServers = $trustedServers;
-		} else {
-			$this->trustedServers = new TrustedServers(
-				$this->dbHandler,
-				\OC::$server->getHTTPClientService(),
-				$this->logger,
-				$this->jobList,
-				\OC::$server->getSecureRandom(),
-				\OC::$server->getConfig(),
-				\OC::$server->getEventDispatcher()
-			);
-		}
+		parent::__construct($timeFactory);
+		$this->logger = $logger;
+		$this->httpClient = $httpClientService->newClient();
+		$this->jobList = $jobList;
+		$this->urlGenerator = $urlGenerator;
+		$this->ocsDiscoveryService = $ocsDiscoveryService;
+		$this->trustedServers = $trustedServers;
 	}
 
 	/**
 	 * run the job, then remove it from the joblist
 	 *
-	 * @param JobList $jobList
-	 * @param ILogger $logger
+	 * @param IJobList $jobList
+	 * @param ILogger|null $logger
 	 */
-	public function execute($jobList, ILogger $logger = null) {
+	public function execute(IJobList $jobList, ILogger $logger = null) {
 		$target = $this->argument['url'];
 		// only execute if target is still in the list of trusted domains
 		if ($this->trustedServers->isTrustedServer($target)) {
 			$this->parentExecute($jobList, $logger);
 		}
 
-		if (!$this->retainJob) {
-			$jobList->remove($this, $this->argument);
+		$jobList->remove($this, $this->argument);
+
+		if ($this->retainJob) {
+			$this->reAddJob($this->argument);
 		}
 	}
 
 	/**
 	 * call execute() method of parent
 	 *
-	 * @param JobList $jobList
+	 * @param IJobList $jobList
 	 * @param ILogger $logger
 	 */
 	protected function parentExecute($jobList, $logger = null) {
@@ -138,19 +140,36 @@ class GetSharedSecret extends Job{
 
 	protected function run($argument) {
 		$target = $argument['url'];
+		$created = isset($argument['created']) ? (int)$argument['created'] : $this->time->getTime();
+		$currentTime = $this->time->getTime();
 		$source = $this->urlGenerator->getAbsoluteURL('/');
 		$source = rtrim($source, '/');
 		$token = $argument['token'];
 
+		// kill job after 30 days of trying
+		$deadline = $currentTime - $this->maxLifespan;
+		if ($created < $deadline) {
+			$this->retainJob = false;
+			$this->trustedServers->setServerStatus($target,TrustedServers::STATUS_FAILURE);
+			return;
+		}
+
+		$endPoints = $this->ocsDiscoveryService->discover($target, 'FEDERATED_SHARING');
+		$endPoint = isset($endPoints['shared-secret']) ? $endPoints['shared-secret'] : $this->defaultEndPoint;
+
+		// make sure that we have a well formatted url
+		$url = rtrim($target, '/') . '/' . trim($endPoint, '/');
+
 		$result = null;
 		try {
 			$result = $this->httpClient->get(
-				$target . $this->endPoint,
+				$url,
 				[
 					'query' =>
 						[
 							'url' => $source,
-							'token' => $token
+							'token' => $token,
+							'format' => 'json',
 						],
 					'timeout' => 3,
 					'connect_timeout' => 3,
@@ -158,15 +177,21 @@ class GetSharedSecret extends Job{
 			);
 
 			$status = $result->getStatusCode();
-
 		} catch (ClientException $e) {
 			$status = $e->getCode();
 			if ($status === Http::STATUS_FORBIDDEN) {
 				$this->logger->info($target . ' refused to exchange a shared secret with you.', ['app' => 'federation']);
 			} else {
-				$this->logger->logException($e, ['app' => 'federation']);
+				$this->logger->info($target . ' responded with a ' . $status . ' containing: ' . $e->getMessage(), ['app' => 'federation']);
 			}
-		} catch (\Exception $e) {
+		} catch (RequestException $e) {
+			$status = -1; // There is no status code if we could not connect
+			$this->logger->logException($e, [
+				'message' => 'Could not connect to ' . $target,
+				'level' => ILogger::INFO,
+				'app' => 'federation',
+			]);
+		} catch (\Throwable $e) {
 			$status = Http::STATUS_INTERNAL_SERVER_ERROR;
 			$this->logger->logException($e, ['app' => 'federation']);
 		}
@@ -177,9 +202,6 @@ class GetSharedSecret extends Job{
 			&& $status !== Http::STATUS_FORBIDDEN
 		) {
 			$this->retainJob = true;
-		}  else {
-			// reset token if we received a valid response
-			$this->dbHandler->addToken($target, '');
 		}
 
 		if ($status === Http::STATUS_OK && $result instanceof IResponse) {
@@ -192,12 +214,30 @@ class GetSharedSecret extends Job{
 				);
 			} else {
 				$this->logger->error(
-						'remote server "' . $target . '"" does not return a valid shared secret',
+						'remote server "' . $target . '"" does not return a valid shared secret. Received data: ' . $body,
 						['app' => 'federation']
 				);
 				$this->trustedServers->setServerStatus($target, TrustedServers::STATUS_FAILURE);
 			}
 		}
+	}
 
+	/**
+	 * re-add background job
+	 *
+	 * @param array $argument
+	 */
+	protected function reAddJob(array $argument) {
+		$url = $argument['url'];
+		$created = isset($argument['created']) ? (int)$argument['created'] : $this->time->getTime();
+		$token = $argument['token'];
+		$this->jobList->add(
+			GetSharedSecret::class,
+			[
+				'url' => $url,
+				'token' => $token,
+				'created' => $created
+			]
+		);
 	}
 }

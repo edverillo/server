@@ -3,9 +3,12 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Bernhard Reiter <ockham@raz.or.at>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Daniel Kesselberg <mail@danielkesselberg.de>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Tanghus <thomas@tanghus.net>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -19,7 +22,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -31,10 +34,13 @@
 
 // use OCP namespace for all classes that are considered public.
 // This means that they should be used by apps instead of the internal ownCloud classes
+
 namespace OCP;
 
+use OC\Tags;
+
 // FIXME: Where should I put this? Or should it be implemented as a Listener?
-\OC_Hook::connect('OC_User', 'post_deleteUser', 'OC\Tags', 'post_deleteUser');
+\OC_Hook::connect('OC_User', 'post_deleteUser', Tags::class, 'post_deleteUser');
 
 /**
  * Class for easily tagging objects by their id
@@ -49,6 +55,10 @@ namespace OCP;
  */
 
 interface ITags {
+	/**
+	 * @since 19.0.0
+	 */
+	public const TAG_FAVORITE = '_$!<Favorite>!$_';
 
 	/**
 	 * Check if any tags are saved for this type and user.
@@ -159,7 +169,7 @@ interface ITags {
 	 * @return bool Returns false on error.
 	 * @since 6.0.0
 	 */
-	public function addMultiple($names, $sync=false, $id = null);
+	public function addMultiple($names, $sync = false, $id = null);
 
 	/**
 	 * Delete tag/object relations from the db
@@ -224,5 +234,4 @@ interface ITags {
 	 * @since 6.0.0
 	 */
 	public function delete($names);
-
 }

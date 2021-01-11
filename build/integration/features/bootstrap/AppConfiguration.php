@@ -1,8 +1,13 @@
 <?php
 /**
-
  *
+ *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Daniel Calviño Sánchez <danxuliu@gmail.com>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author John Molakvoæ (skjnldsv) <skjnldsv@protonmail.com>
+ * @author Sergio Bertolin <sbertolin@solidgear.es>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -17,12 +22,13 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 use Behat\Behat\Hook\Scope\AfterScenarioScope;
 use Behat\Behat\Hook\Scope\BeforeScenarioScope;
-use GuzzleHttp\Message\ResponseInterface;
+use PHPUnit\Framework\Assert;
+use Psr\Http\Message\ResponseInterface;
 
 require __DIR__ . '/../../vendor/autoload.php';
 
@@ -67,6 +73,19 @@ trait AppConfiguration {
 		}
 	}
 
+	/**
+	 * @param string $app
+	 * @param string $parameter
+	 * @param string $value
+	 */
+	protected function deleteServerConfig($app, $parameter) {
+		$this->sendingTo('DELETE', "/apps/testing/api/v1/app/{$app}/{$parameter}");
+		$this->theHTTPStatusCodeShouldBe('200');
+		if ($this->apiVersion === 1) {
+			$this->theOCSStatusCodeShouldBe('100');
+		}
+	}
+
 	protected function setStatusTestingApp($enabled) {
 		$this->sendingTo(($enabled ? 'post' : 'delete'), '/cloud/apps/testing');
 		$this->theHTTPStatusCodeShouldBe('200');
@@ -77,9 +96,9 @@ trait AppConfiguration {
 		$this->sendingTo('get', '/cloud/apps?filter=enabled');
 		$this->theHTTPStatusCodeShouldBe('200');
 		if ($enabled) {
-			PHPUnit_Framework_Assert::assertContains('testing', $this->response->getBody()->getContents());
+			Assert::assertContains('testing', $this->response->getBody()->getContents());
 		} else {
-			PHPUnit_Framework_Assert::assertNotContains('testing', $this->response->getBody()->getContents());
+			Assert::assertNotContains('testing', $this->response->getBody()->getContents());
 		}
 	}
 
@@ -92,7 +111,7 @@ trait AppConfiguration {
 	 * reset the configs before each scenario
 	 * @param BeforeScenarioScope $event
 	 */
-	public function prepareParameters(BeforeScenarioScope $event){
+	public function prepareParameters(BeforeScenarioScope $event) {
 		$user = $this->currentUser;
 		$this->currentUser = 'admin';
 

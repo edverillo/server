@@ -4,11 +4,16 @@
  *
  * @author Andreas Fischer <bantu@owncloud.com>
  * @author Bart Visscher <bartv@thisnet.nl>
+ * @author Bernhard Ostertag <bernieo.code@gmx.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Łukasz Buśko <busko.lukasz@pm.me>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Sander Ruitenbeek <sander@grids.be>
  * @author tbelau666 <thomas.belau@gmx.de>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author unclejamal3000 <andreas.pramhaas@posteo.de>
  *
  * @license AGPL-3.0
  *
@@ -22,16 +27,21 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\Core\Command\Db;
 
-use OCP\DB\QueryBuilder\IQueryBuilder;
-use \OCP\IConfig;
+use Doctrine\DBAL\Exception;
+use Doctrine\DBAL\Schema\AbstractAsset;
+use Doctrine\DBAL\Schema\Table;
+use Doctrine\DBAL\Types\Types;
 use OC\DB\Connection;
 use OC\DB\ConnectionFactory;
+use OC\DB\MigrationService;
+use OCP\DB\QueryBuilder\IQueryBuilder;
+use OCP\IConfig;
 use Stecman\Component\Symfony\Console\BashCompletion\Completion\CompletionAwareInterface;
 use Stecman\Component\Symfony\Console\BashCompletion\CompletionContext;
 use Symfony\Component\Console\Command\Command;
@@ -43,6 +53,8 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\ConfirmationQuestion;
 use Symfony\Component\Console\Question\Question;
+use function preg_match;
+use function preg_quote;
 
 class ConvertType extends Command implements CompletionAwareInterface {
 	/**
@@ -179,18 +191,19 @@ class ConvertType extends Command implements CompletionAwareInterface {
 		}
 	}
 
-	protected function execute(InputInterface $input, OutputInterface $output) {
+	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$this->validateInput($input, $output);
 		$this->readPassword($input, $output);
 
-		$fromDB = \OC::$server->getDatabaseConnection();
+		/** @var Connection $fromDB */
+		$fromDB = \OC::$server->get(Connection::class);
 		$toDB = $this->getToDBConnection($input, $output);
 
 		if ($input->getOption('clear-schema')) {
 			$this->clearSchema($toDB, $input, $output);
 		}
 
-		$this->createSchema($toDB, $input, $output);
+		$this->createSchema($fromDB, $toDB, $input, $output);
 
 		$toTables = $this->getTables($toDB);
 		$fromTables = $this->getTables($fromDB);
@@ -205,39 +218,58 @@ class ConvertType extends Command implements CompletionAwareInterface {
 				$output->writeln('<comment>can be included by specifying the --all-apps option.</comment>');
 			}
 
+			$continueConversion = !$input->isInteractive(); // assume yes for --no-interaction and no otherwise.
+			$question = new ConfirmationQuestion('Continue with the conversion (y/n)? [n] ', $continueConversion);
+
 			/** @var QuestionHelper $helper */
 			$helper = $this->getHelper('question');
-			$question = new ConfirmationQuestion('Continue with the conversion (y/n)? [n] ', false);
 
 			if (!$helper->ask($input, $output, $question)) {
-				return;
+				return 1;
 			}
 		}
 		$intersectingTables = array_intersect($toTables, $fromTables);
 		$this->convertDB($fromDB, $toDB, $intersectingTables, $input, $output);
+		return 0;
 	}
 
-	protected function createSchema(Connection $toDB, InputInterface $input, OutputInterface $output) {
+	protected function createSchema(Connection $fromDB, Connection $toDB, InputInterface $input, OutputInterface $output) {
 		$output->writeln('<info>Creating schema in new database</info>');
+
+		$fromMS = new MigrationService('core', $fromDB);
+		$currentMigration = $fromMS->getMigration('current');
+		if ($currentMigration !== '0') {
+			$toMS = new MigrationService('core', $toDB);
+			$toMS->migrate($currentMigration);
+		}
+
 		$schemaManager = new \OC\DB\MDB2SchemaManager($toDB);
-		$schemaManager->createDbFromStructure(\OC::$SERVERROOT.'/db_structure.xml');
 		$apps = $input->getOption('all-apps') ? \OC_App::getAllApps() : \OC_App::getEnabledApps();
-		foreach($apps as $app) {
+		foreach ($apps as $app) {
 			if (file_exists(\OC_App::getAppPath($app).'/appinfo/database.xml')) {
 				$schemaManager->createDbFromStructure(\OC_App::getAppPath($app).'/appinfo/database.xml');
+			} else {
+				// Make sure autoloading works...
+				\OC_App::loadApp($app);
+				$fromMS = new MigrationService($app, $fromDB);
+				$currentMigration = $fromMS->getMigration('current');
+				if ($currentMigration !== '0') {
+					$toMS = new MigrationService($app, $toDB);
+					$toMS->migrate($currentMigration, true);
+				}
 			}
 		}
 	}
 
 	protected function getToDBConnection(InputInterface $input, OutputInterface $output) {
 		$type = $input->getArgument('type');
-		$connectionParams = array(
+		$connectionParams = $this->connectionFactory->createConnectionParams();
+		$connectionParams = array_merge($connectionParams, [
 			'host' => $input->getArgument('hostname'),
 			'user' => $input->getArgument('username'),
 			'password' => $input->getOption('password'),
 			'dbname' => $input->getArgument('database'),
-			'tablePrefix' => $this->config->getSystemValue('dbtableprefix', 'oc_'),
-		);
+		]);
 		if ($input->getOption('port')) {
 			$connectionParams['port'] = $input->getOption('port');
 		}
@@ -249,30 +281,47 @@ class ConvertType extends Command implements CompletionAwareInterface {
 		if (!empty($toTables)) {
 			$output->writeln('<info>Clearing schema in new database</info>');
 		}
-		foreach($toTables as $table) {
+		foreach ($toTables as $table) {
 			$db->getSchemaManager()->dropTable($table);
 		}
 	}
 
 	protected function getTables(Connection $db) {
-		$filterExpression = '/^' . preg_quote($this->config->getSystemValue('dbtableprefix', 'oc_')) . '/';
-		$db->getConfiguration()->
-			setFilterSchemaAssetsExpression($filterExpression);
+		$db->getConfiguration()->setSchemaAssetsFilter(function ($asset) {
+			/** @var string|AbstractAsset $asset */
+			$filterExpression = '/^' . preg_quote($this->config->getSystemValue('dbtableprefix', 'oc_')) . '/';
+			if ($asset instanceof AbstractAsset) {
+				return preg_match($filterExpression, $asset->getName()) !== false;
+			}
+			return preg_match($filterExpression, $asset) !== false;
+		});
 		return $db->getSchemaManager()->listTableNames();
 	}
 
-	protected function copyTable(Connection $fromDB, Connection $toDB, $table, InputInterface $input, OutputInterface $output) {
+	/**
+	 * @param Connection $fromDB
+	 * @param Connection $toDB
+	 * @param Table $table
+	 * @param InputInterface $input
+	 * @param OutputInterface $output
+	 */
+	protected function copyTable(Connection $fromDB, Connection $toDB, Table $table, InputInterface $input, OutputInterface $output) {
+		if ($table->getName() === $toDB->getPrefix() . 'migrations') {
+			$output->writeln('<comment>Skipping migrations table because it was already filled by running the migrations</comment>');
+			return;
+		}
+
 		$chunkSize = $input->getOption('chunk-size');
 
 		$query = $fromDB->getQueryBuilder();
 		$query->automaticTablePrefix(false);
-		$query->selectAlias($query->createFunction('COUNT(*)'), 'num_entries')
-			->from($table);
+		$query->select($query->func()->count('*', 'num_entries'))
+			->from($table->getName());
 		$result = $query->execute();
-		$count = $result->fetchColumn();
+		$count = $result->fetchOne();
 		$result->closeCursor();
 
-		$numChunks = ceil($count/$chunkSize);
+		$numChunks = ceil($count / $chunkSize);
 		if ($numChunks > 1) {
 			$output->writeln('chunked query, ' . $numChunks . ' chunks');
 		}
@@ -285,12 +334,25 @@ class ConvertType extends Command implements CompletionAwareInterface {
 		$query = $fromDB->getQueryBuilder();
 		$query->automaticTablePrefix(false);
 		$query->select('*')
-			->from($table)
+			->from($table->getName())
 			->setMaxResults($chunkSize);
+
+		try {
+			$orderColumns = $table->getPrimaryKeyColumns();
+		} catch (Exception $e) {
+			$orderColumns = [];
+			foreach ($table->getColumns() as $column) {
+				$orderColumns[] = $column->getName();
+			}
+		}
+
+		foreach ($orderColumns as $column) {
+			$query->addOrderBy($column);
+		}
 
 		$insertQuery = $toDB->getQueryBuilder();
 		$insertQuery->automaticTablePrefix(false);
-		$insertQuery->insert($table);
+		$insertQuery->insert($table->getName());
 		$parametersCreated = false;
 
 		for ($chunk = 0; $chunk < $numChunks; $chunk++) {
@@ -322,33 +384,38 @@ class ConvertType extends Command implements CompletionAwareInterface {
 		$progress->finish();
 	}
 
-	protected function getColumnType($table, $column) {
-		if (isset($this->columnTypes[$table][$column])) {
-			return $this->columnTypes[$table][$column];
-		}
-		$prefix = $this->config->getSystemValue('dbtableprefix', 'oc_');
-
-		$this->columnTypes[$table][$column] = false;
-
-		if ($table === $prefix . 'cards' && $column === 'carddata') {
-			$this->columnTypes[$table][$column] = IQueryBuilder::PARAM_LOB;
-		} else if ($column === 'calendardata') {
-			if ($table === $prefix . 'calendarobjects' ||
-				$table === $prefix . 'schedulingobjects') {
-				$this->columnTypes[$table][$column] = IQueryBuilder::PARAM_LOB;
-			}
+	protected function getColumnType(Table $table, $columnName) {
+		$tableName = $table->getName();
+		if (isset($this->columnTypes[$tableName][$columnName])) {
+			return $this->columnTypes[$tableName][$columnName];
 		}
 
-		return $this->columnTypes[$table][$column];
+		$type = $table->getColumn($columnName)->getType()->getName();
+
+		switch ($type) {
+			case Types::BLOB:
+			case Types::TEXT:
+				$this->columnTypes[$tableName][$columnName] = IQueryBuilder::PARAM_LOB;
+				break;
+			case Types::BOOLEAN:
+				$this->columnTypes[$tableName][$columnName] = IQueryBuilder::PARAM_BOOL;
+				break;
+			default:
+				$this->columnTypes[$tableName][$columnName] = false;
+		}
+
+		return $this->columnTypes[$tableName][$columnName];
 	}
 
 	protected function convertDB(Connection $fromDB, Connection $toDB, array $tables, InputInterface $input, OutputInterface $output) {
 		$this->config->setSystemValue('maintenance', true);
+		$schema = $fromDB->createSchema();
+
 		try {
 			// copy table rows
-			foreach($tables as $table) {
+			foreach ($tables as $table) {
 				$output->writeln($table);
-				$this->copyTable($fromDB, $toDB, $table, $input, $output);
+				$this->copyTable($fromDB, $toDB, $schema->getTable($table), $input, $output);
 			}
 			if ($input->getArgument('type') === 'pgsql') {
 				$tools = new \OC\DB\PgSqlTools($this->config);
@@ -356,7 +423,7 @@ class ConvertType extends Command implements CompletionAwareInterface {
 			}
 			// save new database config
 			$this->saveDBInfo($input);
-		} catch(\Exception $e) {
+		} catch (\Exception $e) {
 			$this->config->setSystemValue('maintenance', false);
 			throw $e;
 		}
@@ -374,11 +441,11 @@ class ConvertType extends Command implements CompletionAwareInterface {
 		}
 
 		$this->config->setSystemValues([
-			'dbtype'		=> $type,
-			'dbname'		=> $dbName,
-			'dbhost'		=> $dbHost,
-			'dbuser'		=> $username,
-			'dbpassword'	=> $password,
+			'dbtype' => $type,
+			'dbname' => $dbName,
+			'dbhost' => $dbHost,
+			'dbuser' => $username,
+			'dbpassword' => $password,
 		]);
 	}
 

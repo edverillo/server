@@ -1,8 +1,16 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Bernhard Posselt <dev@bernhard-posselt.com>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Daniel Kesselberg <mail@danielkesselberg.de>
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Julius Härtl <jus@bitgrid.net>
+ * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
@@ -21,7 +29,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -31,12 +39,14 @@
  */
 
 namespace OCP\AppFramework;
-use OC\AppFramework\Routing\RouteConfig;
 
+use OC\AppFramework\Routing\RouteConfig;
+use OC\Route\Router;
+use OC\ServerContainer;
+use OCP\Route\IRouter;
 
 /**
  * Class App
- * @package OCP\AppFramework
  *
  * Any application must inherit this call - all controller instances to be used are
  * to be registered using IContainer::registerService
@@ -44,10 +54,12 @@ use OC\AppFramework\Routing\RouteConfig;
  */
 class App {
 
+	/** @var IAppContainer */
+	private $container;
 
 	/**
-	 * Turns an app id into a namespace by convetion. The id is split at the
-	 * underscores, all parts are camelcased and reassembled. e.g.:
+	 * Turns an app id into a namespace by convention. The id is split at the
+	 * underscores, all parts are CamelCased and reassembled. e.g.:
 	 * some_app_id -> OCA\SomeAppId
 	 * @param string $appId the app id
 	 * @param string $topNamespace the namespace which should be prepended to
@@ -55,26 +67,62 @@ class App {
 	 * @return string the starting namespace for the app
 	 * @since 8.0.0
 	 */
-	public static function buildAppNamespace($appId, $topNamespace='OCA\\') {
+	public static function buildAppNamespace(string $appId, string $topNamespace = 'OCA\\'): string {
 		return \OC\AppFramework\App::buildAppNamespace($appId, $topNamespace);
 	}
 
 
 	/**
+	 * @param string $appName
 	 * @param array $urlParams an array with variables extracted from the routes
 	 * @since 6.0.0
 	 */
-	public function __construct($appName, $urlParams = array()) {
-		$this->container = new \OC\AppFramework\DependencyInjection\DIContainer($appName, $urlParams);
-	}
+	public function __construct(string $appName, array $urlParams = []) {
+		$runIsSetupDirectly = \OC::$server->getConfig()->getSystemValueBool('debug')
+			&& (PHP_VERSION_ID < 70400 || (PHP_VERSION_ID >= 70400 && !ini_get('zend.exception_ignore_args')));
 
-	private $container;
+		if ($runIsSetupDirectly) {
+			$applicationClassName = get_class($this);
+			$e = new \RuntimeException('App class ' . $applicationClassName . ' is not setup via query() but directly');
+			$setUpViaQuery = false;
+
+			$classNameParts = explode('\\', trim($applicationClassName, '\\'));
+
+			foreach ($e->getTrace() as $step) {
+				if (isset($step['class'], $step['function'], $step['args'][0]) &&
+					$step['class'] === ServerContainer::class &&
+					$step['function'] === 'query' &&
+					$step['args'][0] === $applicationClassName) {
+					$setUpViaQuery = true;
+					break;
+				} elseif (isset($step['class'], $step['function'], $step['args'][0]) &&
+					$step['class'] === ServerContainer::class &&
+					$step['function'] === 'getAppContainer' &&
+					$step['args'][1] === $classNameParts[1]) {
+					$setUpViaQuery = true;
+					break;
+				}
+			}
+
+			if (!$setUpViaQuery && $applicationClassName !== \OCP\AppFramework\App::class) {
+				\OC::$server->getLogger()->logException($e, [
+					'app' => $appName,
+				]);
+			}
+		}
+
+		try {
+			$this->container = \OC::$server->getRegisteredAppContainer($appName);
+		} catch (QueryException $e) {
+			$this->container = new \OC\AppFramework\DependencyInjection\DIContainer($appName, $urlParams);
+		}
+	}
 
 	/**
 	 * @return IAppContainer
 	 * @since 6.0.0
 	 */
-	public function getContainer() {
+	public function getContainer(): IAppContainer {
 		return $this->container;
 	}
 
@@ -95,8 +143,14 @@ class App {
 	 * @param \OCP\Route\IRouter $router
 	 * @param array $routes
 	 * @since 6.0.0
+	 * @suppress PhanAccessMethodInternal
+	 * @deprecated 20.0.0 Just return an array from your routes.php
 	 */
-	public function registerRoutes($router, $routes) {
+	public function registerRoutes(IRouter $router, array $routes) {
+		if (!($router instanceof Router)) {
+			throw new \RuntimeException('Can only setup routes with real router');
+		}
+
 		$routeConfig = new RouteConfig($this->container, $router, $routes);
 		$routeConfig->register();
 	}
@@ -132,7 +186,7 @@ class App {
 	 * @param string $methodName the method that you want to call
 	 * @since 6.0.0
 	 */
-	public function dispatch($controllerName, $methodName) {
+	public function dispatch(string $controllerName, string $methodName) {
 		\OC\AppFramework\App::main($controllerName, $methodName, $this->container);
 	}
 }

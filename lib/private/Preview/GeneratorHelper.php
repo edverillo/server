@@ -2,6 +2,9 @@
 /**
  * @copyright Copyright (c) 2016, Roeland Jago Douma <roeland@famdouma.nl>
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Robin Appelman <robin@icewind.nl>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license GNU AGPL version 3 or any later version
@@ -17,18 +20,20 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
+
 namespace OC\Preview;
 
-use OC\Files\View;
 use OCP\Files\File;
 use OCP\Files\IRootFolder;
 use OCP\Files\SimpleFS\ISimpleFile;
+use OCP\IConfig;
 use OCP\IImage;
-use OCP\Image as img;
+use OCP\Image as OCPImage;
 use OCP\Preview\IProvider;
+use OCP\Preview\IProviderV2;
 
 /**
  * Very small wrapper class to make the generator fully unit testable
@@ -38,40 +43,24 @@ class GeneratorHelper {
 	/** @var IRootFolder */
 	private $rootFolder;
 
-	public function __construct(IRootFolder $rootFolder) {
+	/** @var IConfig */
+	private $config;
+
+	public function __construct(IRootFolder $rootFolder, IConfig $config) {
 		$this->rootFolder = $rootFolder;
+		$this->config = $config;
 	}
 
 	/**
-	 * @param IProvider $provider
+	 * @param IProviderV2 $provider
 	 * @param File $file
 	 * @param int $maxWidth
 	 * @param int $maxHeight
+	 *
 	 * @return bool|IImage
 	 */
-	public function getThumbnail(IProvider $provider, File $file, $maxWidth, $maxHeight) {
-		list($view, $path) = $this->getViewAndPath($file);
-		return $provider->getThumbnail($path, $maxWidth, $maxHeight, false, $view);
-	}
-
-	/**
-	 * @param File $file
-	 * @return array
-	 * This is required to create the old view and path
-	 */
-	private function getViewAndPath(File $file) {
-		$absPath = ltrim($file->getPath(), '/');
-		$owner = explode('/', $absPath)[0];
-
-		$userFolder = $this->rootFolder->getUserFolder($owner)->getParent();
-
-		$nodes = $userFolder->getById($file->getId());
-		$file = $nodes[0];
-
-		$view = new View($userFolder->getPath());
-		$path = $userFolder->getRelativePath($file->getPath());
-
-		return [$view, $path];
+	public function getThumbnail(IProviderV2 $provider, File $file, $maxWidth, $maxHeight) {
+		return $provider->getThumbnail($file, $maxWidth, $maxHeight);
 	}
 
 	/**
@@ -79,14 +68,20 @@ class GeneratorHelper {
 	 * @return IImage
 	 */
 	public function getImage(ISimpleFile $maxPreview) {
-		return new img($maxPreview->getContent());
+		$image = new OCPImage();
+		$image->loadFromData($maxPreview->getContent());
+		return $image;
 	}
 
 	/**
-	 * @param $provider
-	 * @return IProvider
+	 * @param callable $providerClosure
+	 * @return IProviderV2
 	 */
-	public function getProvider($provider) {
-		return $provider();
+	public function getProvider($providerClosure) {
+		$provider = $providerClosure();
+		if ($provider instanceof IProvider) {
+			$provider = new ProviderV1Adapter($provider);
+		}
+		return $provider;
 	}
 }

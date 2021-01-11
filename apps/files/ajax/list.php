@@ -2,11 +2,13 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Jörn Friedrich Dreyer <jfd@butonic.de>
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -20,10 +22,14 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
-OCP\JSON::checkLoggedIn();
+
+use OCP\Files\StorageNotAvailableException;
+use OCP\Files\StorageInvalidException;
+
+\OC_JSON::checkLoggedIn();
 \OC::$server->getSession()->close();
 $l = \OC::$server->getL10N('files');
 
@@ -34,12 +40,12 @@ $dir = \OC\Files\Filesystem::normalizePath($dir);
 try {
 	$dirInfo = \OC\Files\Filesystem::getFileInfo($dir);
 	if (!$dirInfo || !$dirInfo->getType() === 'dir') {
-		header("HTTP/1.0 404 Not Found");
+		http_response_code(404);
 		exit();
 	}
 
-	$data = array();
-	$baseUrl = OCP\Util::linkTo('files', 'index.php') . '?dir=';
+	$data = [];
+	$baseUrl = \OC::$server->getURLGenerator()->linkTo('files', 'index.php') . '?dir=';
 
 	$permissions = $dirInfo->getPermissions();
 
@@ -71,34 +77,33 @@ try {
 		$files = \OCA\Files\Helper::getFiles($dir, $sortAttribute, $sortDirection);
 	}
 
-	$files = \OCA\Files\Helper::populateTags($files);
 	$data['directory'] = $dir;
 	$data['files'] = \OCA\Files\Helper::formatFileInfos($files);
 	$data['permissions'] = $permissions;
 
-	OCP\JSON::success(array('data' => $data));
+	\OC_JSON::success(['data' => $data]);
 } catch (\OCP\Files\StorageNotAvailableException $e) {
-	\OCP\Util::logException('files', $e);
-	OCP\JSON::error([
+	\OC::$server->getLogger()->logException($e, ['app' => 'files']);
+	\OC_JSON::error([
 		'data' => [
-			'exception' => '\OCP\Files\StorageNotAvailableException',
+			'exception' => StorageNotAvailableException::class,
 			'message' => $l->t('Storage is temporarily not available')
 		]
 	]);
 } catch (\OCP\Files\StorageInvalidException $e) {
-	\OCP\Util::logException('files', $e);
-	OCP\JSON::error(array(
-		'data' => array(
-			'exception' => '\OCP\Files\StorageInvalidException',
+	\OC::$server->getLogger()->logException($e, ['app' => 'files']);
+	\OC_JSON::error([
+		'data' => [
+			'exception' => StorageInvalidException::class,
 			'message' => $l->t('Storage invalid')
-		)
-	));
+		]
+	]);
 } catch (\Exception $e) {
-	\OCP\Util::logException('files', $e);
-	OCP\JSON::error(array(
-		'data' => array(
-			'exception' => '\Exception',
+	\OC::$server->getLogger()->logException($e, ['app' => 'files']);
+	\OC_JSON::error([
+		'data' => [
+			'exception' => \Exception::class,
 			'message' => $l->t('Unknown error')
-		)
-	));
+		]
+	]);
 }

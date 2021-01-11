@@ -1,9 +1,13 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -17,7 +21,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -45,7 +49,7 @@ interface IMountManager {
 	 * @param string $mountPoint
 	 * @since 8.2.0
 	 */
-	public function removeMount($mountPoint);
+	public function removeMount(string $mountPoint);
 
 	/**
 	 * Change the location of a mount
@@ -54,16 +58,16 @@ interface IMountManager {
 	 * @param string $target
 	 * @since 8.2.0
 	 */
-	public function moveMount($mountPoint, $target);
+	public function moveMount(string $mountPoint, string $target);
 
 	/**
 	 * Find the mount for $path
 	 *
 	 * @param string $path
-	 * @return \OCP\Files\Mount\IMountPoint
+	 * @return \OCP\Files\Mount\IMountPoint|null
 	 * @since 8.2.0
 	 */
-	public function find($path);
+	public function find(string $path);
 
 	/**
 	 * Find all mounts in $path
@@ -72,7 +76,7 @@ interface IMountManager {
 	 * @return \OCP\Files\Mount\IMountPoint[]
 	 * @since 8.2.0
 	 */
-	public function findIn($path);
+	public function findIn(string $path): array;
 
 	/**
 	 * Remove all registered mounts
@@ -88,13 +92,13 @@ interface IMountManager {
 	 * @return \OCP\Files\Mount\IMountPoint[]
 	 * @since 8.2.0
 	 */
-	public function findByStorageId($id);
+	public function findByStorageId(string $id): array;
 
 	/**
 	 * @return \OCP\Files\Mount\IMountPoint[]
 	 * @since 8.2.0
 	 */
-	public function getAll();
+	public function getAll(): array;
 
 	/**
 	 * Find mounts by numeric storage id
@@ -103,5 +107,5 @@ interface IMountManager {
 	 * @return \OCP\Files\Mount\IMountPoint[]
 	 * @since 8.2.0
 	 */
-	public function findByNumericId($id);
+	public function findByNumericId(int $id): array;
 }

@@ -35,14 +35,14 @@ class LocalTest extends Storage {
 	 */
 	private $tmpDir;
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->tmpDir = \OC::$server->getTempManager()->getTemporaryFolder();
-		$this->instance = new \OC\Files\Storage\Local(array('datadir' => $this->tmpDir));
+		$this->instance = new \OC\Files\Storage\Local(['datadir' => $this->tmpDir]);
 	}
 
-	protected function tearDown() {
+	protected function tearDown(): void {
 		\OC_Helper::rmdirr($this->tmpDir);
 		parent::tearDown();
 	}
@@ -63,24 +63,24 @@ class LocalTest extends Storage {
 		$this->assertNotEquals($etag1, $etag2);
 	}
 
-	/**
-	 * @expectedException \InvalidArgumentException
-	 */
+	
 	public function testInvalidArgumentsEmptyArray() {
+		$this->expectException(\InvalidArgumentException::class);
+
 		new \OC\Files\Storage\Local([]);
 	}
 
-	/**
-	 * @expectedException \InvalidArgumentException
-	 */
+	
 	public function testInvalidArgumentsNoArray() {
+		$this->expectException(\InvalidArgumentException::class);
+
 		new \OC\Files\Storage\Local(null);
 	}
 
-	/**
-	 * @expectedException \OCP\Files\ForbiddenException
-	 */
+	
 	public function testDisallowSymlinksOutsideDatadir() {
+		$this->expectException(\OCP\Files\ForbiddenException::class);
+
 		$subDir1 = $this->tmpDir . 'sub1';
 		$subDir2 = $this->tmpDir . 'sub2';
 		$sym = $this->tmpDir . 'sub1/sym';
@@ -106,6 +106,6 @@ class LocalTest extends Storage {
 		$storage = new \OC\Files\Storage\Local(['datadir' => $subDir1]);
 
 		$storage->file_put_contents('sym/foo', 'bar');
+		$this->addToAssertionCount(1);
 	}
 }
-

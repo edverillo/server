@@ -1,6 +1,15 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016 Lukas Reschke <lukas@statuscode.ch>
+ *
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -15,13 +24,16 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 namespace OC\Security\IdentityProof;
 
+use OC\Files\AppData\Factory;
 use OCP\Files\IAppData;
+use OCP\IConfig;
+use OCP\ILogger;
 use OCP\IUser;
 use OCP\Security\ICrypto;
 
@@ -30,15 +42,20 @@ class Manager {
 	private $appData;
 	/** @var ICrypto */
 	private $crypto;
+	/** @var IConfig */
+	private $config;
+	/** @var ILogger */
+	private $logger;
 
-	/**
-	 * @param IAppData $appData
-	 * @param ICrypto $crypto
-	 */
-	public function __construct(IAppData $appData,
-								ICrypto $crypto) {
-		$this->appData = $appData;
+	public function __construct(Factory $appDataFactory,
+								ICrypto $crypto,
+								IConfig $config,
+								ILogger $logger
+	) {
+		$this->appData = $appDataFactory->get('identityproof');
 		$this->crypto = $crypto;
+		$this->config = $config;
+		$this->logger = $logger;
 	}
 
 	/**
@@ -46,8 +63,9 @@ class Manager {
 	 * In a separate function for unit testing purposes.
 	 *
 	 * @return array [$publicKey, $privateKey]
+	 * @throws \RuntimeException
 	 */
-	protected function generateKeyPair() {
+	protected function generateKeyPair(): array {
 		$config = [
 			'digest_alg' => 'sha512',
 			'private_key_bits' => 2048,
@@ -55,7 +73,16 @@ class Manager {
 
 		// Generate new key
 		$res = openssl_pkey_new($config);
-		openssl_pkey_export($res, $privateKey);
+
+		if ($res === false) {
+			$this->logOpensslError();
+			throw new \RuntimeException('OpenSSL reported a problem');
+		}
+
+		if (openssl_pkey_export($res, $privateKey, null, $config) === false) {
+			$this->logOpensslError();
+			throw new \RuntimeException('OpenSSL reported a problem');
+		}
 
 		// Extract the public key from $res to $pubKey
 		$publicKey = openssl_pkey_get_details($res);
@@ -65,20 +92,22 @@ class Manager {
 	}
 
 	/**
-	 * Generate a key for $user
+	 * Generate a key for a given ID
 	 * Note: If a key already exists it will be overwritten
 	 *
-	 * @param IUser $user
+	 * @param string $id key id
 	 * @return Key
+	 * @throws \RuntimeException
 	 */
-	protected function generateKey(IUser $user) {
+	protected function generateKey(string $id): Key {
 		list($publicKey, $privateKey) = $this->generateKeyPair();
 
 		// Write the private and public key to the disk
 		try {
-			$this->appData->newFolder($user->getUID());
-		} catch (\Exception $e) {}
-		$folder = $this->appData->getFolder($user->getUID());
+			$this->appData->newFolder($id);
+		} catch (\Exception $e) {
+		}
+		$folder = $this->appData->getFolder($id);
 		$folder->newFile('private')
 			->putContent($this->crypto->encrypt($privateKey));
 		$folder->newFile('public')
@@ -88,21 +117,56 @@ class Manager {
 	}
 
 	/**
-	 * Get public and private key for $user
+	 * Get key for a specific id
 	 *
-	 * @param IUser $user
+	 * @param string $id
 	 * @return Key
+	 * @throws \RuntimeException
 	 */
-	public function getKey(IUser $user) {
+	protected function retrieveKey(string $id): Key {
 		try {
-			$folder = $this->appData->getFolder($user->getUID());
+			$folder = $this->appData->getFolder($id);
 			$privateKey = $this->crypto->decrypt(
 				$folder->getFile('private')->getContent()
 			);
 			$publicKey = $folder->getFile('public')->getContent();
 			return new Key($publicKey, $privateKey);
 		} catch (\Exception $e) {
-			return $this->generateKey($user);
+			return $this->generateKey($id);
 		}
+	}
+
+	/**
+	 * Get public and private key for $user
+	 *
+	 * @param IUser $user
+	 * @return Key
+	 * @throws \RuntimeException
+	 */
+	public function getKey(IUser $user): Key {
+		$uid = $user->getUID();
+		return $this->retrieveKey('user-' . $uid);
+	}
+
+	/**
+	 * Get instance wide public and private key
+	 *
+	 * @return Key
+	 * @throws \RuntimeException
+	 */
+	public function getSystemKey(): Key {
+		$instanceId = $this->config->getSystemValue('instanceid', null);
+		if ($instanceId === null) {
+			throw new \RuntimeException('no instance id!');
+		}
+		return $this->retrieveKey('system-' . $instanceId);
+	}
+
+	private function logOpensslError(): void {
+		$errors = [];
+		while ($error = openssl_error_string()) {
+			$errors[] = $error;
+		}
+		$this->logger->critical('Something is wrong with your openssl setup: ' . implode(', ', $errors));
 	}
 }

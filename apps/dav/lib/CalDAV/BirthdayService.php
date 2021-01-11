@@ -1,12 +1,17 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
- * @copyright Copyright (c) 2016, Georg Ehrke
+ * @copyright Copyright (c) 2019, Georg Ehrke
  *
  * @author Achim Königs <garfonso@tratschtante.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Georg Ehrke <oc.list@georgehrke.com>
  * @author Robin Appelman <robin@icewind.nl>
+ * @author Sven Strickroth <email@cs-ware.de>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Georg Ehrke <georg@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -20,7 +25,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -29,6 +34,9 @@ namespace OCA\DAV\CalDAV;
 use Exception;
 use OCA\DAV\CardDAV\CardDavBackend;
 use OCA\DAV\DAV\GroupPrincipalBackend;
+use OCP\IConfig;
+use OCP\IDBConnection;
+use OCP\IL10N;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\Component\VCard;
 use Sabre\VObject\DateTimeParser;
@@ -37,9 +45,13 @@ use Sabre\VObject\InvalidDataException;
 use Sabre\VObject\Property\VCard\DateAndOrTime;
 use Sabre\VObject\Reader;
 
+/**
+ * Class BirthdayService
+ *
+ * @package OCA\DAV\CalDAV
+ */
 class BirthdayService {
-
-	const BIRTHDAY_CALENDAR_URI = 'contact_birthdays';
+	public const BIRTHDAY_CALENDAR_URI = 'contact_birthdays';
 
 	/** @var GroupPrincipalBackend */
 	private $principalBackend;
@@ -50,17 +62,37 @@ class BirthdayService {
 	/** @var CardDavBackend  */
 	private $cardDavBackEnd;
 
+	/** @var IConfig */
+	private $config;
+
+	/** @var IDBConnection */
+	private $dbConnection;
+
+	/** @var IL10N */
+	private $l10n;
+
 	/**
 	 * BirthdayService constructor.
 	 *
 	 * @param CalDavBackend $calDavBackEnd
 	 * @param CardDavBackend $cardDavBackEnd
 	 * @param GroupPrincipalBackend $principalBackend
+	 * @param IConfig $config
+	 * @param IDBConnection $dbConnection
+	 * @param IL10N $l10n
 	 */
-	public function __construct(CalDavBackend $calDavBackEnd, CardDavBackend $cardDavBackEnd, GroupPrincipalBackend $principalBackend) {
+	public function __construct(CalDavBackend $calDavBackEnd,
+								CardDavBackend $cardDavBackEnd,
+								GroupPrincipalBackend $principalBackend,
+								IConfig $config,
+								IDBConnection $dbConnection,
+								IL10N $l10n) {
 		$this->calDavBackEnd = $calDavBackEnd;
 		$this->cardDavBackEnd = $cardDavBackEnd;
 		$this->principalBackend = $principalBackend;
+		$this->config = $config;
+		$this->dbConnection = $dbConnection;
+		$this->l10n = $l10n;
 	}
 
 	/**
@@ -68,20 +100,30 @@ class BirthdayService {
 	 * @param string $cardUri
 	 * @param string $cardData
 	 */
-	public function onCardChanged($addressBookId, $cardUri, $cardData) {
+	public function onCardChanged(int $addressBookId,
+								  string $cardUri,
+								  string $cardData) {
+		if (!$this->isGloballyEnabled()) {
+			return;
+		}
+
 		$targetPrincipals = $this->getAllAffectedPrincipals($addressBookId);
-		
 		$book = $this->cardDavBackEnd->getAddressBookById($addressBookId);
 		$targetPrincipals[] = $book['principaluri'];
 		$datesToSync = [
-			['postfix' => '', 'field' => 'BDAY', 'symbol' => '*'],
-			['postfix' => '-death', 'field' => 'DEATHDATE', 'symbol' => "†"],
-			['postfix' => '-anniversary', 'field' => 'ANNIVERSARY', 'symbol' => "⚭"],
+			['postfix' => '', 'field' => 'BDAY'],
+			['postfix' => '-death', 'field' => 'DEATHDATE'],
+			['postfix' => '-anniversary', 'field' => 'ANNIVERSARY'],
 		];
+
 		foreach ($targetPrincipals as $principalUri) {
+			if (!$this->isUserEnabled($principalUri)) {
+				continue;
+			}
+
 			$calendar = $this->ensureCalendarExists($principalUri);
 			foreach ($datesToSync as $type) {
-				$this->updateCalendar($cardUri, $cardData, $book, $calendar['id'], $type);
+				$this->updateCalendar($cardUri, $cardData, $book, (int) $calendar['id'], $type);
 			}
 		}
 	}
@@ -90,11 +132,20 @@ class BirthdayService {
 	 * @param int $addressBookId
 	 * @param string $cardUri
 	 */
-	public function onCardDeleted($addressBookId, $cardUri) {
+	public function onCardDeleted(int $addressBookId,
+								  string $cardUri) {
+		if (!$this->isGloballyEnabled()) {
+			return;
+		}
+
 		$targetPrincipals = $this->getAllAffectedPrincipals($addressBookId);
 		$book = $this->cardDavBackEnd->getAddressBookById($addressBookId);
 		$targetPrincipals[] = $book['principaluri'];
 		foreach ($targetPrincipals as $principalUri) {
+			if (!$this->isUserEnabled($principalUri)) {
+				continue;
+			}
+
 			$calendar = $this->ensureCalendarExists($principalUri);
 			foreach (['', '-death', '-anniversary'] as $tag) {
 				$objectUri = $book['uri'] . '-' . $cardUri . $tag .'.ics';
@@ -108,27 +159,30 @@ class BirthdayService {
 	 * @return array|null
 	 * @throws \Sabre\DAV\Exception\BadRequest
 	 */
-	public function ensureCalendarExists($principal) {
-		$book = $this->calDavBackEnd->getCalendarByUri($principal, self::BIRTHDAY_CALENDAR_URI);
-		if (!is_null($book)) {
-			return $book;
+	public function ensureCalendarExists(string $principal):?array {
+		$calendar = $this->calDavBackEnd->getCalendarByUri($principal, self::BIRTHDAY_CALENDAR_URI);
+		if (!is_null($calendar)) {
+			return $calendar;
 		}
 		$this->calDavBackEnd->createCalendar($principal, self::BIRTHDAY_CALENDAR_URI, [
 			'{DAV:}displayname' => 'Contact birthdays',
-			'{http://apple.com/ns/ical/}calendar-color' => '#FFFFCA',
-			'components'   => 'VEVENT',
+			'{http://apple.com/ns/ical/}calendar-color' => '#E9D859',
+			'components' => 'VEVENT',
 		]);
 
 		return $this->calDavBackEnd->getCalendarByUri($principal, self::BIRTHDAY_CALENDAR_URI);
 	}
 
 	/**
-	 * @param string $cardData
-	 * @param string $dateField
-	 * @param string $summarySymbol
-	 * @return null|VCalendar
+	 * @param $cardData
+	 * @param $dateField
+	 * @param $postfix
+	 * @return VCalendar|null
+	 * @throws InvalidDataException
 	 */
-	public function buildDateFromContact($cardData, $dateField, $summarySymbol) {
+	public function buildDateFromContact(string $cardData,
+										 string $dateField,
+										 string $postfix):?VCalendar {
 		if (empty($cardData)) {
 			return null;
 		}
@@ -167,25 +221,48 @@ class BirthdayService {
 		}
 
 		$unknownYear = false;
+		$originalYear = null;
 		if (!$dateParts['year']) {
-			$birthday = '1900-' . $dateParts['month'] . '-' . $dateParts['date'];
+			$birthday = '1970-' . $dateParts['month'] . '-' . $dateParts['date'];
 
 			$unknownYear = true;
+		} else {
+			$parameters = $birthday->parameters();
+			if (isset($parameters['X-APPLE-OMIT-YEAR'])) {
+				$omitYear = $parameters['X-APPLE-OMIT-YEAR'];
+				if ($dateParts['year'] === $omitYear) {
+					$birthday = '1970-' . $dateParts['month'] . '-' . $dateParts['date'];
+					$unknownYear = true;
+				}
+			} else {
+				$originalYear = (int)$dateParts['year'];
+				// 'X-APPLE-OMIT-YEAR' is not always present, at least iOS 12.4 uses the hard coded date of 1604 (the start of the gregorian calendar) when the year is unknown
+				if ($originalYear == 1604) {
+					$originalYear = null;
+					$unknownYear = true;
+					$birthday = '1970-' . $dateParts['month'] . '-' . $dateParts['date'];
+				}
+				if ($originalYear < 1970) {
+					$birthday = '1970-' . $dateParts['month'] . '-' . $dateParts['date'];
+				}
+			}
 		}
 
 		try {
-			$date = new \DateTime($birthday);
+			if ($birthday instanceof DateAndOrTime) {
+				$date = $birthday->getDateTime();
+			} else {
+				$date = new \DateTimeImmutable($birthday);
+			}
 		} catch (Exception $e) {
 			return null;
 		}
-		if ($unknownYear) {
-			$summary = $doc->FN->getValue() . ' ' . $summarySymbol;
-		} else {
-			$year = (int)$date->format('Y');
-			$summary = $doc->FN->getValue() . " ($summarySymbol$year)";
-		}
+
+		$summary = $this->formatTitle($dateField, $doc->FN->getValue(), $originalYear, $this->dbConnection->supports4ByteText());
+
 		$vCal = new VCalendar();
 		$vCal->VERSION = '2.0';
+		$vCal->PRODID = '-//IDN nextcloud.com//Birthday calendar//EN';
 		$vEvent = $vCal->createComponent('VEVENT');
 		$vEvent->add('DTSTART');
 		$vEvent->DTSTART->setDateTime(
@@ -193,15 +270,23 @@ class BirthdayService {
 		);
 		$vEvent->DTSTART['VALUE'] = 'DATE';
 		$vEvent->add('DTEND');
-		$date->add(new \DateInterval('P1D'));
+
+		$dtEndDate = (new \DateTime())->setTimestamp($date->getTimeStamp());
+		$dtEndDate->add(new \DateInterval('P1D'));
 		$vEvent->DTEND->setDateTime(
-			$date
+			$dtEndDate
 		);
+
 		$vEvent->DTEND['VALUE'] = 'DATE';
-		$vEvent->{'UID'} = $doc->UID;
+		$vEvent->{'UID'} = $doc->UID . $postfix;
 		$vEvent->{'RRULE'} = 'FREQ=YEARLY';
 		$vEvent->{'SUMMARY'} = $summary;
 		$vEvent->{'TRANSP'} = 'TRANSPARENT';
+		$vEvent->{'X-NEXTCLOUD-BC-FIELD-TYPE'} = $dateField;
+		$vEvent->{'X-NEXTCLOUD-BC-UNKNOWN-YEAR'} = $unknownYear ? '1' : '0';
+		if ($originalYear !== null) {
+			$vEvent->{'X-NEXTCLOUD-BC-YEAR'} = (string) $originalYear;
+		}
 		$alarm = $vCal->createComponent('VALARM');
 		$alarm->add($vCal->createProperty('TRIGGER', '-PT0M', ['VALUE' => 'DURATION']));
 		$alarm->add($vCal->createProperty('ACTION', 'DISPLAY'));
@@ -214,14 +299,28 @@ class BirthdayService {
 	/**
 	 * @param string $user
 	 */
-	public function syncUser($user) {
+	public function resetForUser(string $user):void {
+		$principal = 'principals/users/'.$user;
+		$calendar = $this->calDavBackEnd->getCalendarByUri($principal, self::BIRTHDAY_CALENDAR_URI);
+		$calendarObjects = $this->calDavBackEnd->getCalendarObjects($calendar['id'], CalDavBackend::CALENDAR_TYPE_CALENDAR);
+
+		foreach ($calendarObjects as $calendarObject) {
+			$this->calDavBackEnd->deleteCalendarObject($calendar['id'], $calendarObject['uri'], CalDavBackend::CALENDAR_TYPE_CALENDAR);
+		}
+	}
+
+	/**
+	 * @param string $user
+	 * @throws \Sabre\DAV\Exception\BadRequest
+	 */
+	public function syncUser(string $user):void {
 		$principal = 'principals/users/'.$user;
 		$this->ensureCalendarExists($principal);
 		$books = $this->cardDavBackEnd->getAddressBooksForUser($principal);
-		foreach($books as $book) {
+		foreach ($books as $book) {
 			$cards = $this->cardDavBackEnd->getCards($book['id']);
-			foreach($cards as $card) {
-				$this->onCardChanged($book['id'], $card['uri'], $card['carddata']);
+			foreach ($cards as $card) {
+				$this->onCardChanged((int) $book['id'], $card['uri'], $card['carddata']);
 			}
 		}
 	}
@@ -231,25 +330,25 @@ class BirthdayService {
 	 * @param VCalendar $newCalendarData
 	 * @return bool
 	 */
-	public function birthdayEvenChanged($existingCalendarData, $newCalendarData) {
+	public function birthdayEvenChanged(string $existingCalendarData,
+										VCalendar $newCalendarData):bool {
 		try {
 			$existingBirthday = Reader::read($existingCalendarData);
 		} catch (Exception $ex) {
 			return true;
 		}
-		if ($newCalendarData->VEVENT->DTSTART->getValue() !== $existingBirthday->VEVENT->DTSTART->getValue() ||
+
+		return (
+			$newCalendarData->VEVENT->DTSTART->getValue() !== $existingBirthday->VEVENT->DTSTART->getValue() ||
 			$newCalendarData->VEVENT->SUMMARY->getValue() !== $existingBirthday->VEVENT->SUMMARY->getValue()
-		) {
-			return true;
-		}
-		return false;
+		);
 	}
 
 	/**
 	 * @param integer $addressBookId
 	 * @return mixed
 	 */
-	protected function getAllAffectedPrincipals($addressBookId) {
+	protected function getAllAffectedPrincipals(int $addressBookId) {
 		$targetPrincipals = [];
 		$shares = $this->cardDavBackEnd->getShares($addressBookId);
 		foreach ($shares as $share) {
@@ -267,14 +366,20 @@ class BirthdayService {
 
 	/**
 	 * @param string $cardUri
-	 * @param string  $cardData
+	 * @param string $cardData
 	 * @param array $book
 	 * @param int $calendarId
-	 * @param string $type
+	 * @param array $type
+	 * @throws InvalidDataException
+	 * @throws \Sabre\DAV\Exception\BadRequest
 	 */
-	private function updateCalendar($cardUri, $cardData, $book, $calendarId, $type) {
+	private function updateCalendar(string $cardUri,
+									string $cardData,
+									array $book,
+									int $calendarId,
+									array $type):void {
 		$objectUri = $book['uri'] . '-' . $cardUri . $type['postfix'] . '.ics';
-		$calendarData = $this->buildDateFromContact($cardData, $type['field'], $type['symbol']);
+		$calendarData = $this->buildDateFromContact($cardData, $type['field'], $type['postfix']);
 		$existing = $this->calDavBackEnd->getCalendarObject($calendarId, $objectUri);
 		if (is_null($calendarData)) {
 			if (!is_null($existing)) {
@@ -291,4 +396,95 @@ class BirthdayService {
 		}
 	}
 
+	/**
+	 * checks if the admin opted-out of birthday calendars
+	 *
+	 * @return bool
+	 */
+	private function isGloballyEnabled():bool {
+		return $this->config->getAppValue('dav', 'generateBirthdayCalendar', 'yes') === 'yes';
+	}
+
+	/**
+	 * Checks if the user opted-out of birthday calendars
+	 *
+	 * @param string $userPrincipal The user principal to check for
+	 * @return bool
+	 */
+	private function isUserEnabled(string $userPrincipal):bool {
+		if (strpos($userPrincipal, 'principals/users/') === 0) {
+			$userId = substr($userPrincipal, 17);
+			$isEnabled = $this->config->getUserValue($userId, 'dav', 'generateBirthdayCalendar', 'yes');
+			return $isEnabled === 'yes';
+		}
+
+		// not sure how we got here, just be on the safe side and return true
+		return true;
+	}
+
+	/**
+	 * Formats title of Birthday event
+	 *
+	 * @param string $field Field name like BDAY, ANNIVERSARY, ...
+	 * @param string $name Name of contact
+	 * @param int|null $year Year of birth, anniversary, ...
+	 * @param bool $supports4Byte Whether or not the database supports 4 byte chars
+	 * @return string The formatted title
+	 */
+	private function formatTitle(string $field,
+								 string $name,
+								 int $year = null,
+								 bool $supports4Byte = true):string {
+		if ($supports4Byte) {
+			switch ($field) {
+				case 'BDAY':
+					return implode('', [
+						'🎂 ',
+						$name,
+						$year ? (' (' . $year . ')') : '',
+					]);
+
+				case 'DEATHDATE':
+					return implode('', [
+						$this->l10n->t('Death of %s', [$name]),
+						$year ? (' (' . $year . ')') : '',
+					]);
+
+				case 'ANNIVERSARY':
+					return implode('', [
+						'💍 ',
+						$name,
+						$year ? (' (' . $year . ')') : '',
+					]);
+
+				default:
+					return '';
+			}
+		} else {
+			switch ($field) {
+				case 'BDAY':
+					return implode('', [
+						$name,
+						' ',
+						$year ? ('(*' . $year . ')') : '*',
+					]);
+
+				case 'DEATHDATE':
+					return implode('', [
+						$this->l10n->t('Death of %s', [$name]),
+						$year ? (' (' . $year . ')') : '',
+					]);
+
+				case 'ANNIVERSARY':
+					return implode('', [
+						$name,
+						' ',
+						$year ? ('(⚭' . $year . ')') : '⚭',
+					]);
+
+				default:
+					return '';
+			}
+		}
+	}
 }

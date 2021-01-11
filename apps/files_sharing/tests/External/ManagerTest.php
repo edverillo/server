@@ -2,9 +2,15 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Daniel Kesselberg <mail@danielkesselberg.de>
  * @author Joas Schilling <coding@schilljs.com>
- * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Julius Härtl <jus@bitgrid.net>
+ * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -19,7 +25,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -27,11 +33,18 @@ namespace OCA\Files_Sharing\Tests\External;
 
 use OC\Federation\CloudIdManager;
 use OC\Files\Storage\StorageFactory;
-use OCA\FederatedFileSharing\DiscoveryManager;
 use OCA\Files_Sharing\External\Manager;
 use OCA\Files_Sharing\External\MountProvider;
 use OCA\Files_Sharing\Tests\TestCase;
+use OCP\Contacts\IManager;
+use OCP\EventDispatcher\IEventDispatcher;
+use OCP\Federation\ICloudFederationFactory;
+use OCP\Federation\ICloudFederationProviderManager;
 use OCP\Http\Client\IClientService;
+use OCP\Http\Client\IResponse;
+use OCP\IGroupManager;
+use OCP\IUserManager;
+use OCP\Share\IShare;
 use Test\Traits\UserTrait;
 
 /**
@@ -44,14 +57,29 @@ use Test\Traits\UserTrait;
 class ManagerTest extends TestCase {
 	use UserTrait;
 
-	/** @var Manager **/
+	/** @var IManager|\PHPUnit\Framework\MockObject\MockObject */
+	protected $contactsManager;
+
+	/** @var Manager|\PHPUnit\Framework\MockObject\MockObject **/
 	private $manager;
 
 	/** @var \OC\Files\Mount\Manager */
 	private $mountManager;
 
-	/** @var IClientService|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var IClientService|\PHPUnit\Framework\MockObject\MockObject */
 	private $clientService;
+
+	/** @var ICloudFederationProviderManager|\PHPUnit\Framework\MockObject\MockObject */
+	private $cloudFederationProviderManager;
+
+	/** @var ICloudFederationFactory|\PHPUnit\Framework\MockObject\MockObject */
+	private $cloudFederationFactory;
+
+	/** @var \PHPUnit\Framework\MockObject\MockObject|IGroupManager */
+	private $groupManager;
+
+	/** @var \PHPUnit\Framework\MockObject\MockObject|IUserManager */
+	private $userManager;
 
 	private $uid;
 
@@ -60,32 +88,51 @@ class ManagerTest extends TestCase {
 	 */
 	private $user;
 	private $testMountProvider;
+	/** @var IEventDispatcher|\PHPUnit\Framework\MockObject\MockObject */
+	private $eventDispatcher;
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->uid = $this->getUniqueID('user');
 		$this->createUser($this->uid, '');
 		$this->user = \OC::$server->getUserManager()->get($this->uid);
 		$this->mountManager = new \OC\Files\Mount\Manager();
-		$this->clientService = $this->getMockBuilder('\OCP\Http\Client\IClientService')
+		$this->clientService = $this->getMockBuilder(IClientService::class)
 			->disableOriginalConstructor()->getMock();
-		$discoveryManager = new DiscoveryManager(
-			\OC::$server->getMemCacheFactory(),
-			\OC::$server->getHTTPClientService()
-		);
-		$this->manager = new Manager(
-			\OC::$server->getDatabaseConnection(),
-			$this->mountManager,
-			new StorageFactory(),
-			$this->clientService,
-			\OC::$server->getNotificationManager(),
-			$discoveryManager,
-			$this->uid
-		);
-		$this->testMountProvider = new MountProvider(\OC::$server->getDatabaseConnection(), function() {
+		$this->cloudFederationProviderManager = $this->createMock(ICloudFederationProviderManager::class);
+		$this->cloudFederationFactory = $this->createMock(ICloudFederationFactory::class);
+		$this->groupManager = $this->createMock(IGroupManager::class);
+		$this->userManager = $this->createMock(IUserManager::class);
+		$this->eventDispatcher = $this->createMock(IEventDispatcher::class);
+
+		$this->contactsManager = $this->createMock(IManager::class);
+		// needed for MountProvider() initialization
+		$this->contactsManager->expects($this->any())
+			->method('search')
+			->willReturn([]);
+
+		$this->manager = $this->getMockBuilder(Manager::class)
+			->setConstructorArgs(
+				[
+					\OC::$server->getDatabaseConnection(),
+					$this->mountManager,
+					new StorageFactory(),
+					$this->clientService,
+					\OC::$server->getNotificationManager(),
+					\OC::$server->query(\OCP\OCS\IDiscoveryService::class),
+					$this->cloudFederationProviderManager,
+					$this->cloudFederationFactory,
+					$this->groupManager,
+					$this->userManager,
+					$this->uid,
+					$this->eventDispatcher,
+				]
+			)->setMethods(['tryOCMEndPoint'])->getMock();
+
+		$this->testMountProvider = new MountProvider(\OC::$server->getDatabaseConnection(), function () {
 			return $this->manager;
-		}, new CloudIdManager());
+		}, new CloudIdManager($this->contactsManager));
 	}
 
 	private function setupMounts() {
@@ -96,20 +143,27 @@ class ManagerTest extends TestCase {
 	}
 
 	public function testAddShare() {
-
 		$shareData1 = [
 			'remote' => 'http://localhost',
 			'token' => 'token1',
 			'password' => '',
 			'name' => '/SharedFolder',
 			'owner' => 'foobar',
+			'shareType' => IShare::TYPE_USER,
 			'accepted' => false,
 			'user' => $this->uid,
+			'remoteId' => '2342'
 		];
 		$shareData2 = $shareData1;
 		$shareData2['token'] = 'token2';
 		$shareData3 = $shareData1;
 		$shareData3['token'] = 'token3';
+
+		$this->userManager->expects($this->any())->method('get')->willReturn($this->user);
+		$this->groupManager->expects($this->any())->method(('getUserGroups'))->willReturn([]);
+
+		$this->manager->expects($this->at(0))->method('tryOCMEndPoint')->with('http://localhost', 'token1', '2342', 'accept')->willReturn(false);
+		$this->manager->expects($this->at(1))->method('tryOCMEndPoint')->with('http://localhost', 'token3', '2342', 'decline')->willReturn(false);
 
 		// Add a share for "user"
 		$this->assertSame(null, call_user_func_array([$this->manager, 'addShare'], $shareData1));
@@ -139,11 +193,18 @@ class ManagerTest extends TestCase {
 		$this->clientService->expects($this->at(0))
 			->method('newClient')
 			->willReturn($client);
-		$response = $this->getMockBuilder('OCP\Http\Client\IResponse')
-			->disableOriginalConstructor()->getMock();
+		$response = $this->createMock(IResponse::class);
+		$response->method('getBody')
+			->willReturn(json_encode([
+				'ocs' => [
+					'meta' => [
+						'statuscode' => 200,
+					]
+				]
+			]));
 		$client->expects($this->once())
 			->method('post')
-			->with($this->stringStartsWith('http://localhost/ocs/v1.php/cloud/shares/' . $openShares[0]['remote_id']), $this->anything())
+			->with($this->stringStartsWith('http://localhost/ocs/v2.php/cloud/shares/' . $openShares[0]['remote_id']), $this->anything())
 			->willReturn($response);
 
 		// Accept the first share
@@ -182,11 +243,18 @@ class ManagerTest extends TestCase {
 		$this->clientService->expects($this->at(0))
 			->method('newClient')
 			->willReturn($client);
-		$response = $this->getMockBuilder('OCP\Http\Client\IResponse')
-			->disableOriginalConstructor()->getMock();
+		$response = $this->createMock(IResponse::class);
+		$response->method('getBody')
+			->willReturn(json_encode([
+				'ocs' => [
+					'meta' => [
+						'statuscode' => 200,
+					]
+				]
+			]));
 		$client->expects($this->once())
 			->method('post')
-			->with($this->stringStartsWith('http://localhost/ocs/v1.php/cloud/shares/' . $openShares[1]['remote_id'] . '/decline'), $this->anything())
+			->with($this->stringStartsWith('http://localhost/ocs/v2.php/cloud/shares/' . $openShares[1]['remote_id'] . '/decline'), $this->anything())
 			->willReturn($response);
 
 		// Decline the third share
@@ -222,15 +290,22 @@ class ManagerTest extends TestCase {
 		$this->clientService->expects($this->at(1))
 			->method('newClient')
 			->willReturn($client2);
-		$response = $this->getMockBuilder('OCP\Http\Client\IResponse')
-			->disableOriginalConstructor()->getMock();
+		$response = $this->createMock(IResponse::class);
+		$response->method('getBody')
+			->willReturn(json_encode([
+				'ocs' => [
+					'meta' => [
+						'statuscode' => 200,
+					]
+				]
+			]));
 		$client1->expects($this->once())
 			->method('post')
-			->with($this->stringStartsWith('http://localhost/ocs/v1.php/cloud/shares/' . $openShares[0]['remote_id'] . '/decline'), $this->anything())
+			->with($this->stringStartsWith('http://localhost/ocs/v2.php/cloud/shares/' . $openShares[0]['remote_id'] . '/decline'), $this->anything())
 			->willReturn($response);
 		$client2->expects($this->once())
 			->method('post')
-			->with($this->stringStartsWith('http://localhost/ocs/v1.php/cloud/shares/' . $acceptedShares[0]['remote_id'] . '/decline'), $this->anything())
+			->with($this->stringStartsWith('http://localhost/ocs/v2.php/cloud/shares/' . $acceptedShares[0]['remote_id'] . '/decline'), $this->anything())
 			->willReturn($response);
 
 		$this->manager->removeUserShares($this->uid);

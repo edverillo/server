@@ -1,6 +1,10 @@
 <?php
 /**
+ *
+ *
  * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -15,20 +19,23 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 namespace OCA\TwoFactorBackupCodes\Db;
 
-use OCP\AppFramework\Db\Mapper;
+use OCP\AppFramework\Db\QBMapper;
+use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 use OCP\IUser;
 
-class BackupCodeMapper extends Mapper {
-
+/**
+ * @template-extends QBMapper<BackupCode>
+ */
+class BackupCodeMapper extends QBMapper {
 	public function __construct(IDBConnection $db) {
-		parent::__construct($db, 'twofactor_backup_codes');
+		parent::__construct($db, 'twofactor_backupcodes');
 	}
 
 	/**
@@ -40,25 +47,28 @@ class BackupCodeMapper extends Mapper {
 		$qb = $this->db->getQueryBuilder();
 
 		$qb->select('id', 'user_id', 'code', 'used')
-			->from('twofactor_backup_codes')
+			->from('twofactor_backupcodes')
 			->where($qb->expr()->eq('user_id', $qb->createNamedParameter($user->getUID())));
-		$result = $qb->execute();
 
-		$rows = $result->fetchAll();
-		$result->closeCursor();
-
-		return array_map(function ($row) {
-			return BackupCode::fromRow($row);
-		}, $rows);
+		return self::findEntities($qb);
 	}
 
+	/**
+	 * @param IUser $user
+	 */
 	public function deleteCodes(IUser $user) {
+		$this->deleteCodesByUserId($user->getUID());
+	}
+
+	/**
+	 * @param string $uid
+	 */
+	public function deleteCodesByUserId($uid) {
 		/* @var IQueryBuilder $qb */
 		$qb = $this->db->getQueryBuilder();
 
-		$qb->delete('twofactor_backup_codes')
-			->where($qb->expr()->eq('user_id', $qb->createNamedParameter($user->getUID())));
+		$qb->delete('twofactor_backupcodes')
+			->where($qb->expr()->eq('user_id', $qb->createNamedParameter($uid)));
 		$qb->execute();
 	}
-
 }

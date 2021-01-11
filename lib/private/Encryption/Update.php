@@ -2,8 +2,10 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
  * @author Björn Schießle <bjoern@schiessle.org>
- * @author Joas Schilling <coding@schilljs.com>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -18,15 +20,15 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\Encryption;
 
 use OC\Files\Filesystem;
-use \OC\Files\Mount;
-use \OC\Files\View;
+use OC\Files\Mount;
+use OC\Files\View;
 
 /**
  * update encrypted files, e.g. because a file was shared
@@ -39,7 +41,7 @@ class Update {
 	/** @var \OC\Encryption\Util */
 	protected $util;
 
-	 /** @var \OC\Files\Mount\Manager */
+	/** @var \OC\Files\Mount\Manager */
 	protected $mountManager;
 
 	/** @var \OC\Encryption\Manager */
@@ -68,7 +70,6 @@ class Update {
 			File $file,
 			$uid
 		) {
-
 		$this->view = $view;
 		$this->util = $util;
 		$this->mountManager = $mountManager;
@@ -131,13 +132,13 @@ class Update {
 	public function postRename($params) {
 		$source = $params['oldpath'];
 		$target = $params['newpath'];
-		if(
+		if (
 			$this->encryptionManager->isEnabled() &&
 			dirname($source) !== dirname($target)
 		) {
-				list($owner, $ownerPath) = $this->getOwnerPath($target);
-				$absPath = '/' . $owner . '/files/' . $ownerPath;
-				$this->update($absPath);
+			list($owner, $ownerPath) = $this->getOwnerPath($target);
+			$absPath = '/' . $owner . '/files/' . $ownerPath;
+			$this->update($absPath);
 		}
 	}
 
@@ -157,7 +158,7 @@ class Update {
 			throw new \InvalidArgumentException('No file found for ' . $info->getId());
 		}
 
-		return array($owner, $path);
+		return [$owner, $path];
 	}
 
 	/**
@@ -167,20 +168,26 @@ class Update {
 	 * @throws Exceptions\ModuleDoesNotExistsException
 	 */
 	public function update($path) {
+		$encryptionModule = $this->encryptionManager->getEncryptionModule();
+
+		// if the encryption module doesn't encrypt the files on a per-user basis
+		// we have nothing to do here.
+		if ($encryptionModule->needDetailedAccessList() === false) {
+			return;
+		}
 
 		// if a folder was shared, get a list of all (sub-)folders
 		if ($this->view->is_dir($path)) {
 			$allFiles = $this->util->getAllFiles($path);
 		} else {
-			$allFiles = array($path);
+			$allFiles = [$path];
 		}
 
-		$encryptionModule = $this->encryptionManager->getEncryptionModule();
+
 
 		foreach ($allFiles as $file) {
 			$usersSharing = $this->file->getAccessList($file);
 			$encryptionModule->update($file, $this->uid, $usersSharing);
 		}
 	}
-
 }

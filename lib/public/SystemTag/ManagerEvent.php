@@ -1,8 +1,15 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -16,25 +23,23 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCP\SystemTag;
 
-use Symfony\Component\EventDispatcher\Event;
+use OCP\EventDispatcher\Event;
 
 /**
  * Class ManagerEvent
  *
- * @package OCP\SystemTag
  * @since 9.0.0
  */
 class ManagerEvent extends Event {
-
-	const EVENT_CREATE = 'OCP\SystemTag\ISystemTagManager::createTag';
-	const EVENT_UPDATE = 'OCP\SystemTag\ISystemTagManager::updateTag';
-	const EVENT_DELETE = 'OCP\SystemTag\ISystemTagManager::deleteTag';
+	public const EVENT_CREATE = 'OCP\SystemTag\ISystemTagManager::createTag';
+	public const EVENT_UPDATE = 'OCP\SystemTag\ISystemTagManager::updateTag';
+	public const EVENT_DELETE = 'OCP\SystemTag\ISystemTagManager::deleteTag';
 
 	/** @var string */
 	protected $event;
@@ -48,10 +53,10 @@ class ManagerEvent extends Event {
 	 *
 	 * @param string $event
 	 * @param ISystemTag $tag
-	 * @param ISystemTag $beforeTag
+	 * @param ISystemTag|null $beforeTag
 	 * @since 9.0.0
 	 */
-	public function __construct($event, ISystemTag $tag, ISystemTag $beforeTag = null) {
+	public function __construct(string $event, ISystemTag $tag, ISystemTag $beforeTag = null) {
 		$this->event = $event;
 		$this->tag = $tag;
 		$this->beforeTag = $beforeTag;
@@ -61,7 +66,7 @@ class ManagerEvent extends Event {
 	 * @return string
 	 * @since 9.0.0
 	 */
-	public function getEvent() {
+	public function getEvent(): string {
 		return $this->event;
 	}
 
@@ -69,15 +74,16 @@ class ManagerEvent extends Event {
 	 * @return ISystemTag
 	 * @since 9.0.0
 	 */
-	public function getTag() {
+	public function getTag(): ISystemTag {
 		return $this->tag;
 	}
 
 	/**
 	 * @return ISystemTag
 	 * @since 9.0.0
+	 * @throws \BadMethodCallException
 	 */
-	public function getTagBefore() {
+	public function getTagBefore(): ISystemTag {
 		if ($this->event !== self::EVENT_UPDATE) {
 			throw new \BadMethodCallException('getTagBefore is only available on the update Event');
 		}

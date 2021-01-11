@@ -2,6 +2,12 @@
 /**
  * @copyright Copyright (c) 2016 Joas Schilling <coding@schilljs.com>
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author John Molakvoæ (skjnldsv) <skjnldsv@protonmail.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ *
  * @license GNU AGPL version 3 or any later version
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,7 +21,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
@@ -29,19 +35,19 @@ use Test\TestCase;
 
 class CalendarTest extends TestCase {
 
-	/** @var IURLGenerator|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var IURLGenerator|\PHPUnit\Framework\MockObject\MockObject */
 	protected $url;
 
-	/** @var IFilter|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var IFilter|\PHPUnit\Framework\MockObject\MockObject */
 	protected $filter;
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 		$this->url = $this->createMock(IURLGenerator::class);
 		$l = $this->createMock(IL10N::class);
 		$l->expects($this->any())
 			->method('t')
-			->willReturnCallback(function($string, $args) {
+			->willReturnCallback(function ($string, $args) {
 				return vsprintf($string, $args);
 			});
 
@@ -53,7 +59,7 @@ class CalendarTest extends TestCase {
 	public function testGetIcon() {
 		$this->url->expects($this->once())
 			->method('imagePath')
-			->with('core', 'places/calendar-dark.svg')
+			->with('core', 'places/calendar.svg')
 			->willReturn('path-to-icon');
 
 		$this->url->expects($this->once())

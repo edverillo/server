@@ -43,13 +43,13 @@ class QueryBuilderTest extends \Test\TestCase {
 	/** @var IDBConnection */
 	protected $connection;
 
-	/** @var SystemConfig|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var SystemConfig|\PHPUnit\Framework\MockObject\MockObject */
 	protected $config;
 
-	/** @var ILogger|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var ILogger|\PHPUnit\Framework\MockObject\MockObject */
 	protected $logger;
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->connection = \OC::$server->getDatabaseConnection();
@@ -314,6 +314,44 @@ class QueryBuilderTest extends \Test\TestCase {
 		$this->deleteTestingRows('testFirstResult2');
 	}
 
+	public function testSelectDistinctMultiple() {
+		$this->deleteTestingRows('testFirstResult1');
+		$this->deleteTestingRows('testFirstResult2');
+		$this->createTestingRows('testFirstResult1');
+		$this->createTestingRows('testFirstResult2');
+
+		$this->queryBuilder->selectDistinct(['appid', 'configkey']);
+
+		$this->queryBuilder->from('*PREFIX*appconfig')
+			->where($this->queryBuilder->expr()->eq(
+				'appid',
+				$this->queryBuilder->expr()->literal('testFirstResult1')
+			))
+			->orderBy('appid', 'DESC');
+
+		$query = $this->queryBuilder->execute();
+		$rows = $query->fetchAll();
+		$query->closeCursor();
+
+		$this->assertEquals(
+			[
+				['appid' => 'testFirstResult1', 'configkey' => 'testing1'],
+				['appid' => 'testFirstResult1', 'configkey' => 'testing2'],
+				['appid' => 'testFirstResult1', 'configkey' => 'testing3'],
+				['appid' => 'testFirstResult1', 'configkey' => 'testing4'],
+				['appid' => 'testFirstResult1', 'configkey' => 'testing5'],
+				['appid' => 'testFirstResult1', 'configkey' => 'testing6'],
+				['appid' => 'testFirstResult1', 'configkey' => 'testing7'],
+				['appid' => 'testFirstResult1', 'configkey' => 'testing8'],
+				['appid' => 'testFirstResult1', 'configkey' => 'testing9'],
+			],
+			$rows
+		);
+
+		$this->deleteTestingRows('testFirstResult1');
+		$this->deleteTestingRows('testFirstResult2');
+	}
+
 	public function dataAddSelect() {
 		$config = $this->createMock(SystemConfig::class);
 		$logger = $this->createMock(ILogger::class);
@@ -472,15 +510,15 @@ class QueryBuilderTest extends \Test\TestCase {
 	public function dataFrom() {
 		return [
 			['data', null, null, null, [['table' => '`*PREFIX*data`', 'alias' => null]], '`*PREFIX*data`'],
-			['data', 't', null, null, [['table' => '`*PREFIX*data`', 'alias' => 't']], '`*PREFIX*data` t'],
+			['data', 't', null, null, [['table' => '`*PREFIX*data`', 'alias' => '`t`']], '`*PREFIX*data` `t`'],
 			['data1', null, 'data2', null, [
 				['table' => '`*PREFIX*data1`', 'alias' => null],
 				['table' => '`*PREFIX*data2`', 'alias' => null]
 			], '`*PREFIX*data1`, `*PREFIX*data2`'],
 			['data', 't1', 'data', 't2', [
-				['table' => '`*PREFIX*data`', 'alias' => 't1'],
-				['table' => '`*PREFIX*data`', 'alias' => 't2']
-			], '`*PREFIX*data` t1, `*PREFIX*data` t2'],
+				['table' => '`*PREFIX*data`', 'alias' => '`t1`'],
+				['table' => '`*PREFIX*data`', 'alias' => '`t2`']
+			], '`*PREFIX*data` `t1`, `*PREFIX*data` `t2`'],
 		];
 	}
 
@@ -515,18 +553,18 @@ class QueryBuilderTest extends \Test\TestCase {
 		return [
 			[
 				'd1', 'data2', null, null,
-				['d1' => [['joinType' => 'inner', 'joinTable' => '`*PREFIX*data2`', 'joinAlias' => null, 'joinCondition' => null]]],
-				'`*PREFIX*data1` d1 INNER JOIN `*PREFIX*data2`  ON '
+				['`d1`' => [['joinType' => 'inner', 'joinTable' => '`*PREFIX*data2`', 'joinAlias' => null, 'joinCondition' => null]]],
+				'`*PREFIX*data1` `d1` INNER JOIN `*PREFIX*data2` '
 			],
 			[
 				'd1', 'data2', 'd2', null,
-				['d1' => [['joinType' => 'inner', 'joinTable' => '`*PREFIX*data2`', 'joinAlias' => 'd2', 'joinCondition' => null]]],
-				'`*PREFIX*data1` d1 INNER JOIN `*PREFIX*data2` d2 ON '
+				['`d1`' => [['joinType' => 'inner', 'joinTable' => '`*PREFIX*data2`', 'joinAlias' => '`d2`', 'joinCondition' => null]]],
+				'`*PREFIX*data1` `d1` INNER JOIN `*PREFIX*data2` `d2`'
 			],
 			[
-				'd1', 'data2', 'd2', 'd1.`field1` = d2.`field2`',
-				['d1' => [['joinType' => 'inner', 'joinTable' => '`*PREFIX*data2`', 'joinAlias' => 'd2', 'joinCondition' => 'd1.`field1` = d2.`field2`']]],
-				'`*PREFIX*data1` d1 INNER JOIN `*PREFIX*data2` d2 ON d1.`field1` = d2.`field2`'
+				'd1', 'data2', 'd2', '`d1`.`field1` = `d2`.`field2`',
+				['`d1`' => [['joinType' => 'inner', 'joinTable' => '`*PREFIX*data2`', 'joinAlias' => '`d2`', 'joinCondition' => '`d1`.`field1` = `d2`.`field2`']]],
+				'`*PREFIX*data1` `d1` INNER JOIN `*PREFIX*data2` `d2` ON `d1`.`field1` = `d2`.`field2`'
 			],
 
 		];
@@ -596,18 +634,18 @@ class QueryBuilderTest extends \Test\TestCase {
 		return [
 			[
 				'd1', 'data2', null, null,
-				['d1' => [['joinType' => 'left', 'joinTable' => '`*PREFIX*data2`', 'joinAlias' => null, 'joinCondition' => null]]],
-				'`*PREFIX*data1` d1 LEFT JOIN `*PREFIX*data2`  ON '
+				['`d1`' => [['joinType' => 'left', 'joinTable' => '`*PREFIX*data2`', 'joinAlias' => null, 'joinCondition' => null]]],
+				'`*PREFIX*data1` `d1` LEFT JOIN `*PREFIX*data2` '
 			],
 			[
 				'd1', 'data2', 'd2', null,
-				['d1' => [['joinType' => 'left', 'joinTable' => '`*PREFIX*data2`', 'joinAlias' => 'd2', 'joinCondition' => null]]],
-				'`*PREFIX*data1` d1 LEFT JOIN `*PREFIX*data2` d2 ON '
+				['`d1`' => [['joinType' => 'left', 'joinTable' => '`*PREFIX*data2`', 'joinAlias' => '`d2`', 'joinCondition' => null]]],
+				'`*PREFIX*data1` `d1` LEFT JOIN `*PREFIX*data2` `d2`'
 			],
 			[
-				'd1', 'data2', 'd2', 'd1.`field1` = d2.`field2`',
-				['d1' => [['joinType' => 'left', 'joinTable' => '`*PREFIX*data2`', 'joinAlias' => 'd2', 'joinCondition' => 'd1.`field1` = d2.`field2`']]],
-				'`*PREFIX*data1` d1 LEFT JOIN `*PREFIX*data2` d2 ON d1.`field1` = d2.`field2`'
+				'd1', 'data2', 'd2', '`d1`.`field1` = `d2`.`field2`',
+				['`d1`' => [['joinType' => 'left', 'joinTable' => '`*PREFIX*data2`', 'joinAlias' => '`d2`', 'joinCondition' => '`d1`.`field1` = `d2`.`field2`']]],
+				'`*PREFIX*data1` `d1` LEFT JOIN `*PREFIX*data2` `d2` ON `d1`.`field1` = `d2`.`field2`'
 			],
 		];
 	}
@@ -646,18 +684,18 @@ class QueryBuilderTest extends \Test\TestCase {
 		return [
 			[
 				'd1', 'data2', null, null,
-				['d1' => [['joinType' => 'right', 'joinTable' => '`*PREFIX*data2`', 'joinAlias' => null, 'joinCondition' => null]]],
-				'`*PREFIX*data1` d1 RIGHT JOIN `*PREFIX*data2`  ON '
+				['`d1`' => [['joinType' => 'right', 'joinTable' => '`*PREFIX*data2`', 'joinAlias' => null, 'joinCondition' => null]]],
+				'`*PREFIX*data1` `d1` RIGHT JOIN `*PREFIX*data2` '
 			],
 			[
 				'd1', 'data2', 'd2', null,
-				['d1' => [['joinType' => 'right', 'joinTable' => '`*PREFIX*data2`', 'joinAlias' => 'd2', 'joinCondition' => null]]],
-				'`*PREFIX*data1` d1 RIGHT JOIN `*PREFIX*data2` d2 ON '
+				['`d1`' => [['joinType' => 'right', 'joinTable' => '`*PREFIX*data2`', 'joinAlias' => '`d2`', 'joinCondition' => null]]],
+				'`*PREFIX*data1` `d1` RIGHT JOIN `*PREFIX*data2` `d2`'
 			],
 			[
-				'd1', 'data2', 'd2', 'd1.`field1` = d2.`field2`',
-				['d1' => [['joinType' => 'right', 'joinTable' => '`*PREFIX*data2`', 'joinAlias' => 'd2', 'joinCondition' => 'd1.`field1` = d2.`field2`']]],
-				'`*PREFIX*data1` d1 RIGHT JOIN `*PREFIX*data2` d2 ON d1.`field1` = d2.`field2`'
+				'd1', 'data2', 'd2', '`d1`.`field1` = `d2`.`field2`',
+				['`d1`' => [['joinType' => 'right', 'joinTable' => '`*PREFIX*data2`', 'joinAlias' => '`d2`', 'joinCondition' => '`d1`.`field1` = `d2`.`field2`']]],
+				'`*PREFIX*data1` `d1` RIGHT JOIN `*PREFIX*data2` `d2` ON `d1`.`field1` = `d2`.`field2`'
 			],
 		];
 	}
@@ -1137,7 +1175,7 @@ class QueryBuilderTest extends \Test\TestCase {
 			$qB->getLastInsertId();
 			$this->fail('getLastInsertId() should throw an exception, when being called before insert()');
 		} catch (\BadMethodCallException $e) {
-			$this->assertTrue(true);
+			$this->addToAssertionCount(1);
 		}
 
 		$qB->insert('properties')
@@ -1152,7 +1190,7 @@ class QueryBuilderTest extends \Test\TestCase {
 		$actual = $qB->getLastInsertId();
 
 		$this->assertNotNull($actual);
-		$this->assertInternalType('int', $actual);
+		$this->assertIsInt($actual);
 		$this->assertEquals($this->connection->lastInsertId('*PREFIX*properties'), $actual);
 
 		$qB->delete('properties')
@@ -1163,7 +1201,7 @@ class QueryBuilderTest extends \Test\TestCase {
 			$qB->getLastInsertId();
 			$this->fail('getLastInsertId() should throw an exception, when being called after delete()');
 		} catch (\BadMethodCallException $e) {
-			$this->assertTrue(true);
+			$this->addToAssertionCount(1);
 		}
 	}
 
@@ -1200,7 +1238,7 @@ class QueryBuilderTest extends \Test\TestCase {
 	public function dataGetColumnName() {
 		return [
 			['column', '', '`column`'],
-			['column', 'a', 'a.`column`'],
+			['column', 'a', '`a`.`column`'],
 		];
 	}
 

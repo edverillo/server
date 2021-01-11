@@ -12,10 +12,10 @@ describe('OC.L10N tests', function() {
 	var TEST_APP = 'jsunittestapp';
 
 	beforeEach(function() {
-		OC.appswebroots[TEST_APP] = OC.webroot + '/apps3/jsunittestapp';
+		OC.appswebroots[TEST_APP] = OC.getRootPath() + '/apps3/jsunittestapp';
 	});
 	afterEach(function() {
-		delete OC.L10N._bundles[TEST_APP];
+		OC.L10N._unregister(TEST_APP);
 		delete OC.appswebroots[TEST_APP];
 	});
 
@@ -29,7 +29,7 @@ describe('OC.L10N tests', function() {
 			});
 		});
 		it('returns untranslated text when no bundle exists', function() {
-			delete OC.L10N._bundles[TEST_APP];
+			OC.L10N._unregister(TEST_APP);
 			expect(t(TEST_APP, 'unknown text')).toEqual('unknown text');
 		});
 		it('returns untranslated text when no key exists', function() {
@@ -87,7 +87,6 @@ describe('OC.L10N tests', function() {
 			spyOn(console, 'warn');
 			OC.L10N.register(TEST_APP, {
 			});
-			expect(console.warn).toHaveBeenCalled();
 			expect(
 				n(TEST_APP, 'download %n file', 'download %n files', 0)
 			).toEqual('download 0 files');
@@ -107,42 +106,34 @@ describe('OC.L10N tests', function() {
 				'_download %n file_::_download %n files_':
 					['%n Datei herunterladen', '%n Dateien herunterladen']
 			});
-			expect(console.warn).toHaveBeenCalled();
-			checkPlurals();
-		});
-		it('generates plural with generated function when forms is specified', function() {
-			OC.L10N.register(TEST_APP, {
-				'_download %n file_::_download %n files_':
-					['%n Datei herunterladen', '%n Dateien herunterladen']
-			}, 'nplurals=2; plural=(n != 1);');
-			checkPlurals();
-		});
-		it('generates plural with function when forms is specified as function', function() {
-			OC.L10N.register(TEST_APP, {
-				'_download %n file_::_download %n files_':
-					['%n Datei herunterladen', '%n Dateien herunterladen']
-			}, function(n) {
-				return {
-					nplurals: 2,
-					plural: (n !== 1) ? 1 : 0
-				};
-			});
 			checkPlurals();
 		});
 	});
 	describe('async loading of translations', function() {
-		it('loads bundle for given app and calls callback', function() {
+		it('loads bundle for given app and calls callback', function(done) {
 			var localeStub = sinon.stub(OC, 'getLocale').returns('zh_CN');
 			var callbackStub = sinon.stub();
 			var promiseStub = sinon.stub();
-			OC.L10N.load(TEST_APP, callbackStub).then(promiseStub);
+			var loading = OC.L10N.load(TEST_APP, callbackStub);
 			expect(callbackStub.notCalled).toEqual(true);
-			expect(promiseStub.notCalled).toEqual(true);
-			expect(fakeServer.requests.length).toEqual(1);
 			var req = fakeServer.requests[0];
-			expect(req.url).toEqual(
-				OC.webroot + '/apps3/' + TEST_APP + '/l10n/zh_CN.json'
-			);
+
+			loading
+				.then(promiseStub)
+				.then(function() {
+					expect(fakeServer.requests.length).toEqual(1);
+					expect(req.url).toEqual(
+						OC.getRootPath() + '/apps3/' + TEST_APP + '/l10n/zh_CN.json'
+					);
+
+					expect(callbackStub.calledOnce).toEqual(true);
+					expect(promiseStub.calledOnce).toEqual(true);
+					expect(t(TEST_APP, 'Hello world!')).toEqual('你好世界!');
+					localeStub.restore();
+				})
+				.then(done);
+
+			expect(promiseStub.notCalled).toEqual(true);
 			req.respond(
 				200,
 				{ 'Content-Type': 'application/json' },
@@ -151,33 +142,30 @@ describe('OC.L10N tests', function() {
 					pluralForm: 'nplurals=2; plural=(n != 1);'
 				})
 			);
-
-			expect(callbackStub.calledOnce).toEqual(true);
-			expect(promiseStub.calledOnce).toEqual(true);
-			expect(t(TEST_APP, 'Hello world!')).toEqual('你好世界!');
-			localeStub.restore();
 		});
-		it('calls callback if translation already available', function() {
-			var promiseStub = sinon.stub();
+		it('calls callback if translation already available', function(done) {
 			var callbackStub = sinon.stub();
 			spyOn(console, 'warn');
 			OC.L10N.register(TEST_APP, {
 				'Hello world!': 'Hallo Welt!'
 			});
-			expect(console.warn).toHaveBeenCalled();
-			OC.L10N.load(TEST_APP, callbackStub).then(promiseStub);
-			expect(callbackStub.calledOnce).toEqual(true);
-			expect(promiseStub.calledOnce).toEqual(true);
-			expect(fakeServer.requests.length).toEqual(0);
+			OC.L10N.load(TEST_APP, callbackStub)
+				.then(function() {
+					expect(callbackStub.calledOnce).toEqual(true);
+					expect(fakeServer.requests.length).toEqual(0);
+				})
+				.then(done);
+
 		});
-		it('calls callback if locale is en', function() {
-			var localeStub = sinon.stub(OC, 'getLocale').returns('en');
-			var promiseStub = sinon.stub();
+		it('calls callback if locale is en', function(done) {
 			var callbackStub = sinon.stub();
-			OC.L10N.load(TEST_APP, callbackStub).then(promiseStub);
-			expect(callbackStub.calledOnce).toEqual(true);
-			expect(promiseStub.calledOnce).toEqual(true);
-			expect(fakeServer.requests.length).toEqual(0);
+			OC.L10N.load(TEST_APP, callbackStub)
+				.then(function() {
+					expect(callbackStub.calledOnce).toEqual(true);
+					expect(fakeServer.requests.length).toEqual(0);
+				})
+				.then(done)
+				.catch(done);
 		});
 	});
 });

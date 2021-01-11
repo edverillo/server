@@ -1,8 +1,14 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Victor Dubiniuk <dubiniuk@owncloud.com>
  *
  * @license AGPL-3.0
  *
@@ -16,7 +22,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -35,7 +41,7 @@ class FileAccessHelper {
 	 * @param string $filename
 	 * @return string|false
 	 */
-	public function file_get_contents($filename) {
+	public function file_get_contents(string $filename) {
 		return file_get_contents($filename);
 	}
 
@@ -45,7 +51,7 @@ class FileAccessHelper {
 	 * @param string $filename
 	 * @return bool
 	 */
-	public function file_exists($filename) {
+	public function file_exists(string $filename): bool {
 		return file_exists($filename);
 	}
 
@@ -57,9 +63,9 @@ class FileAccessHelper {
 	 * @return int
 	 * @throws \Exception
 	 */
-	public function file_put_contents($filename, $data) {
+	public function file_put_contents(string $filename, string $data): int {
 		$bytesWritten = @file_put_contents($filename, $data);
-		if ($bytesWritten === false || $bytesWritten !== strlen($data)){
+		if ($bytesWritten === false || $bytesWritten !== \strlen($data)) {
 			throw new \Exception('Failed to write into ' . $filename);
 		}
 		return $bytesWritten;
@@ -69,7 +75,7 @@ class FileAccessHelper {
 	 * @param string $path
 	 * @return bool
 	 */
-	public function is_writable($path) {
+	public function is_writable(string $path): bool {
 		return is_writable($path);
 	}
 
@@ -77,7 +83,7 @@ class FileAccessHelper {
 	 * @param string $path
 	 * @throws \Exception
 	 */
-	public function assertDirectoryExists($path) {
+	public function assertDirectoryExists(string $path) {
 		if (!is_dir($path)) {
 			throw new \Exception('Directory ' . $path . ' does not exist.');
 		}

@@ -1,6 +1,12 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016 Joas Schilling <coding@schilljs.com>
+ *
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -15,12 +21,11 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 namespace OCA\Provisioning_API\Controller;
-
 
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataResponse;
@@ -43,7 +48,7 @@ class AppConfigController extends OCSController {
 	 * @param IConfig $config
 	 * @param IAppConfig $appConfig
 	 */
-	public function __construct($appName,
+	public function __construct(string $appName,
 								IRequest $request,
 								IConfig $config,
 								IAppConfig $appConfig) {
@@ -55,7 +60,7 @@ class AppConfigController extends OCSController {
 	/**
 	 * @return DataResponse
 	 */
-	public function getApps() {
+	public function getApps(): DataResponse {
 		return new DataResponse([
 			'data' => $this->appConfig->getApps(),
 		]);
@@ -65,7 +70,7 @@ class AppConfigController extends OCSController {
 	 * @param string $app
 	 * @return DataResponse
 	 */
-	public function getKeys($app) {
+	public function getKeys(string $app): DataResponse {
 		try {
 			$this->verifyAppId($app);
 		} catch (\InvalidArgumentException $e) {
@@ -82,7 +87,7 @@ class AppConfigController extends OCSController {
 	 * @param string $defaultValue
 	 * @return DataResponse
 	 */
-	public function getValue($app, $key, $defaultValue = '') {
+	public function getValue(string $app, string $key, string $defaultValue = ''): DataResponse {
 		try {
 			$this->verifyAppId($app);
 		} catch (\InvalidArgumentException $e) {
@@ -100,10 +105,10 @@ class AppConfigController extends OCSController {
 	 * @param string $value
 	 * @return DataResponse
 	 */
-	public function setValue($app, $key, $value) {
+	public function setValue(string $app, string $key, string $value): DataResponse {
 		try {
 			$this->verifyAppId($app);
-			$this->verifyConfigKey($app, $key);
+			$this->verifyConfigKey($app, $key, $value);
 		} catch (\InvalidArgumentException $e) {
 			return new DataResponse(['data' => ['message' => $e->getMessage()]], Http::STATUS_FORBIDDEN);
 		}
@@ -118,10 +123,10 @@ class AppConfigController extends OCSController {
 	 * @param string $key
 	 * @return DataResponse
 	 */
-	public function deleteKey($app, $key) {
+	public function deleteKey(string $app, string $key): DataResponse {
 		try {
 			$this->verifyAppId($app);
-			$this->verifyConfigKey($app, $key);
+			$this->verifyConfigKey($app, $key, '');
 		} catch (\InvalidArgumentException $e) {
 			return new DataResponse(['data' => ['message' => $e->getMessage()]], Http::STATUS_FORBIDDEN);
 		}
@@ -134,7 +139,7 @@ class AppConfigController extends OCSController {
 	 * @param string $app
 	 * @throws \InvalidArgumentException
 	 */
-	protected function verifyAppId($app) {
+	protected function verifyAppId(string $app) {
 		if (\OC_App::cleanAppId($app) !== $app) {
 			throw new \InvalidArgumentException('Invalid app id given');
 		}
@@ -143,10 +148,15 @@ class AppConfigController extends OCSController {
 	/**
 	 * @param string $app
 	 * @param string $key
+	 * @param string $value
 	 * @throws \InvalidArgumentException
 	 */
-	protected function verifyConfigKey($app, $key) {
+	protected function verifyConfigKey(string $app, string $key, string $value) {
 		if (in_array($key, ['installed_version', 'enabled', 'types'])) {
+			throw new \InvalidArgumentException('The given key can not be set');
+		}
+
+		if ($app === 'core' && $key === 'encryption_enabled' && $value !== 'yes') {
 			throw new \InvalidArgumentException('The given key can not be set');
 		}
 

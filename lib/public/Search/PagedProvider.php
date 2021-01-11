@@ -2,9 +2,12 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Jörn Friedrich Dreyer <jfd@butonic.de>
+ * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -18,7 +21,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -27,22 +30,25 @@ namespace OCP\Search;
 /**
  * Provides a template for search functionality throughout ownCloud;
  * @since 8.0.0
+ * @deprecated 20.0.0
  */
 abstract class PagedProvider extends Provider {
 
 	/**
 	 * show all results
 	 * @since 8.0.0
+	 * @deprecated 20.0.0
 	 */
-	const SIZE_ALL = 0;
+	public const SIZE_ALL = 0;
 
 	/**
 	 * Constructor
 	 * @param array $options
 	 * @since 8.0.0
+	 * @deprecated 20.0.0
 	 */
 	public function __construct($options) {
-		$this->options = $options;
+		parent::__construct($options);
 	}
 
 	/**
@@ -50,10 +56,11 @@ abstract class PagedProvider extends Provider {
 	 * @param string $query
 	 * @return array An array of OCP\Search\Result's
 	 * @since 8.0.0
+	 * @deprecated 20.0.0
 	 */
 	public function search($query) {
 		// old apps might assume they get all results, so we use SIZE_ALL
-		$this->searchPaged($query, 1, self::SIZE_ALL);
+		return $this->searchPaged($query, 1, self::SIZE_ALL);
 	}
 
 	/**
@@ -63,6 +70,7 @@ abstract class PagedProvider extends Provider {
 	 * @param int $size 0 = SIZE_ALL
 	 * @return array An array of OCP\Search\Result's
 	 * @since 8.0.0
+	 * @deprecated 20.0.0
 	 */
 	abstract public function searchPaged($query, $page, $size);
 }

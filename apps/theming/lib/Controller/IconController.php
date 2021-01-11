@@ -2,7 +2,12 @@
 /**
  * @copyright Copyright (c) 2016 Julius Haertl <jus@bitgrid.net>
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
  * @author Julius Haertl <jus@bitgrid.net>
+ * @author Julius Härtl <jus@bitgrid.net>
+ * @author Michael Weimann <mail@michael-weimann.eu>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -17,37 +22,34 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
+
 namespace OCA\Theming\Controller;
 
+use OC\IntegrityCheck\Helpers\FileAccessHelper;
 use OCA\Theming\IconBuilder;
 use OCA\Theming\ImageManager;
 use OCA\Theming\ThemingDefaults;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\NotFoundResponse;
+use OCP\AppFramework\Http\DataDisplayResponse;
 use OCP\AppFramework\Http\FileDisplayResponse;
-use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\AppFramework\Http\NotFoundResponse;
+use OCP\AppFramework\Http\Response;
 use OCP\Files\NotFoundException;
 use OCP\IRequest;
-use OCA\Theming\Util;
-use OCP\IConfig;
 
 class IconController extends Controller {
 	/** @var ThemingDefaults */
 	private $themingDefaults;
-	/** @var Util */
-	private $util;
-	/** @var ITimeFactory */
-	private $timeFactory;
-	/** @var IConfig */
-	private $config;
 	/** @var IconBuilder */
 	private $iconBuilder;
 	/** @var ImageManager */
 	private $imageManager;
+	/** @var FileAccessHelper */
+	private $fileAccessHelper;
 
 	/**
 	 * IconController constructor.
@@ -55,30 +57,24 @@ class IconController extends Controller {
 	 * @param string $appName
 	 * @param IRequest $request
 	 * @param ThemingDefaults $themingDefaults
-	 * @param Util $util
-	 * @param ITimeFactory $timeFactory
-	 * @param IConfig $config
 	 * @param IconBuilder $iconBuilder
 	 * @param ImageManager $imageManager
+	 * @param FileAccessHelper $fileAccessHelper
 	 */
 	public function __construct(
 		$appName,
 		IRequest $request,
 		ThemingDefaults $themingDefaults,
-		Util $util,
-		ITimeFactory $timeFactory,
-		IConfig $config,
 		IconBuilder $iconBuilder,
-		ImageManager $imageManager
+		ImageManager $imageManager,
+		FileAccessHelper $fileAccessHelper
 	) {
 		parent::__construct($appName, $request);
 
 		$this->themingDefaults = $themingDefaults;
-		$this->util = $util;
-		$this->timeFactory = $timeFactory;
-		$this->config = $config;
 		$this->iconBuilder = $iconBuilder;
 		$this->imageManager = $imageManager;
+		$this->fileAccessHelper = $fileAccessHelper;
 	}
 
 	/**
@@ -88,29 +84,25 @@ class IconController extends Controller {
 	 * @param $app string app name
 	 * @param $image string image file name (svg required)
 	 * @return FileDisplayResponse|NotFoundResponse
+	 * @throws \Exception
 	 */
-	public function getThemedIcon($app, $image) {
+	public function getThemedIcon(string $app, string $image): Response {
 		try {
-			$iconFile = $this->imageManager->getCachedImage("icon-" . $app . '-' . str_replace("/","_",$image));
+			$iconFile = $this->imageManager->getCachedImage('icon-' . $app . '-' . str_replace('/', '_',$image));
 		} catch (NotFoundException $exception) {
 			$icon = $this->iconBuilder->colorSvg($app, $image);
-			if ($icon === false || $icon === "") {
+			if ($icon === false || $icon === '') {
 				return new NotFoundResponse();
 			}
-			$iconFile = $this->imageManager->setCachedImage("icon-" . $app . '-' . str_replace("/","_",$image), $icon);
+			$iconFile = $this->imageManager->setCachedImage('icon-' . $app . '-' . str_replace('/', '_',$image), $icon);
 		}
 		if ($iconFile !== false) {
 			$response = new FileDisplayResponse($iconFile, Http::STATUS_OK, ['Content-Type' => 'image/svg+xml']);
 			$response->cacheFor(86400);
-			$expires = new \DateTime();
-			$expires->setTimestamp($this->timeFactory->getTime());
-			$expires->add(new \DateInterval('PT24H'));
-			$response->addHeader('Expires', $expires->format(\DateTime::RFC2822));
-			$response->addHeader('Pragma', 'cache');
 			return $response;
-		} else {
-			return new NotFoundResponse();
 		}
+
+		return new NotFoundResponse();
 	}
 
 	/**
@@ -120,10 +112,18 @@ class IconController extends Controller {
 	 * @NoCSRFRequired
 	 *
 	 * @param $app string app name
-	 * @return FileDisplayResponse|NotFoundResponse
+	 * @return FileDisplayResponse|DataDisplayResponse
+	 * @throws \Exception
 	 */
-	public function getFavicon($app = "core") {
-		if ($this->themingDefaults->shouldReplaceIcons()) {
+	public function getFavicon(string $app = 'core'): Response {
+		$response = null;
+		$iconFile = null;
+		try {
+			$iconFile = $this->imageManager->getImage('favicon', false);
+			$response = new FileDisplayResponse($iconFile, Http::STATUS_OK, ['Content-Type' => 'image/x-icon']);
+		} catch (NotFoundException $e) {
+		}
+		if ($iconFile === null && $this->imageManager->shouldReplaceIcons()) {
 			try {
 				$iconFile = $this->imageManager->getCachedImage('favIcon-' . $app);
 			} catch (NotFoundException $exception) {
@@ -132,16 +132,14 @@ class IconController extends Controller {
 			}
 			if ($iconFile !== false) {
 				$response = new FileDisplayResponse($iconFile, Http::STATUS_OK, ['Content-Type' => 'image/x-icon']);
-				$response->cacheFor(86400);
-				$expires = new \DateTime();
-				$expires->setTimestamp($this->timeFactory->getTime());
-				$expires->add(new \DateInterval('PT24H'));
-				$response->addHeader('Expires', $expires->format(\DateTime::RFC2822));
-				$response->addHeader('Pragma', 'cache');
-				return $response;
 			}
 		}
-		return new NotFoundResponse();
+		if ($response === null) {
+			$fallbackLogo = \OC::$SERVERROOT . '/core/img/favicon.png';
+			$response = new DataDisplayResponse($this->fileAccessHelper->file_get_contents($fallbackLogo), Http::STATUS_OK, ['Content-Type' => 'image/x-icon']);
+		}
+		$response->cacheFor(86400);
+		return $response;
 	}
 
 	/**
@@ -152,9 +150,16 @@ class IconController extends Controller {
 	 *
 	 * @param $app string app name
 	 * @return FileDisplayResponse|NotFoundResponse
+	 * @throws \Exception
 	 */
-	public function getTouchIcon($app = "core") {
-		if ($this->themingDefaults->shouldReplaceIcons()) {
+	public function getTouchIcon(string $app = 'core'): Response {
+		$response = null;
+		try {
+			$iconFile = $this->imageManager->getImage('favicon');
+			$response = new FileDisplayResponse($iconFile, Http::STATUS_OK, ['Content-Type' => 'image/x-icon']);
+		} catch (NotFoundException $e) {
+		}
+		if ($this->imageManager->shouldReplaceIcons()) {
 			try {
 				$iconFile = $this->imageManager->getCachedImage('touchIcon-' . $app);
 			} catch (NotFoundException $exception) {
@@ -163,15 +168,13 @@ class IconController extends Controller {
 			}
 			if ($iconFile !== false) {
 				$response = new FileDisplayResponse($iconFile, Http::STATUS_OK, ['Content-Type' => 'image/png']);
-				$response->cacheFor(86400);
-				$expires = new \DateTime();
-				$expires->setTimestamp($this->timeFactory->getTime());
-				$expires->add(new \DateInterval('PT24H'));
-				$response->addHeader('Expires', $expires->format(\DateTime::RFC2822));
-				$response->addHeader('Pragma', 'cache');
-				return $response;
 			}
 		}
-		return new NotFoundResponse();
+		if ($response === null) {
+			$fallbackLogo = \OC::$SERVERROOT . '/core/img/favicon-touch.png';
+			$response = new DataDisplayResponse($this->fileAccessHelper->file_get_contents($fallbackLogo), Http::STATUS_OK, ['Content-Type' => 'image/png']);
+		}
+		$response->cacheFor(86400);
+		return $response;
 	}
 }

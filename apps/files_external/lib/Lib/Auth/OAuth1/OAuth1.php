@@ -2,7 +2,9 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -16,21 +18,20 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\Files_External\Lib\Auth\OAuth1;
 
-use \OCP\IL10N;
-use \OCA\Files_External\Lib\DefinitionParameter;
-use \OCA\Files_External\Lib\Auth\AuthMechanism;
+use OCA\Files_External\Lib\Auth\AuthMechanism;
+use OCA\Files_External\Lib\DefinitionParameter;
+use OCP\IL10N;
 
 /**
  * OAuth1 authentication
  */
 class OAuth1 extends AuthMechanism {
-
 	public function __construct(IL10N $l) {
 		$this
 			->setIdentifier('oauth1::oauth1')
@@ -39,7 +40,7 @@ class OAuth1 extends AuthMechanism {
 			->addParameters([
 				(new DefinitionParameter('configured', 'configured'))
 					->setType(DefinitionParameter::VALUE_HIDDEN),
-				(new DefinitionParameter('app_key', $l->t('App key'))),
+				new DefinitionParameter('app_key', $l->t('App key')),
 				(new DefinitionParameter('app_secret', $l->t('App secret')))
 					->setType(DefinitionParameter::VALUE_PASSWORD),
 				(new DefinitionParameter('token', 'token'))
@@ -50,5 +51,4 @@ class OAuth1 extends AuthMechanism {
 			->addCustomJs('oauth1')
 		;
 	}
-
 }

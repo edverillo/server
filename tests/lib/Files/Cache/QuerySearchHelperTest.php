@@ -39,7 +39,7 @@ class QuerySearchHelperTest extends TestCase {
 	/** @var  IQueryBuilder */
 	private $builder;
 
-	/** @var  IMimeTypeLoader|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var  IMimeTypeLoader|\PHPUnit\Framework\MockObject\MockObject */
 	private $mimetypeLoader;
 
 	/** @var  QuerySearchHelper */
@@ -48,7 +48,7 @@ class QuerySearchHelperTest extends TestCase {
 	/** @var  integer */
 	private $numericStorageId;
 
-	public function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 		$this->builder = \OC::$server->getDatabaseConnection()->getQueryBuilder();
 		$this->mimetypeLoader = $this->createMock(IMimeTypeLoader::class);
@@ -83,7 +83,7 @@ class QuerySearchHelperTest extends TestCase {
 			->where($this->builder->expr()->eq('storage', new Literal($this->numericStorageId)));
 	}
 
-	public function tearDown() {
+	protected function tearDown(): void {
 		parent::tearDown();
 
 		$builder = \OC::$server->getDatabaseConnection()->getQueryBuilder();
@@ -129,44 +129,56 @@ class QuerySearchHelperTest extends TestCase {
 		$builder->insert('filecache')
 			->values($values)
 			->execute();
+
+		return $builder->getLastInsertId();
 	}
 
 	private function search(ISearchOperator $operator) {
 		$dbOperator = $this->querySearchHelper->searchOperatorToDBExpr($this->builder, $operator);
 		$this->builder->andWhere($dbOperator);
-		return $this->builder->execute()->fetchAll(\PDO::FETCH_COLUMN);
+
+		$result = $this->builder->execute();
+		$rows = $result->fetchAll(\PDO::FETCH_COLUMN);
+		$result->closeCursor();
+
+		return $rows;
 	}
 
 	public function comparisonProvider() {
 		return [
-			[new SearchComparison(ISearchComparison::COMPARE_GREATER_THAN, 'mtime', 125), [1002]],
-			[new SearchComparison(ISearchComparison::COMPARE_LESS_THAN, 'mtime', 125), [1001]],
+			[new SearchComparison(ISearchComparison::COMPARE_GREATER_THAN, 'mtime', 125), [1]],
+			[new SearchComparison(ISearchComparison::COMPARE_LESS_THAN, 'mtime', 125), [0]],
 			[new SearchComparison(ISearchComparison::COMPARE_EQUAL, 'size', 125), []],
-			[new SearchComparison(ISearchComparison::COMPARE_EQUAL, 'size', 50), [1001, 1002]],
-			[new SearchComparison(ISearchComparison::COMPARE_EQUAL, 'name', 'foobar'), [1001]],
-			[new SearchComparison(ISearchComparison::COMPARE_LIKE, 'name', 'foo%'), [1001, 1002]],
-			[new SearchComparison(ISearchComparison::COMPARE_EQUAL, 'mimetype', 'image/jpg'), [1001]],
-			[new SearchComparison(ISearchComparison::COMPARE_LIKE, 'mimetype', 'image/%'), [1001, 1002]],
+			[new SearchComparison(ISearchComparison::COMPARE_EQUAL, 'size', 50), [0, 1]],
+			[new SearchComparison(ISearchComparison::COMPARE_EQUAL, 'name', 'foobar'), [0]],
+			[new SearchComparison(ISearchComparison::COMPARE_LIKE, 'name', 'foo%'), [0, 1]],
+			[new SearchComparison(ISearchComparison::COMPARE_EQUAL, 'mimetype', 'image/jpg'), [0]],
+			[new SearchComparison(ISearchComparison::COMPARE_LIKE, 'mimetype', 'image/%'), [0, 1]],
 			[new SearchBinaryOperator(ISearchBinaryOperator::OPERATOR_AND, [
 				new SearchComparison(ISearchComparison::COMPARE_EQUAL, 'size', 50),
-				new SearchComparison(ISearchComparison::COMPARE_LESS_THAN, 'mtime', 125), [1001]
-			]), [1001]],
+				new SearchComparison(ISearchComparison::COMPARE_LESS_THAN, 'mtime', 125)
+			]), [0]],
+			[new SearchBinaryOperator(ISearchBinaryOperator::OPERATOR_AND, [
+				new SearchComparison(ISearchComparison::COMPARE_EQUAL, 'size', 50),
+				new SearchComparison(ISearchComparison::COMPARE_LESS_THAN, 'mtime', 125),
+				new SearchComparison(ISearchComparison::COMPARE_LIKE, 'mimetype', 'text/%')
+			]), []],
 			[new SearchBinaryOperator(ISearchBinaryOperator::OPERATOR_OR, [
 				new SearchComparison(ISearchComparison::COMPARE_EQUAL, 'mtime', 100),
 				new SearchComparison(ISearchComparison::COMPARE_EQUAL, 'mtime', 150),
-			]), [1001, 1002]],
+			]), [0, 1]],
 			[new SearchBinaryOperator(ISearchBinaryOperator::OPERATOR_NOT, [
 				new SearchComparison(ISearchComparison::COMPARE_EQUAL, 'mtime', 150),
-			]), [1001]],
+			]), [0]],
 			[new SearchBinaryOperator(ISearchBinaryOperator::OPERATOR_NOT, [
 				new SearchComparison(ISearchComparison::COMPARE_GREATER_THAN, 'mtime', 125),
-			]), [1001]],
+			]), [0]],
 			[new SearchBinaryOperator(ISearchBinaryOperator::OPERATOR_NOT, [
 				new SearchComparison(ISearchComparison::COMPARE_LESS_THAN, 'mtime', 125),
-			]), [1002]],
+			]), [1]],
 			[new SearchBinaryOperator(ISearchBinaryOperator::OPERATOR_NOT, [
 				new SearchComparison(ISearchComparison::COMPARE_LIKE, 'name', '%bar'),
-			]), [1002]],
+			]), [1]],
 
 		];
 	}
@@ -178,21 +190,24 @@ class QuerySearchHelperTest extends TestCase {
 	 * @param array $fileIds
 	 */
 	public function testComparison(ISearchOperator $operator, array $fileIds) {
-		$this->addCacheEntry([
+		$fileId = [];
+		$fileId[] = $this->addCacheEntry([
 			'path' => 'foobar',
-			'fileid' => 1001,
 			'mtime' => 100,
 			'size' => 50,
 			'mimetype' => 'image/jpg'
 		]);
 
-		$this->addCacheEntry([
+		$fileId[] = $this->addCacheEntry([
 			'path' => 'fooasd',
-			'fileid' => 1002,
 			'mtime' => 150,
 			'size' => 50,
 			'mimetype' => 'image/png'
 		]);
+
+		$fileIds = array_map(function ($i) use ($fileId) {
+			return $fileId[$i];
+		}, $fileIds);
 
 		$results = $this->search($operator);
 

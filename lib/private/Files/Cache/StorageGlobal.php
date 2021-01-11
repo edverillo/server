@@ -2,26 +2,29 @@
 /**
  * @copyright Robin Appelman <robin@icewind.nl>
  *
- * @license AGPL-3.0
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Robin Appelman <robin@icewind.nl>
  *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
+ * @license GNU AGPL version 3 or any later version
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 namespace OC\Files\Cache;
 
 use OCP\DB\QueryBuilder\IQueryBuilder;
-use OCP\Files\Mount\IMountPoint;
 use OCP\IDBConnection;
 
 /**
@@ -59,6 +62,7 @@ class StorageGlobal {
 		while ($row = $result->fetch()) {
 			$this->cache[$row['id']] = $row;
 		}
+		$result->closeCursor();
 	}
 
 	/**
@@ -67,7 +71,18 @@ class StorageGlobal {
 	 */
 	public function getStorageInfo($storageId) {
 		if (!isset($this->cache[$storageId])) {
-			$this->loadForStorageIds([$storageId]);
+			$builder = $this->connection->getQueryBuilder();
+			$query = $builder->select(['id', 'numeric_id', 'available', 'last_checked'])
+				->from('storages')
+				->where($builder->expr()->eq('id', $builder->createNamedParameter($storageId)));
+
+			$result = $query->execute();
+			$row = $result->fetch();
+			$result->closeCursor();
+
+			if ($row) {
+				$this->cache[$storageId] = $row;
+			}
 		}
 		return isset($this->cache[$storageId]) ? $this->cache[$storageId] : null;
 	}

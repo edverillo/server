@@ -4,12 +4,15 @@
  *
  * @author Andreas Fischer <bantu@owncloud.com>
  * @author Bart Visscher <bartv@thisnet.nl>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Jörn Friedrich Dreyer <jfd@butonic.de>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
+ * @author Victor Dubiniuk <dubiniuk@owncloud.com>
  *
  * @license AGPL-3.0
  *
@@ -23,7 +26,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -49,13 +52,13 @@ class Memcached extends Cache implements IMemcache {
 
 			$defaultOptions = [
 				\Memcached::OPT_CONNECT_TIMEOUT => 50,
-				\Memcached::OPT_RETRY_TIMEOUT =>   50,
-				\Memcached::OPT_SEND_TIMEOUT =>    50,
-				\Memcached::OPT_RECV_TIMEOUT =>    50,
-				\Memcached::OPT_POLL_TIMEOUT =>    50,
+				\Memcached::OPT_RETRY_TIMEOUT => 50,
+				\Memcached::OPT_SEND_TIMEOUT => 50,
+				\Memcached::OPT_RECV_TIMEOUT => 50,
+				\Memcached::OPT_POLL_TIMEOUT => 50,
 
 				// Enable compression
-				\Memcached::OPT_COMPRESSION =>          true,
+				\Memcached::OPT_COMPRESSION => true,
 
 				// Turn on consistent hashing
 				\Memcached::OPT_LIBKETAMA_COMPATIBLE => true,
@@ -97,7 +100,7 @@ class Memcached extends Cache implements IMemcache {
 	}
 
 	public function get($key) {
-		$result = self::$cache->get($this->getNamespace() . $key);
+		$result = self::$cache->get($this->getNameSpace() . $key);
 		if ($result === false and self::$cache->getResultCode() == \Memcached::RES_NOTFOUND) {
 			return null;
 		} else {
@@ -107,9 +110,9 @@ class Memcached extends Cache implements IMemcache {
 
 	public function set($key, $value, $ttl = 0) {
 		if ($ttl > 0) {
-			$result =  self::$cache->set($this->getNamespace() . $key, $value, $ttl);
+			$result = self::$cache->set($this->getNameSpace() . $key, $value, $ttl);
 		} else {
-			$result = self::$cache->set($this->getNamespace() . $key, $value);
+			$result = self::$cache->set($this->getNameSpace() . $key, $value);
 		}
 		if ($result !== true) {
 			$this->verifyReturnCode();
@@ -118,12 +121,12 @@ class Memcached extends Cache implements IMemcache {
 	}
 
 	public function hasKey($key) {
-		self::$cache->get($this->getNamespace() . $key);
+		self::$cache->get($this->getNameSpace() . $key);
 		return self::$cache->getResultCode() === \Memcached::RES_SUCCESS;
 	}
 
 	public function remove($key) {
-		$result= self::$cache->delete($this->getNamespace() . $key);
+		$result = self::$cache->delete($this->getNameSpace() . $key);
 		if (self::$cache->getResultCode() !== \Memcached::RES_NOTFOUND) {
 			$this->verifyReturnCode();
 		}
@@ -131,14 +134,14 @@ class Memcached extends Cache implements IMemcache {
 	}
 
 	public function clear($prefix = '') {
-		$prefix = $this->getNamespace() . $prefix;
+		$prefix = $this->getNameSpace() . $prefix;
 		$allKeys = self::$cache->getAllKeys();
 		if ($allKeys === false) {
 			// newer Memcached doesn't like getAllKeys(), flush everything
 			self::$cache->flush();
 			return true;
 		}
-		$keys = array();
+		$keys = [];
 		$prefixLength = strlen($prefix);
 		foreach ($allKeys as $key) {
 			if (substr($key, 0, $prefixLength) === $prefix) {
@@ -207,7 +210,7 @@ class Memcached extends Cache implements IMemcache {
 		return $result;
 	}
 
-	static public function isAvailable() {
+	public static function isAvailable() {
 		return extension_loaded('memcached');
 	}
 

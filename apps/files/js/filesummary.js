@@ -20,15 +20,6 @@
 */
 
 (function() {
-	var INFO_TEMPLATE =
-		'<span class="info">' +
-			'<span class="dirinfo"></span>' +
-			'<span class="connector">{{connectorLabel}}</span>' +
-			'<span class="fileinfo"></span>' +
-			'<span class="hiddeninfo"></span>' +
-			'<span class="filter"></span>' +
-		'</span>';
-
 	/**
 	 * The FileSummary class encapsulates the file summary values and
 	 * the logic to render it in the given container
@@ -71,7 +62,7 @@
 		 * Returns whether the given file info must be hidden
 		 *
 		 * @param {OC.Files.FileInfo} fileInfo file info
-		 * 
+		 *
 		 * @return {boolean} true if the file is a hidden file, false otherwise
 		 */
 		_isHiddenFile: function(file) {
@@ -200,10 +191,12 @@
 		},
 
 		_infoTemplate: function(data) {
-			if (!this._infoTemplateCompiled) {
-				this._infoTemplateCompiled = Handlebars.compile(INFO_TEMPLATE);
-			}
-			return this._infoTemplateCompiled(_.extend({
+			/* NOTE: To update the template make changes in filesummary.handlebars
+			 * and run:
+			 *
+			 * handlebars -n OCA.Files.FileSummary.Templates filesummary.handlebars -f filesummary_template.js
+			 */
+			return OCA.Files.Templates['filesummary'](_.extend({
 				connectorLabel: t('files', '{dirs} and {files}', {dirs: '', files: ''})
 			}, data));
 		},
@@ -273,7 +266,7 @@
 			}
 
 			var $summary = $(
-				'<td>' + this._infoTemplate() + '</td>' +
+				'<td class="filesummary">'+ this._infoTemplate() + '</td>' +
 				fileSize +
 				'<td class="date"></td>'
 			);

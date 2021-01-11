@@ -1,8 +1,12 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -16,9 +20,10 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
+
 namespace OCP\SystemTag;
 
 use OCP\IServerContainer;
@@ -28,7 +33,6 @@ use OCP\IServerContainer;
  *
  * Factory interface for system tag managers
  *
- * @package OCP\SystemTag
  * @since 9.0.0
  */
 interface ISystemTagManagerFactory {
@@ -47,7 +51,7 @@ interface ISystemTagManagerFactory {
 	 * @return ISystemTagManager
 	 * @since 9.0.0
 	 */
-	public function getManager();
+	public function getManager(): ISystemTagManager;
 
 	/**
 	 * creates and returns an instance of the system tag object
@@ -56,5 +60,5 @@ interface ISystemTagManagerFactory {
 	 * @return ISystemTagObjectMapper
 	 * @since 9.0.0
 	 */
-	public function getObjectMapper();
+	public function getObjectMapper(): ISystemTagObjectMapper;
 }

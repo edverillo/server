@@ -2,6 +2,7 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -16,7 +17,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -65,7 +66,7 @@ $size = filesize($file);
 $stream = fopen($file, 'r');
 
 $index = 0;
-while(!feof($stream)) {
+while (!feof($stream)) {
 	request($client, 'PUT', "$uploadUrl/$index", fread($stream, $chunkSize));
 	$index++;
 }
@@ -73,5 +74,7 @@ while(!feof($stream)) {
 $destination = pathinfo($file, PATHINFO_BASENAME);
 //echo "Moving $uploadUrl/.file to it's final destination $baseUri/files/$userName/$destination" . PHP_EOL;
 request($client, 'MOVE', "$uploadUrl/.file", null, [
-	'Destination' => "$baseUri/files/$userName/$destination"
+	'Destination' => "$baseUri/files/$userName/$destination",
+	'OC-Total-Length' => filesize($file),
+	'X-OC-MTime' => filemtime($file)
 ]);

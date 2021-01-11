@@ -2,6 +2,9 @@
 /**
  * @copyright Copyright (c) 2016 Joas Schilling <coding@schilljs.com>
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
+ *
  * @license GNU AGPL version 3 or any later version
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,7 +18,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
@@ -40,28 +43,31 @@ class Todo extends Event {
 
 		$this->l = $this->languageFactory->get('dav', $language);
 
-		$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/checkmark.svg')));
+		if ($this->activityManager->getRequirePNG()) {
+			$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/checkmark.png')));
+		} else {
+			$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/checkmark.svg')));
+		}
 
 		if ($event->getSubject() === self::SUBJECT_OBJECT_ADD . '_todo') {
 			$subject = $this->l->t('{actor} created todo {todo} in list {calendar}');
-		} else if ($event->getSubject() === self::SUBJECT_OBJECT_ADD . '_todo_self') {
+		} elseif ($event->getSubject() === self::SUBJECT_OBJECT_ADD . '_todo_self') {
 			$subject = $this->l->t('You created todo {todo} in list {calendar}');
-		} else if ($event->getSubject() === self::SUBJECT_OBJECT_DELETE . '_todo') {
+		} elseif ($event->getSubject() === self::SUBJECT_OBJECT_DELETE . '_todo') {
 			$subject = $this->l->t('{actor} deleted todo {todo} from list {calendar}');
-		} else if ($event->getSubject() === self::SUBJECT_OBJECT_DELETE . '_todo_self') {
+		} elseif ($event->getSubject() === self::SUBJECT_OBJECT_DELETE . '_todo_self') {
 			$subject = $this->l->t('You deleted todo {todo} from list {calendar}');
-		} else if ($event->getSubject() === self::SUBJECT_OBJECT_UPDATE . '_todo') {
+		} elseif ($event->getSubject() === self::SUBJECT_OBJECT_UPDATE . '_todo') {
 			$subject = $this->l->t('{actor} updated todo {todo} in list {calendar}');
-		} else if ($event->getSubject() === self::SUBJECT_OBJECT_UPDATE . '_todo_self') {
+		} elseif ($event->getSubject() === self::SUBJECT_OBJECT_UPDATE . '_todo_self') {
 			$subject = $this->l->t('You updated todo {todo} in list {calendar}');
-
-		} else if ($event->getSubject() === self::SUBJECT_OBJECT_UPDATE . '_todo_completed') {
+		} elseif ($event->getSubject() === self::SUBJECT_OBJECT_UPDATE . '_todo_completed') {
 			$subject = $this->l->t('{actor} solved todo {todo} in list {calendar}');
-		} else if ($event->getSubject() === self::SUBJECT_OBJECT_UPDATE . '_todo_completed_self') {
+		} elseif ($event->getSubject() === self::SUBJECT_OBJECT_UPDATE . '_todo_completed_self') {
 			$subject = $this->l->t('You solved todo {todo} in list {calendar}');
-		} else if ($event->getSubject() === self::SUBJECT_OBJECT_UPDATE . '_todo_needs_action') {
+		} elseif ($event->getSubject() === self::SUBJECT_OBJECT_UPDATE . '_todo_needs_action') {
 			$subject = $this->l->t('{actor} reopened todo {todo} in list {calendar}');
-		} else if ($event->getSubject() === self::SUBJECT_OBJECT_UPDATE . '_todo_needs_action_self') {
+		} elseif ($event->getSubject() === self::SUBJECT_OBJECT_UPDATE . '_todo_needs_action_self') {
 			$subject = $this->l->t('You reopened todo {todo} in list {calendar}');
 		} else {
 			throw new \InvalidArgumentException();
@@ -83,6 +89,36 @@ class Todo extends Event {
 		$subject = $event->getSubject();
 		$parameters = $event->getSubjectParameters();
 
+		// Nextcloud 13+
+		if (isset($parameters['calendar'])) {
+			switch ($subject) {
+				case self::SUBJECT_OBJECT_ADD . '_todo':
+				case self::SUBJECT_OBJECT_DELETE . '_todo':
+				case self::SUBJECT_OBJECT_UPDATE . '_todo':
+				case self::SUBJECT_OBJECT_UPDATE . '_todo_completed':
+				case self::SUBJECT_OBJECT_UPDATE . '_todo_needs_action':
+					return [
+						'actor' => $this->generateUserParameter($parameters['actor']),
+						'calendar' => $this->generateCalendarParameter($parameters['calendar'], $this->l),
+						'todo' => $this->generateObjectParameter($parameters['object']),
+					];
+				case self::SUBJECT_OBJECT_ADD . '_todo_self':
+				case self::SUBJECT_OBJECT_DELETE . '_todo_self':
+				case self::SUBJECT_OBJECT_UPDATE . '_todo_self':
+				case self::SUBJECT_OBJECT_UPDATE . '_todo_completed_self':
+				case self::SUBJECT_OBJECT_UPDATE . '_todo_needs_action_self':
+					return [
+						'calendar' => $this->generateCalendarParameter($parameters['calendar'], $this->l),
+						'todo' => $this->generateObjectParameter($parameters['object']),
+					];
+			}
+		}
+
+		// Legacy - Do NOT Remove unless necessary
+		// Removing this will break parsing of activities that were created on
+		// Nextcloud 12, so we should keep this as long as it's acceptable.
+		// Otherwise if people upgrade over multiple releases in a short period,
+		// they will get the dead entries in their stream.
 		switch ($subject) {
 			case self::SUBJECT_OBJECT_ADD . '_todo':
 			case self::SUBJECT_OBJECT_DELETE . '_todo':
@@ -91,7 +127,7 @@ class Todo extends Event {
 			case self::SUBJECT_OBJECT_UPDATE . '_todo_needs_action':
 				return [
 					'actor' => $this->generateUserParameter($parameters[0]),
-					'calendar' => $this->generateCalendarParameter($event->getObjectId(), $parameters[1]),
+					'calendar' => $this->generateLegacyCalendarParameter($event->getObjectId(), $parameters[1]),
 					'todo' => $this->generateObjectParameter($parameters[2]),
 				];
 			case self::SUBJECT_OBJECT_ADD . '_todo_self':
@@ -100,7 +136,7 @@ class Todo extends Event {
 			case self::SUBJECT_OBJECT_UPDATE . '_todo_completed_self':
 			case self::SUBJECT_OBJECT_UPDATE . '_todo_needs_action_self':
 				return [
-					'calendar' => $this->generateCalendarParameter($event->getObjectId(), $parameters[1]),
+					'calendar' => $this->generateLegacyCalendarParameter($event->getObjectId(), $parameters[1]),
 					'todo' => $this->generateObjectParameter($parameters[2]),
 				];
 		}

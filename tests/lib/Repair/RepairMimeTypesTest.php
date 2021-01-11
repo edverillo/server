@@ -6,6 +6,7 @@
  * later.
  * See the COPYING-README file.
  */
+
 namespace Test\Repair;
 
 use OC\Files\Storage\Temporary;
@@ -32,38 +33,44 @@ class RepairMimeTypesTest extends \Test\TestCase {
 	/** @var IMimeTypeLoader */
 	private $mimetypeLoader;
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->savedMimetypeLoader = \OC::$server->getMimeTypeLoader();
 		$this->mimetypeLoader = \OC::$server->getMimeTypeLoader();
 
-		/** @var IConfig | \PHPUnit_Framework_MockObject_MockObject $config */
-		$config = $this->getMockBuilder('OCP\IConfig')
+		/** @var IConfig | \PHPUnit\Framework\MockObject\MockObject $config */
+		$config = $this->getMockBuilder(IConfig::class)
 			->disableOriginalConstructor()
 			->getMock();
 		$config->expects($this->any())
 			->method('getSystemValue')
 			->with('version')
-			->will($this->returnValue('11.0.0.0'));
+			->willReturn('11.0.0.0');
 
 		$this->storage = new \OC\Files\Storage\Temporary([]);
 
-		$this->repair = new \OC\Repair\RepairMimeTypes($config);
+		$this->repair = new \OC\Repair\RepairMimeTypes($config, \OC::$server->getDatabaseConnection());
 	}
 
-	protected function tearDown() {
+	protected function tearDown(): void {
 		$this->storage->getCache()->clear();
-		$sql = 'DELETE FROM `*PREFIX*storages` WHERE `id` = ?';
-		\OC_DB::executeAudited($sql, [$this->storage->getId()]);
+
+		$qb = \OC::$server->getDatabaseConnection()->getQueryBuilder();
+		$qb->delete('storages')
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($this->storage->getId())));
+		$qb->execute();
+
 		$this->clearMimeTypes();
 
 		parent::tearDown();
 	}
 
 	private function clearMimeTypes() {
-		$sql = 'DELETE FROM `*PREFIX*mimetypes`';
-		\OC_DB::executeAudited($sql);
+		$qb = \OC::$server->getDatabaseConnection()->getQueryBuilder();
+		$qb->delete('mimetypes');
+		$qb->execute();
+
 		$this->mimetypeLoader->reset();
 	}
 
@@ -80,7 +87,6 @@ class RepairMimeTypesTest extends \Test\TestCase {
 				]
 			);
 		}
-
 	}
 
 	private function checkEntries($entries) {
@@ -93,7 +99,7 @@ class RepairMimeTypesTest extends \Test\TestCase {
 	private function renameMimeTypes($currentMimeTypes, $fixedMimeTypes) {
 		$this->addEntries($currentMimeTypes);
 
-		/** @var IOutput | \PHPUnit_Framework_MockObject_MockObject $outputMock */
+		/** @var IOutput | \PHPUnit\Framework\MockObject\MockObject $outputMock */
 		$outputMock = $this->getMockBuilder('\OCP\Migration\IOutput')
 			->disableOriginalConstructor()
 			->getMock();
@@ -104,6 +110,23 @@ class RepairMimeTypesTest extends \Test\TestCase {
 		$this->mimetypeLoader->reset();
 
 		$this->checkEntries($fixedMimeTypes);
+	}
+
+	/**
+	 * Test renaming the additional image mime types
+	 */
+	public function testRenameImageTypes() {
+		$currentMimeTypes = [
+			['test.jp2', 'application/octet-stream'],
+			['test.webp', 'application/octet-stream'],
+		];
+
+		$fixedMimeTypes = [
+			['test.jp2', 'image/jp2'],
+			['test.webp', 'image/webp'],
+		];
+
+		$this->renameMimeTypes($currentMimeTypes, $fixedMimeTypes);
 	}
 
 	/**
@@ -163,8 +186,10 @@ class RepairMimeTypesTest extends \Test\TestCase {
 			['test.sr2', 'image/x-dcraw'],
 			['test.xrf', 'image/x-dcraw'],
 			['test.DNG', 'image/x-dcraw'],
+			['test.jp2', 'image/jp2'],
 			['test.jps', 'image/jpeg'],
 			['test.MPO', 'image/jpeg'],
+			['test.webp', 'image/webp'],
 			['test.conf', 'text/plain'],
 			['test.cnf', 'text/plain'],
 			['test.yaml', 'application/yaml'],
@@ -215,8 +240,10 @@ class RepairMimeTypesTest extends \Test\TestCase {
 			['test.sr2', 'image/x-dcraw'],
 			['test.xrf', 'image/x-dcraw'],
 			['test.DNG', 'image/x-dcraw'],
+			['test.jp2', 'image/jp2'],
 			['test.jps', 'image/jpeg'],
 			['test.MPO', 'image/jpeg'],
+			['test.webp', 'image/webp'],
 			['test.conf', 'text/plain'],
 			['test.cnf', 'text/plain'],
 			['test.yaml', 'application/yaml'],
@@ -256,4 +283,3 @@ class RepairMimeTypesTest extends \Test\TestCase {
 		$this->renameMimeTypes($currentMimeTypes, $fixedMimeTypes);
 	}
 }
-

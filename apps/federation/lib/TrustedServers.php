@@ -2,7 +2,10 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
  * @author Björn Schießle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
@@ -19,15 +22,16 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
-
 
 namespace OCA\Federation;
 
 use OC\HintException;
+use OCA\Federation\BackgroundJob\RequestSharedSecret;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
@@ -39,13 +43,13 @@ use Symfony\Component\EventDispatcher\GenericEvent;
 class TrustedServers {
 
 	/** after a user list was exchanged at least once successfully */
-	const STATUS_OK = 1;
+	public const STATUS_OK = 1;
 	/** waiting for shared secret or initial user list exchange */
-	const STATUS_PENDING = 2;
+	public const STATUS_PENDING = 2;
 	/** something went wrong, misconfigured server, software bug,... user interaction needed */
-	const STATUS_FAILURE = 3;
+	public const STATUS_FAILURE = 3;
 	/** remote server revoked access */
-	const STATUS_ACCESS_REVOKED = 4;
+	public const STATUS_ACCESS_REVOKED = 4;
 
 	/** @var  dbHandler */
 	private $dbHandler;
@@ -68,6 +72,9 @@ class TrustedServers {
 	/** @var EventDispatcherInterface */
 	private $dispatcher;
 
+	/** @var ITimeFactory */
+	private $timeFactory;
+
 	/**
 	 * @param DbHandler $dbHandler
 	 * @param IClientService $httpClientService
@@ -76,6 +83,7 @@ class TrustedServers {
 	 * @param ISecureRandom $secureRandom
 	 * @param IConfig $config
 	 * @param EventDispatcherInterface $dispatcher
+	 * @param ITimeFactory $timeFactory
 	 */
 	public function __construct(
 		DbHandler $dbHandler,
@@ -84,7 +92,8 @@ class TrustedServers {
 		IJobList $jobList,
 		ISecureRandom $secureRandom,
 		IConfig $config,
-		EventDispatcherInterface $dispatcher
+		EventDispatcherInterface $dispatcher,
+		ITimeFactory $timeFactory
 	) {
 		$this->dbHandler = $dbHandler;
 		$this->httpClientService = $httpClientService;
@@ -93,6 +102,7 @@ class TrustedServers {
 		$this->secureRandom = $secureRandom;
 		$this->config = $config;
 		$this->dispatcher = $dispatcher;
+		$this->timeFactory = $timeFactory;
 	}
 
 	/**
@@ -108,10 +118,11 @@ class TrustedServers {
 			$token = $this->secureRandom->generate(16);
 			$this->dbHandler->addToken($url, $token);
 			$this->jobList->add(
-				'OCA\Federation\BackgroundJob\RequestSharedSecret',
+				RequestSharedSecret::class,
 				[
 					'url' => $url,
-					'token' => $token
+					'token' => $token,
+					'created' => $this->timeFactory->getTime()
 				]
 			);
 		}
@@ -183,7 +194,7 @@ class TrustedServers {
 	}
 
 	/**
-	 * check if given server is a trusted ownCloud server
+	 * check if given server is a trusted Nextcloud server
 	 *
 	 * @param string $url
 	 * @return bool
@@ -229,10 +240,13 @@ class TrustedServers {
 			);
 			if ($result->getStatusCode() === Http::STATUS_OK) {
 				$isValidOwnCloud = $this->checkOwnCloudVersion($result->getBody());
-
 			}
 		} catch (\Exception $e) {
-			$this->logger->debug('No Nextcloud server: ' . $e->getMessage());
+			\OC::$server->getLogger()->logException($e, [
+				'message' => 'No Nextcloud server.',
+				'level' => ILogger::DEBUG,
+				'app' => 'federation',
+			]);
 			return false;
 		}
 
@@ -268,9 +282,7 @@ class TrustedServers {
 			strpos($url, 'https://') === 0
 			|| strpos($url, 'http://') === 0
 		) {
-
 			return $url;
-
 		}
 
 		return 'https://' . $url;

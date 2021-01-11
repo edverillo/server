@@ -3,11 +3,14 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author J0WI <J0WI@users.noreply.github.com>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Jörn Friedrich Dreyer <jfd@butonic.de>
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
+ * @author Roger Szabo <roger.szabo@web.de>
+ * @author Vinicius Cubas Brand <vinicius@eita.org.br>
  *
  * @license AGPL-3.0
  *
@@ -21,7 +24,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -58,7 +61,7 @@ interface ILDAPWrapper {
 	 * @param string $cookie structure sent by LDAP server
 	 * @return bool true on success, false otherwise
 	 */
-	public function controlPagedResult($link, $pageSize, $isCritical, $cookie);
+	public function controlPagedResult($link, $pageSize, $isCritical);
 
 	/**
 	 * Retrieve the LDAP pagination cookie
@@ -82,14 +85,14 @@ interface ILDAPWrapper {
 	/**
 	 * Return the LDAP error number of the last LDAP command
 	 * @param resource $link LDAP link resource
-	 * @return string error message as string
+	 * @return int error code
 	 */
 	public function errno($link);
 
 	/**
 	 * Return the LDAP error message of the last LDAP command
 	 * @param resource $link LDAP link resource
-	 * @return int error code as integer
+	 * @return string error message
 	 */
 	public function error($link);
 
@@ -98,7 +101,7 @@ interface ILDAPWrapper {
 	 * @param string $dn
 	 * @param int @withAttrib
 	 * @return array|false
-	 * @link http://www.php.net/manual/en/function.ldap-explode-dn.php
+	 * @link https://www.php.net/manual/en/function.ldap-explode-dn.php
 	 */
 	public function explodeDN($dn, $withAttrib);
 
@@ -163,7 +166,7 @@ interface ILDAPWrapper {
 	 * @return resource|false an LDAP search result resource, false on error
 	 */
 	public function search($link, $baseDN, $filter, $attr, $attrsOnly = 0, $limit = 0);
-	
+
 	/**
 	 * Replace the value of a userPassword by $password
 	 * @param resource $link LDAP link resource
@@ -196,7 +199,7 @@ interface ILDAPWrapper {
 	 */
 	public function unbind($link);
 
-	//additional required methods in ownCloud
+	//additional required methods in Nextcloud
 
 	/**
 	 * Checks whether the server supports LDAP
@@ -205,16 +208,9 @@ interface ILDAPWrapper {
 	public function areLDAPFunctionsAvailable();
 
 	/**
-	 * Checks whether PHP supports LDAP Paged Results
-	 * @return bool true if it the case, false otherwise
-	 * */
-	public function hasPagedResultSupport();
-
-	/**
 	 * Checks whether the submitted parameter is a resource
 	 * @param resource $resource the resource variable to check
 	 * @return bool true if it is a resource, false otherwise
 	 */
 	public function isResource($resource);
-
 }

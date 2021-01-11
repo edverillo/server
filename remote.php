@@ -4,13 +4,17 @@
  *
  * @author Brice Maron <brice@bmaron.net>
  * @author Christopher Schäpers <kondou@ts.unde.re>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Georg Ehrke <oc.list@georgehrke.com>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Jörn Friedrich Dreyer <jfd@butonic.de>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -24,9 +28,11 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
+
+require_once __DIR__ . '/lib/versioncheck.php';
 
 use OCA\DAV\Connector\Sabre\ExceptionLoggerPlugin;
 use Sabre\DAV\Exception\ServiceUnavailable;
@@ -41,7 +47,7 @@ class RemoteException extends Exception {
 }
 
 /**
- * @param Exception | Error $e
+ * @param Exception|Error $e
  */
 function handleException($e) {
 	$request = \OC::$server->getRequest();
@@ -54,12 +60,12 @@ function handleException($e) {
 			// we shall not log on RemoteException
 			$server->addPlugin(new ExceptionLoggerPlugin('webdav', \OC::$server->getLogger()));
 		}
-		$server->on('beforeMethod', function () use ($e) {
+		$server->on('beforeMethod:*', function () use ($e) {
 			if ($e instanceof RemoteException) {
 				switch ($e->getCode()) {
-					case OC_Response::STATUS_SERVICE_UNAVAILABLE:
+					case 503:
 						throw new ServiceUnavailable($e->getMessage());
-					case OC_Response::STATUS_NOT_FOUND:
+					case 404:
 						throw new \Sabre\DAV\Exception\NotFound($e->getMessage());
 				}
 			}
@@ -69,18 +75,16 @@ function handleException($e) {
 		});
 		$server->exec();
 	} else {
-		$statusCode = OC_Response::STATUS_INTERNAL_SERVER_ERROR;
-		if ($e instanceof \OC\ServiceUnavailableException ) {
-			$statusCode = OC_Response::STATUS_SERVICE_UNAVAILABLE;
+		$statusCode = 500;
+		if ($e instanceof \OC\ServiceUnavailableException) {
+			$statusCode = 503;
 		}
 		if ($e instanceof RemoteException) {
 			// we shall not log on RemoteException
-			OC_Response::setStatus($e->getCode());
-			OC_Template::printErrorPage($e->getMessage());
+			OC_Template::printErrorPage($e->getMessage(), '', $e->getCode());
 		} else {
 			\OC::$server->getLogger()->logException($e, ['app' => 'remote']);
-			OC_Response::setStatus($statusCode);
-			OC_Template::printExceptionErrorPage($e);
+			OC_Template::printExceptionErrorPage($e, $statusCode);
 		}
 	}
 }
@@ -98,6 +102,7 @@ function resolveService($service) {
 		'carddav' => 'dav/appinfo/v1/carddav.php',
 		'contacts' => 'dav/appinfo/v1/carddav.php',
 		'files' => 'dav/appinfo/v1/webdav.php',
+		'direct' => 'dav/appinfo/v2/direct.php',
 	];
 	if (isset($services[$service])) {
 		return $services[$service];
@@ -117,41 +122,38 @@ try {
 	if (\OCP\Util::needUpgrade()) {
 		// since the behavior of apps or remotes are unpredictable during
 		// an upgrade, return a 503 directly
-		throw new RemoteException('Service unavailable', OC_Response::STATUS_SERVICE_UNAVAILABLE);
+		throw new RemoteException('Service unavailable', 503);
 	}
 
 	$request = \OC::$server->getRequest();
 	$pathInfo = $request->getPathInfo();
 	if ($pathInfo === false || $pathInfo === '') {
-		throw new RemoteException('Path not found', OC_Response::STATUS_NOT_FOUND);
+		throw new RemoteException('Path not found', 404);
 	}
 	if (!$pos = strpos($pathInfo, '/', 1)) {
 		$pos = strlen($pathInfo);
 	}
-	$service=substr($pathInfo, 1, $pos-1);
+	$service = substr($pathInfo, 1, $pos - 1);
 
 	$file = resolveService($service);
 
-	if(is_null($file)) {
-		throw new RemoteException('Path not found', OC_Response::STATUS_NOT_FOUND);
+	if (is_null($file)) {
+		throw new RemoteException('Path not found', 404);
 	}
 
-	// force language as given in the http request
-	\OC::$server->getL10NFactory()->setLanguageFromRequest();
+	$file = ltrim($file, '/');
 
-	$file=ltrim($file, '/');
-
-	$parts=explode('/', $file, 2);
-	$app=$parts[0];
+	$parts = explode('/', $file, 2);
+	$app = $parts[0];
 
 	// Load all required applications
 	\OC::$REQUESTEDAPP = $app;
-	OC_App::loadApps(array('authentication'));
-	OC_App::loadApps(array('filesystem', 'logging'));
+	OC_App::loadApps(['authentication']);
+	OC_App::loadApps(['filesystem', 'logging']);
 
 	switch ($app) {
 		case 'core':
-			$file =  OC::$SERVERROOT .'/'. $file;
+			$file = OC::$SERVERROOT .'/'. $file;
 			break;
 		default:
 			if (!\OC::$server->getAppManager()->isInstalled($app)) {
@@ -163,7 +165,6 @@ try {
 	}
 	$baseuri = OC::$WEBROOT . '/remote.php/'.$service.'/';
 	require_once $file;
-
 } catch (Exception $ex) {
 	handleException($ex);
 } catch (Error $e) {

@@ -2,7 +2,11 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Joas Schilling <coding@schilljs.com>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -17,23 +21,21 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\Updater;
 
-use OC_Util;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
-use OC\Setup;
 use OCP\Util;
 
 class VersionCheck {
 
 	/** @var IClientService */
 	private $clientService;
-	
+
 	/** @var IConfig */
 	private $config;
 
@@ -54,6 +56,11 @@ class VersionCheck {
 	 * @return array|bool
 	 */
 	public function check() {
+		// If this server is set to have no internet connection this is all not needed
+		if (!$this->config->getSystemValueBool('has_internet_connection', true)) {
+			return false;
+		}
+
 		// Look up the cache - it is invalidated all 30 minutes
 		if (((int)$this->config->getAppValue('core', 'lastupdatedat') + 1800) > time()) {
 			return json_decode($this->config->getAppValue('core', 'lastupdateResult'), true);
@@ -97,16 +104,16 @@ class VersionCheck {
 				$tmp['versionstring'] = (string)$data->versionstring;
 				$tmp['url'] = (string)$data->url;
 				$tmp['web'] = (string)$data->web;
+				$tmp['changes'] = isset($data->changes) ? (string)$data->changes : '';
 				$tmp['autoupdater'] = (string)$data->autoupdater;
+				$tmp['eol'] = isset($data->eol) ? (string)$data->eol : '0';
 			} else {
 				libxml_clear_errors();
 			}
-		} else {
-			$data = [];
 		}
 
 		// Cache the result
-		$this->config->setAppValue('core', 'lastupdateResult', json_encode($data));
+		$this->config->setAppValue('core', 'lastupdateResult', json_encode($tmp));
 		return $tmp;
 	}
 
@@ -122,4 +129,3 @@ class VersionCheck {
 		return $response->getBody();
 	}
 }
-

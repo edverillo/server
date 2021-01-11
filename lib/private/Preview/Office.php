@@ -2,11 +2,14 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Olivier Paroz <github@oparoz.com>
+ * @author Robin Appelman <robin@icewind.nl>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Tor Lillqvist <tml@collabora.com>
  *
  * @license AGPL-3.0
  *
@@ -20,62 +23,69 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
+
 namespace OC\Preview;
 
-abstract class Office extends Provider {
+use OCP\Files\File;
+use OCP\IImage;
+use OCP\ILogger;
+
+abstract class Office extends ProviderV2 {
 	private $cmd;
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public function getThumbnail($path, $maxX, $maxY, $scalingup, $fileview) {
+	public function getThumbnail(File $file, int $maxX, int $maxY): ?IImage {
 		$this->initCmd();
 		if (is_null($this->cmd)) {
-			return false;
+			return null;
 		}
 
-		$absPath = $fileview->toTmpFile($path);
+		$absPath = $this->getLocalFile($file);
 
 		$tmpDir = \OC::$server->getTempManager()->getTempBaseDir();
 
-		$defaultParameters = ' -env:UserInstallation=file://' . escapeshellarg($tmpDir . '/owncloud-' . \OC_Util::getInstanceId() . '/') . ' --headless --nologo --nofirststartwizard --invisible --norestore --convert-to pdf --outdir ';
-		$clParameters = \OCP\Config::getSystemValue('preview_office_cl_parameters', $defaultParameters);
+		$defaultParameters = ' -env:UserInstallation=file://' . escapeshellarg($tmpDir . '/owncloud-' . \OC_Util::getInstanceId() . '/') . ' --headless --nologo --nofirststartwizard --invisible --norestore --convert-to png --outdir ';
+		$clParameters = \OC::$server->getConfig()->getSystemValue('preview_office_cl_parameters', $defaultParameters);
 
 		$exec = $this->cmd . $clParameters . escapeshellarg($tmpDir) . ' ' . escapeshellarg($absPath);
 
 		shell_exec($exec);
 
-		//create imagick object from pdf
-		$pdfPreview = null;
+		//create imagick object from png
+		$pngPreview = null;
 		try {
 			list($dirname, , , $filename) = array_values(pathinfo($absPath));
-			$pdfPreview = $dirname . '/' . $filename . '.pdf';
+			$pngPreview = $tmpDir . '/' . $filename . '.png';
 
-			$pdf = new \imagick($pdfPreview . '[0]');
-			$pdf->setImageFormat('jpg');
+			$png = new \imagick($pngPreview . '[0]');
+			$png->setImageFormat('jpg');
 		} catch (\Exception $e) {
-			unlink($absPath);
-			unlink($pdfPreview);
-			\OCP\Util::writeLog('core', $e->getmessage(), \OCP\Util::ERROR);
-			return false;
+			$this->cleanTmpFiles();
+			unlink($pngPreview);
+			\OC::$server->getLogger()->logException($e, [
+				'level' => ILogger::ERROR,
+				'app' => 'core',
+			]);
+			return null;
 		}
 
 		$image = new \OC_Image();
-		$image->loadFromData($pdf);
+		$image->loadFromData($png);
 
-		unlink($absPath);
-		unlink($pdfPreview);
+		$this->cleanTmpFiles();
+		unlink($pngPreview);
 
 		if ($image->valid()) {
 			$image->scaleDownToFit($maxX, $maxY);
 
 			return $image;
 		}
-		return false;
-
+		return null;
 	}
 
 	private function initCmd() {

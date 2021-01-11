@@ -2,11 +2,14 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Daniel Kesselberg <mail@danielkesselberg.de>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Temtaime <temtaime@gmail.com>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -20,20 +23,20 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\Core\Command\Maintenance;
 
 use Exception;
+use OCP\App\IAppManager;
 use OCP\IConfig;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Helper\ProgressBar;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\EventDispatcher\GenericEvent;
 
@@ -48,15 +51,20 @@ class Repair extends Command {
 	private $progress;
 	/** @var OutputInterface */
 	private $output;
+	/** @var IAppManager */
+	private $appManager;
 
 	/**
 	 * @param \OC\Repair $repair
 	 * @param IConfig $config
+	 * @param EventDispatcherInterface $dispatcher
+	 * @param IAppManager $appManager
 	 */
-	public function __construct(\OC\Repair $repair, IConfig $config, EventDispatcherInterface $dispatcher) {
+	public function __construct(\OC\Repair $repair, IConfig $config, EventDispatcherInterface $dispatcher, IAppManager $appManager) {
 		$this->repair = $repair;
 		$this->config = $config;
 		$this->dispatcher = $dispatcher;
+		$this->appManager = $appManager;
 		parent::__construct();
 	}
 
@@ -71,23 +79,27 @@ class Repair extends Command {
 				'Use this option when you want to include resource and load expensive tasks');
 	}
 
-	protected function execute(InputInterface $input, OutputInterface $output) {
-		$includeExpensive = $input->getOption('include-expensive');
-		if ($includeExpensive) {
-			foreach ($this->repair->getExpensiveRepairSteps() as $step) {
-				$this->repair->addStep($step);
-			}
+	protected function execute(InputInterface $input, OutputInterface $output): int {
+		$repairSteps = $this->repair::getRepairSteps();
+
+		if ($input->getOption('include-expensive')) {
+			$repairSteps = array_merge($repairSteps, $this->repair::getExpensiveRepairSteps());
 		}
 
-		$apps = \OC::$server->getAppManager()->getInstalledApps();
+		foreach ($repairSteps as $step) {
+			$this->repair->addStep($step);
+		}
+
+		$apps = $this->appManager->getInstalledApps();
 		foreach ($apps as $app) {
-			if (!\OC_App::isEnabled($app)) {
+			if (!$this->appManager->isEnabledForUser($app)) {
 				continue;
 			}
 			$info = \OC_App::getAppInfo($app);
 			if (!is_array($info)) {
 				continue;
 			}
+			\OC_App::loadApp($app);
 			$steps = $info['repair-steps']['post-migration'];
 			foreach ($steps as $step) {
 				try {
@@ -98,7 +110,7 @@ class Repair extends Command {
 			}
 		}
 
-		$maintenanceMode = $this->config->getSystemValue('maintenance', false);
+		$maintenanceMode = $this->config->getSystemValueBool('maintenance');
 		$this->config->setSystemValue('maintenance', true);
 
 		$this->progress = new ProgressBar($output);
@@ -114,6 +126,7 @@ class Repair extends Command {
 		$this->repair->run();
 
 		$this->config->setSystemValue('maintenance', $maintenanceMode);
+		return 0;
 	}
 
 	public function handleRepairFeedBack($event) {

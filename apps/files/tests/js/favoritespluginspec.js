@@ -14,6 +14,7 @@ describe('OCA.Files.FavoritesPlugin tests', function() {
 
 	beforeEach(function() {
 		$('#testArea').append(
+			'<div id="content">' +
 			'<div id="app-navigation">' +
 			'<ul><li data-id="files"><a>Files</a></li>' +
 			'<li data-id="sharingin"><a></a></li>' +
@@ -23,6 +24,7 @@ describe('OCA.Files.FavoritesPlugin tests', function() {
 			'<div id="app-content-files" class="hidden">' +
 			'</div>' +
 			'<div id="app-content-favorites" class="hidden">' +
+			'</div>' +
 			'</div>' +
 			'</div>' +
 			'</div>'
@@ -40,16 +42,6 @@ describe('OCA.Files.FavoritesPlugin tests', function() {
 		});
 	});
 	describe('file actions', function() {
-		var oldLegacyFileActions;
-
-		beforeEach(function() {
-			oldLegacyFileActions = window.FileActions;
-			window.FileActions = new OCA.Files.FileActions();
-		});
-
-		afterEach(function() {
-			window.FileActions = oldLegacyFileActions;
-		});
 		it('provides default file actions', function() {
 			var fileActions = fileList.fileActions;
 
@@ -75,22 +67,6 @@ describe('OCA.Files.FavoritesPlugin tests', function() {
 			fileList = Plugin.showFileList($('#app-content-favorites'));
 
 			expect(fileList.fileActions.actions.all.RegularTest).toBeDefined();
-		});
-		it('does not provide legacy file actions', function() {
-			var actionStub = sinon.stub();
-			// legacy file action
-			window.FileActions.register(
-					'all',
-					'LegacyTest',
-					OC.PERMISSION_READ,
-					OC.imagePath('core', 'actions/shared'),
-					actionStub
-			);
-
-			Plugin.favoritesFileList = null;
-			fileList = Plugin.showFileList($('#app-content-favorites'));
-
-			expect(fileList.fileActions.actions.all.LegacyTest).not.toBeDefined();
 		});
 		it('redirects to files app when opening a directory', function() {
 			var oldList = OCA.Files.App.fileList;

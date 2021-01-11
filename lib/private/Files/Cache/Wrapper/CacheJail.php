@@ -2,12 +2,13 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Daniel Jagszent <daniel@jagszent.de>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
  *
@@ -21,12 +22,14 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\Files\Cache\Wrapper;
+
 use OC\Files\Cache\Cache;
+use OC\Files\Search\SearchQuery;
 use OCP\Files\Cache\ICacheEntry;
 use OCP\Files\Search\ISearchQuery;
 
@@ -48,11 +51,15 @@ class CacheJail extends CacheWrapper {
 		$this->root = $root;
 	}
 
+	protected function getRoot() {
+		return $this->root;
+	}
+
 	protected function getSourcePath($path) {
 		if ($path === '') {
-			return $this->root;
+			return $this->getRoot();
 		} else {
-			return $this->root . '/' . ltrim($path, '/');
+			return $this->getRoot() . '/' . ltrim($path, '/');
 		}
 	}
 
@@ -61,13 +68,13 @@ class CacheJail extends CacheWrapper {
 	 * @return null|string the jailed path or null if the path is outside the jail
 	 */
 	protected function getJailedPath($path) {
-		if ($this->root === '') {
+		if ($this->getRoot() === '') {
 			return $path;
 		}
-		$rootLength = strlen($this->root) + 1;
-		if ($path === $this->root) {
+		$rootLength = strlen($this->getRoot()) + 1;
+		if ($path === $this->getRoot()) {
 			return '';
-		} else if (substr($path, 0, $rootLength) === $this->root . '/') {
+		} elseif (substr($path, 0, $rootLength) === $this->getRoot() . '/') {
 			return substr($path, $rootLength);
 		} else {
 			return null;
@@ -86,15 +93,15 @@ class CacheJail extends CacheWrapper {
 	}
 
 	protected function filterCacheEntry($entry) {
-		$rootLength = strlen($this->root) + 1;
-		return ($entry['path'] === $this->root) or (substr($entry['path'], 0, $rootLength) === $this->root . '/');
+		$rootLength = strlen($this->getRoot()) + 1;
+		return $rootLength === 1 || ($entry['path'] === $this->getRoot()) || (substr($entry['path'], 0, $rootLength) === $this->getRoot() . '/');
 	}
 
 	/**
 	 * get the stored metadata of a file or folder
 	 *
 	 * @param string /int $file
-	 * @return array|false
+	 * @return ICacheEntry|false
 	 */
 	public function get($file) {
 		if (is_string($file) or $file == '') {
@@ -176,10 +183,20 @@ class CacheJail extends CacheWrapper {
 	}
 
 	/**
+	 * Get the storage id and path needed for a move
+	 *
+	 * @param string $path
+	 * @return array [$storageId, $internalPath]
+	 */
+	protected function getMoveInfo($path) {
+		return [$this->getNumericStorageId(), $this->getSourcePath($path)];
+	}
+
+	/**
 	 * remove all entries for files that are stored on the storage from the cache
 	 */
 	public function clear() {
-		$this->getCache()->remove($this->root);
+		$this->getCache()->remove($this->getRoot());
 	}
 
 	/**
@@ -192,9 +209,9 @@ class CacheJail extends CacheWrapper {
 	}
 
 	private function formatSearchResults($results) {
-		$results = array_filter($results, array($this, 'filterCacheEntry'));
+		$results = array_filter($results, [$this, 'filterCacheEntry']);
 		$results = array_values($results);
-		return array_map(array($this, 'formatCacheEntry'), $results);
+		return array_map([$this, 'formatCacheEntry'], $results);
 	}
 
 	/**
@@ -220,20 +237,14 @@ class CacheJail extends CacheWrapper {
 	}
 
 	public function searchQuery(ISearchQuery $query) {
-		$results = $this->getCache()->searchQuery($query);
-		return $this->formatSearchResults($results);
-	}
+		$simpleQuery = new SearchQuery($query->getSearchOperation(), 0, 0, $query->getOrder(), $query->getUser());
+		$results = $this->getCache()->searchQuery($simpleQuery);
+		$results = $this->formatSearchResults($results);
 
-	/**
-	 * search for files by mimetype
-	 *
-	 * @param string|int $tag name or tag id
-	 * @param string $userId owner of the tags
-	 * @return array
-	 */
-	public function searchByTag($tag, $userId) {
-		$results = $this->getCache()->searchByTag($tag, $userId);
-		return $this->formatSearchResults($results);
+		$limit = $query->getLimit() === 0 ? null : $query->getLimit();
+		$results = array_slice($results, $query->getOffset(), $limit);
+
+		return $results;
 	}
 
 	/**
@@ -242,9 +253,9 @@ class CacheJail extends CacheWrapper {
 	 * @param string|boolean $path
 	 * @param array $data (optional) meta data of the folder
 	 */
-	public function correctFolderSize($path, $data = null) {
+	public function correctFolderSize($path, $data = null, $isBackgroundScan = false) {
 		if ($this->getCache() instanceof Cache) {
-			$this->getCache()->correctFolderSize($this->getSourcePath($path), $data);
+			$this->getCache()->correctFolderSize($this->getSourcePath($path), $data, $isBackgroundScan);
 		}
 	}
 
@@ -261,7 +272,6 @@ class CacheJail extends CacheWrapper {
 		} else {
 			return 0;
 		}
-
 	}
 
 	/**
@@ -271,7 +281,7 @@ class CacheJail extends CacheWrapper {
 	 */
 	public function getAll() {
 		// not supported
-		return array();
+		return [];
 	}
 
 	/**
@@ -296,6 +306,10 @@ class CacheJail extends CacheWrapper {
 	 */
 	public function getPathById($id) {
 		$path = $this->getCache()->getPathById($id);
+		if ($path === null) {
+			return null;
+		}
+
 		return $this->getJailedPath($path);
 	}
 

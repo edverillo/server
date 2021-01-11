@@ -3,9 +3,11 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author John Molakvoæ (skjnldsv) <skjnldsv@protonmail.com>
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -20,7 +22,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -29,7 +31,6 @@ namespace OCP;
 /**
  * Interface IUser
  *
- * @package OCP
  * @since 8.0.0
  */
 interface IUser {
@@ -109,6 +110,14 @@ interface IUser {
 	public function getBackendClassName();
 
 	/**
+	 * Get the backend for the current user object
+	 *
+	 * @return UserInterface
+	 * @since 15.0.0
+	 */
+	public function getBackend();
+
+	/**
 	 * check if the backend allows the user to change his avatar on Personal page
 	 *
 	 * @return bool
@@ -146,7 +155,7 @@ interface IUser {
 	 * @param bool $enabled
 	 * @since 8.0.0
 	 */
-	public function setEnabled($enabled);
+	public function setEnabled(bool $enabled = true);
 
 	/**
 	 * get the users email address

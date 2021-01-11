@@ -2,8 +2,10 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -17,7 +19,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -26,8 +28,9 @@ namespace OC\Files\Config;
 use OC\Hooks\Emitter;
 use OC\Hooks\EmitterTrait;
 use OCP\Files\Config\IHomeMountProvider;
-use OCP\Files\Config\IMountProviderCollection;
 use OCP\Files\Config\IMountProvider;
+use OCP\Files\Config\IMountProviderCollection;
+use OCP\Files\Config\IRootMountProvider;
 use OCP\Files\Config\IUserMountCache;
 use OCP\Files\Mount\IMountManager;
 use OCP\Files\Mount\IMountPoint;
@@ -45,7 +48,10 @@ class MountProviderCollection implements IMountProviderCollection, Emitter {
 	/**
 	 * @var \OCP\Files\Config\IMountProvider[]
 	 */
-	private $providers = array();
+	private $providers = [];
+
+	/** @var \OCP\Files\Config\IRootMountProvider[] */
+	private $rootProviders = [];
 
 	/**
 	 * @var \OCP\Files\Storage\IStorageFactory
@@ -56,6 +62,9 @@ class MountProviderCollection implements IMountProviderCollection, Emitter {
 	 * @var \OCP\Files\Config\IUserMountCache
 	 */
 	private $mountCache;
+
+	/** @var callable[] */
+	private $mountFilters = [];
 
 	/**
 	 * @param \OCP\Files\Storage\IStorageFactory $loader
@@ -80,9 +89,10 @@ class MountProviderCollection implements IMountProviderCollection, Emitter {
 		$mounts = array_filter($mounts, function ($result) {
 			return is_array($result);
 		});
-		return array_reduce($mounts, function (array $mounts, array $providerMounts) {
+		$mounts = array_reduce($mounts, function (array $mounts, array $providerMounts) {
 			return array_merge($mounts, $providerMounts);
-		}, array());
+		}, []);
+		return $this->filterMounts($user, $mounts);
 	}
 
 	public function addMountForUser(IUser $user, IMountManager $mountManager) {
@@ -101,6 +111,7 @@ class MountProviderCollection implements IMountProviderCollection, Emitter {
 				$firstMounts = array_merge($firstMounts, $mounts);
 			}
 		}
+		$firstMounts = $this->filterMounts($user, $firstMounts);
 		array_walk($firstMounts, [$mountManager, 'addMount']);
 
 		$lateMounts = [];
@@ -111,6 +122,7 @@ class MountProviderCollection implements IMountProviderCollection, Emitter {
 			}
 		}
 
+		$lateMounts = $this->filterMounts($user, $lateMounts);
 		array_walk($lateMounts, [$mountManager, 'addMount']);
 
 		return array_merge($lateMounts, $firstMounts);
@@ -146,6 +158,21 @@ class MountProviderCollection implements IMountProviderCollection, Emitter {
 		$this->emit('\OC\Files\Config', 'registerMountProvider', [$provider]);
 	}
 
+	public function registerMountFilter(callable $filter) {
+		$this->mountFilters[] = $filter;
+	}
+
+	private function filterMounts(IUser $user, array $mountPoints) {
+		return array_filter($mountPoints, function (IMountPoint $mountPoint) use ($user) {
+			foreach ($this->mountFilters as $filter) {
+				if ($filter($mountPoint, $user) === false) {
+					return false;
+				}
+			}
+			return true;
+		});
+	}
+
 	/**
 	 * Add a provider for home mount points
 	 *
@@ -174,5 +201,26 @@ class MountProviderCollection implements IMountProviderCollection, Emitter {
 	 */
 	public function getMountCache() {
 		return $this->mountCache;
+	}
+
+	public function registerRootProvider(IRootMountProvider $provider) {
+		$this->rootProviders[] = $provider;
+	}
+
+	/**
+	 * Get all root mountpoints
+	 *
+	 * @return \OCP\Files\Mount\IMountPoint[]
+	 * @since 20.0.0
+	 */
+	public function getRootMounts(): array {
+		$loader = $this->loader;
+		$mounts = array_map(function (IRootMountProvider $provider) use ($loader) {
+			return $provider->getRootMounts($loader);
+		}, $this->rootProviders);
+		$mounts = array_reduce($mounts, function (array $mounts, array $providerMounts) {
+			return array_merge($mounts, $providerMounts);
+		}, []);
+		return $mounts;
 	}
 }

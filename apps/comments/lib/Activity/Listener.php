@@ -2,7 +2,10 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -16,7 +19,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -30,7 +33,7 @@ use OCP\Files\IRootFolder;
 use OCP\Files\Node;
 use OCP\IUser;
 use OCP\IUserSession;
-use OCP\Share;
+use OCP\Share\IShareHelper;
 
 class Listener {
 	/** @var IManager */
@@ -43,6 +46,8 @@ class Listener {
 	protected $mountCollection;
 	/** @var \OCP\Files\IRootFolder */
 	protected $rootFolder;
+	/** @var IShareHelper */
+	protected $shareHelper;
 
 	/**
 	 * Listener constructor.
@@ -52,17 +57,20 @@ class Listener {
 	 * @param IAppManager $appManager
 	 * @param IMountProviderCollection $mountCollection
 	 * @param IRootFolder $rootFolder
+	 * @param IShareHelper $shareHelper
 	 */
 	public function __construct(IManager $activityManager,
 								IUserSession $session,
 								IAppManager $appManager,
 								IMountProviderCollection $mountCollection,
-								IRootFolder $rootFolder) {
+								IRootFolder $rootFolder,
+								IShareHelper $shareHelper) {
 		$this->activityManager = $activityManager;
 		$this->session = $session;
 		$this->appManager = $appManager;
 		$this->mountCollection = $mountCollection;
 		$this->rootFolder = $rootFolder;
+		$this->shareHelper = $shareHelper;
 	}
 
 	/**
@@ -70,7 +78,7 @@ class Listener {
 	 */
 	public function commentEvent(CommentsEvent $event) {
 		if ($event->getComment()->getObjectType() !== 'files'
-			|| !in_array($event->getEvent(), [CommentsEvent::EVENT_ADD])
+			|| $event->getEvent() !== CommentsEvent::EVENT_ADD
 			|| !$this->appManager->isInstalled('activity')) {
 			// Comment not for file, not adding a comment or no activity-app enabled (save the energy)
 			return;
@@ -78,7 +86,7 @@ class Listener {
 
 		// Get all mount point owners
 		$cache = $this->mountCollection->getMountCache();
-		$mounts = $cache->getMountsForFileId($event->getComment()->getObjectId());
+		$mounts = $cache->getMountsForFileId((int)$event->getComment()->getObjectId());
 		if (empty($mounts)) {
 			return;
 		}
@@ -87,16 +95,12 @@ class Listener {
 		foreach ($mounts as $mount) {
 			$owner = $mount->getUser()->getUID();
 			$ownerFolder = $this->rootFolder->getUserFolder($owner);
-			$nodes = $ownerFolder->getById($event->getComment()->getObjectId());
+			$nodes = $ownerFolder->getById((int)$event->getComment()->getObjectId());
 			if (!empty($nodes)) {
 				/** @var Node $node */
 				$node = array_shift($nodes);
-				$path = $node->getPath();
-				if (strpos($path, '/' . $owner . '/files/') === 0) {
-					$path = substr($path, strlen('/' . $owner . '/files'));
-				}
-				// Get all users that have access to the mount point
-				$users = array_merge($users, Share::getUsersSharingFile($path, $owner, true, true));
+				$al = $this->shareHelper->getPathsForAccessList($node);
+				$users += $al['users'];
 			}
 		}
 
@@ -113,15 +117,18 @@ class Listener {
 			->setAuthor($actor)
 			->setObject($event->getComment()->getObjectType(), (int) $event->getComment()->getObjectId())
 			->setMessage('add_comment_message', [
-				$event->getComment()->getId(),
+				'commentId' => $event->getComment()->getId(),
 			]);
 
 		foreach ($users as $user => $path) {
-			$activity->setAffectedUser($user);
+			// numerical user ids end up as integers from array keys, but string
+			// is required
+			$activity->setAffectedUser((string)$user);
 
 			$activity->setSubject('add_comment_subject', [
-				$actor,
-				$path,
+				'actor' => $actor,
+				'fileId' => (int) $event->getComment()->getObjectId(),
+				'filePath' => trim($path, '/'),
 			]);
 			$this->activityManager->publish($activity);
 		}

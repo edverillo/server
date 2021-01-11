@@ -1,13 +1,8 @@
-@media only screen and (max-width: 768px) {
+@media only screen and (max-width: $breakpoint-mobile) {
 
 /* make header scroll up for single shares, more view of content on small screens */
 #header.share-file {
 	position: absolute !important;
-}
-
-/* hide text of download button, only show icon */
-#download-text {
-	display: none;
 }
 
 /* hide size and date columns */
@@ -34,13 +29,6 @@ table td.filename .nametext {
 	margin-top: 32px;
 }
 
-/* always show actions on mobile */
-#fileList a.action {
-	-ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=20)" !important;
-	filter: alpha(opacity=20) !important;
-	opacity: .2 !important;
-	display: inline !important;
-}
 /* some padding for better clickability */
 #fileList a.action img {
 	padding: 0 6px 0 12px;
@@ -58,5 +46,15 @@ table td.filename .nametext {
 	text-overflow: ellipsis;
 }
 
+#header .menutoggle {
+    padding-right: 14px;
+    background-position: center;
+}
+.note {
+	padding: 0 20px;
+}
 
+#emptycontent {
+	margin-top: 10vh;
+}
 }

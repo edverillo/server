@@ -2,10 +2,11 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
- * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -19,7 +20,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -27,14 +28,12 @@ namespace OC\Repair;
 
 use OCP\Migration\IOutput;
 use OCP\Migration\IRepairStep;
-use Doctrine\DBAL\Platforms\OraclePlatform;
 
 /**
  * Repairs shares with invalid data
  */
 class RepairInvalidShares implements IRepairStep {
-
-	const CHUNK_SIZE = 200;
+	public const CHUNK_SIZE = 200;
 
 	/** @var \OCP\IConfig */
 	protected $config;

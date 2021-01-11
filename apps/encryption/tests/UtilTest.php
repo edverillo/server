@@ -2,9 +2,13 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
  * @author Björn Schießle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Clark Tomlinson <fallen013@gmail.com>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -18,35 +22,38 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
-
 namespace OCA\Encryption\Tests;
 
-
 use OC\Files\View;
+use OCA\Encryption\Crypto\Crypt;
 use OCA\Encryption\Util;
 use OCP\Files\Mount\IMountPoint;
+use OCP\Files\Storage;
 use OCP\IConfig;
 use OCP\ILogger;
+use OCP\IUser;
 use OCP\IUserManager;
+use OCP\IUserSession;
+use PHPUnit\Framework\MockObject\MockObject;
 use Test\TestCase;
 
 class UtilTest extends TestCase {
 	private static $tempStorage = [];
 
-	/** @var \OCP\IConfig|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OCP\IConfig|\PHPUnit\Framework\MockObject\MockObject */
 	private $configMock;
 
-	/** @var \OC\Files\View|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OC\Files\View|\PHPUnit\Framework\MockObject\MockObject */
 	private $filesMock;
 
-	/** @var \OCP\IUserManager|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OCP\IUserManager|\PHPUnit\Framework\MockObject\MockObject */
 	private $userManagerMock;
 
-	/** @var \OCP\Files\Mount\IMountPoint|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OCP\Files\Mount\IMountPoint|\PHPUnit\Framework\MockObject\MockObject */
 	private $mountMock;
 
 	/** @var Util */
@@ -68,54 +75,47 @@ class UtilTest extends TestCase {
 	public function testUserHasFiles() {
 		$this->filesMock->expects($this->once())
 			->method('file_exists')
-			->will($this->returnValue(true));
+			->willReturn(true);
 
 		$this->assertTrue($this->instance->userHasFiles('admin'));
 	}
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 		$this->mountMock = $this->createMock(IMountPoint::class);
 		$this->filesMock = $this->createMock(View::class);
 		$this->userManagerMock = $this->createMock(IUserManager::class);
 
 		/** @var \OCA\Encryption\Crypto\Crypt $cryptMock */
-		$cryptMock = $this->getMockBuilder('OCA\Encryption\Crypto\Crypt')
+		$cryptMock = $this->getMockBuilder(Crypt::class)
 			->disableOriginalConstructor()
 			->getMock();
 		/** @var \OCP\ILogger $loggerMock */
 		$loggerMock = $this->createMock(ILogger::class);
-		/** @var \OCP\IUserSession|\PHPUnit_Framework_MockObject_MockObject $userSessionMock */
-		$userSessionMock = $this->getMockBuilder('OCP\IUserSession')
-			->disableOriginalConstructor()
-			->setMethods([
-				'isLoggedIn',
-				'getUID',
-				'login',
-				'logout',
-				'setUser',
-				'getUser'
-			])
-			->getMock();
 
-		$userSessionMock->method('isLoggedIn')->will($this->returnValue(true));
+		$user = $this->createMock(IUser::class);
+		$user->expects($this->any())
+			->method('getUID')
+			->willReturn('admin');
 
-		$userSessionMock->method('getUID')->will($this->returnValue('admin'));
-
+		/** @var IUserSession|MockObject $userSessionMock */
+		$userSessionMock = $this->createMock(IUserSession::class);
 		$userSessionMock->expects($this->any())
-			->method($this->anything())
-			->will($this->returnSelf());
-
+			->method('getUser')
+			->willReturn($user);
+		$userSessionMock->expects($this->any())
+			->method('isLoggedIn')
+			->willReturn(true);
 
 		$this->configMock = $this->createMock(IConfig::class);
 
 		$this->configMock->expects($this->any())
 			->method('getUserValue')
-			->will($this->returnCallback([$this, 'getValueTester']));
+			->willReturnCallback([$this, 'getValueTester']);
 
 		$this->configMock->expects($this->any())
 			->method('setUserValue')
-			->will($this->returnCallback([$this, 'setValueTester']));
+			->willReturnCallback([$this, 'setValueTester']);
 
 		$this->instance = new Util($this->filesMock, $cryptMock, $loggerMock, $userSessionMock, $this->configMock, $this->userManagerMock);
 	}
@@ -152,7 +152,7 @@ class UtilTest extends TestCase {
 	 */
 	public function testIsMasterKeyEnabled($value, $expect) {
 		$this->configMock->expects($this->once())->method('getAppValue')
-			->with('encryption', 'useMasterKey', '0')->willReturn($value);
+			->with('encryption', 'useMasterKey', '1')->willReturn($value);
 		$this->assertSame($expect,
 			$this->instance->isMasterKeyEnabled()
 		);
@@ -205,7 +205,7 @@ class UtilTest extends TestCase {
 	}
 
 	public function testGetStorage() {
-		$return = $this->getMockBuilder('OC\Files\Storage\Storage')
+		$return = $this->getMockBuilder(Storage::class)
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -216,5 +216,4 @@ class UtilTest extends TestCase {
 
 		$this->assertEquals($return, $this->instance->getStorage($path));
 	}
-
 }

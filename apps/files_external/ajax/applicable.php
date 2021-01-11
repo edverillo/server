@@ -2,9 +2,12 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Jörn Friedrich Dreyer <jfd@butonic.de>
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -18,13 +21,13 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
-OCP\JSON::checkAppEnabled('files_external');
-OCP\JSON::callCheck();
+\OC_JSON::checkAppEnabled('files_external');
+\OC_JSON::callCheck();
 
-OCP\JSON::checkAdminUser();
+\OC_JSON::checkAdminUser();
 
 $pattern = '';
 $limit = null;
@@ -41,7 +44,7 @@ if (isset($_GET['offset'])) {
 
 $groups = [];
 foreach (\OC::$server->getGroupManager()->search($pattern, $limit, $offset) as $group) {
-	$groups[$group->getGID()] = $group->getGID();
+	$groups[$group->getGID()] = $group->getDisplayName();
 }
 
 $users = [];
@@ -49,6 +52,6 @@ foreach (\OC::$server->getUserManager()->searchDisplayName($pattern, $limit, $of
 	$users[$user->getUID()] = $user->getDisplayName();
 }
 
-$results = array('groups' => $groups, 'users' => $users);
+$results = ['groups' => $groups, 'users' => $users];
 
-\OCP\JSON::success($results);
+\OC_JSON::success($results);

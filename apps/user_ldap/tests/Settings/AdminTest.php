@@ -2,7 +2,11 @@
 /**
  * @copyright Copyright (c) 2016 Lukas Reschke <lukas@statuscode.ch>
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -17,14 +21,13 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 namespace OCA\User_LDAP\Tests\Settings;
 
 use OCA\User_LDAP\Configuration;
-use OCA\User_LDAP\Helper;
 use OCA\User_LDAP\Settings\Admin;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IL10N;
@@ -41,9 +44,9 @@ class AdminTest extends TestCase {
 	/** @var IL10N */
 	private $l10n;
 
-	public function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
-		$this->l10n = $this->getMockBuilder('\OCP\IL10N')->getMock();
+		$this->l10n = $this->getMockBuilder(IL10N::class)->getMock();
 
 		$this->admin = new Admin(
 			$this->l10n
@@ -54,10 +57,8 @@ class AdminTest extends TestCase {
 	 * @UseDB
 	 */
 	public function testGetForm() {
-
-		$helper = new Helper(\OC::$server->getConfig());
-		$prefixes = $helper->getServerConfigurationPrefixes();
-		$hosts = $helper->getServerConfigurationHosts();
+		$prefixes = ['s01'];
+		$hosts = ['s01' => ''];
 
 		$wControls = new Template('user_ldap', 'part.wizardcontrols');
 		$wControls = $wControls->fetchPage();
@@ -72,7 +73,7 @@ class AdminTest extends TestCase {
 		// assign default values
 		$config = new Configuration('', false);
 		$defaults = $config->getDefaults();
-		foreach($defaults as $key => $default) {
+		foreach ($defaults as $key => $default) {
 			$parameters[$key.'_default'] = $default;
 		}
 

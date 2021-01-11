@@ -21,56 +21,95 @@
 
 namespace Tests\Core\Controller;
 
+use OC\Authentication\Login\Chain as LoginChain;
+use OC\Authentication\Login\LoginData;
+use OC\Authentication\Login\LoginResult;
 use OC\Authentication\TwoFactorAuth\Manager;
 use OC\Core\Controller\LoginController;
 use OC\Security\Bruteforce\Throttler;
+use OC\User\Session;
 use OCP\AppFramework\Http\RedirectResponse;
 use OCP\AppFramework\Http\TemplateResponse;
+use OCP\Defaults;
 use OCP\IConfig;
+use OCP\IInitialStateService;
+use OCP\ILogger;
 use OCP\IRequest;
 use OCP\ISession;
 use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserManager;
-use OCP\IUserSession;
+use PHPUnit\Framework\MockObject\MockObject;
 use Test\TestCase;
 
 class LoginControllerTest extends TestCase {
+
 	/** @var LoginController */
 	private $loginController;
-	/** @var IRequest | \PHPUnit_Framework_MockObject_MockObject */
+
+	/** @var IRequest|MockObject */
 	private $request;
-	/** @var IUserManager | \PHPUnit_Framework_MockObject_MockObject */
+
+	/** @var IUserManager|MockObject */
 	private $userManager;
-	/** @var IConfig | \PHPUnit_Framework_MockObject_MockObject */
+
+	/** @var IConfig|MockObject */
 	private $config;
-	/** @var ISession | \PHPUnit_Framework_MockObject_MockObject */
+
+	/** @var ISession|MockObject */
 	private $session;
-	/** @var IUserSession | \PHPUnit_Framework_MockObject_MockObject */
+
+	/** @var Session|MockObject */
 	private $userSession;
-	/** @var IURLGenerator | \PHPUnit_Framework_MockObject_MockObject */
+
+	/** @var IURLGenerator|MockObject */
 	private $urlGenerator;
-	/** @var Manager | \PHPUnit_Framework_MockObject_MockObject */
+
+	/** @var ILogger|MockObject */
+	private $logger;
+
+	/** @var Manager|MockObject */
 	private $twoFactorManager;
-	/** @var Throttler */
+
+	/** @var Defaults|MockObject */
+	private $defaults;
+
+	/** @var Throttler|MockObject */
 	private $throttler;
 
-	public function setUp() {
+	/** @var LoginChain|MockObject */
+	private $chain;
+
+	/** @var IInitialStateService|MockObject */
+	private $initialStateService;
+
+	/** @var \OC\Authentication\WebAuthn\Manager|MockObject */
+	private $webAuthnManager;
+
+	protected function setUp(): void {
 		parent::setUp();
-		$this->request = $this->getMockBuilder('\\OCP\\IRequest')->getMock();
-		$this->userManager = $this->getMockBuilder('\\OCP\\IUserManager')->getMock();
-		$this->config = $this->getMockBuilder('\\OCP\\IConfig')->getMock();
-		$this->session = $this->getMockBuilder('\\OCP\\ISession')->getMock();
-		$this->userSession = $this->getMockBuilder('\\OC\\User\\Session')
-			->disableOriginalConstructor()
-			->getMock();
-		$this->urlGenerator = $this->getMockBuilder('\\OCP\\IURLGenerator')->getMock();
-		$this->twoFactorManager = $this->getMockBuilder('\OC\Authentication\TwoFactorAuth\Manager')
-			->disableOriginalConstructor()
-			->getMock();
-		$this->throttler = $this->getMockBuilder('\OC\Security\Bruteforce\Throttler')
-			->disableOriginalConstructor()
-			->getMock();
+		$this->request = $this->createMock(IRequest::class);
+		$this->userManager = $this->createMock(\OC\User\Manager::class);
+		$this->config = $this->createMock(IConfig::class);
+		$this->session = $this->createMock(ISession::class);
+		$this->userSession = $this->createMock(Session::class);
+		$this->urlGenerator = $this->createMock(IURLGenerator::class);
+		$this->logger = $this->createMock(ILogger::class);
+		$this->twoFactorManager = $this->createMock(Manager::class);
+		$this->defaults = $this->createMock(Defaults::class);
+		$this->throttler = $this->createMock(Throttler::class);
+		$this->chain = $this->createMock(LoginChain::class);
+		$this->initialStateService = $this->createMock(IInitialStateService::class);
+		$this->webAuthnManager = $this->createMock(\OC\Authentication\WebAuthn\Manager::class);
+
+
+		$this->request->method('getRemoteAddress')
+			->willReturn('1.2.3.4');
+		$this->throttler->method('getDelay')
+			->with(
+				$this->equalTo('1.2.3.4'),
+				$this->equalTo('')
+			)->willReturn(1000);
 
 		$this->loginController = new LoginController(
 			'core',
@@ -80,8 +119,12 @@ class LoginControllerTest extends TestCase {
 			$this->session,
 			$this->userSession,
 			$this->urlGenerator,
-			$this->twoFactorManager,
-			$this->throttler
+			$this->logger,
+			$this->defaults,
+			$this->throttler,
+			$this->chain,
+			$this->initialStateService,
+			$this->webAuthnManager
 		);
 	}
 
@@ -91,9 +134,34 @@ class LoginControllerTest extends TestCase {
 			->method('getCookie')
 			->with('nc_token')
 			->willReturn(null);
+		$this->request
+			->expects($this->once())
+			->method('isUserAgent')
+			->willReturn(false);
 		$this->config
 			->expects($this->never())
 			->method('deleteUserValue');
+		$this->urlGenerator
+			->expects($this->once())
+			->method('linkToRouteAbsolute')
+			->with('core.login.showLoginForm')
+			->willReturn('/login');
+
+		$expected = new RedirectResponse('/login');
+		$expected->addHeader('Clear-Site-Data', '"cache", "storage"');
+		$this->assertEquals($expected, $this->loginController->logout());
+	}
+
+	public function testLogoutNoClearSiteData() {
+		$this->request
+			->expects($this->once())
+			->method('getCookie')
+			->with('nc_token')
+			->willReturn(null);
+		$this->request
+			->expects($this->once())
+			->method('isUserAgent')
+			->willReturn(true);
 		$this->urlGenerator
 			->expects($this->once())
 			->method('linkToRouteAbsolute')
@@ -110,7 +178,11 @@ class LoginControllerTest extends TestCase {
 			->method('getCookie')
 			->with('nc_token')
 			->willReturn('MyLoginToken');
-		$user = $this->getMockBuilder('\\OCP\\IUser')->getMock();
+		$this->request
+			->expects($this->once())
+			->method('isUserAgent')
+			->willReturn(false);
+		$user = $this->createMock(IUser::class);
 		$user
 			->expects($this->once())
 			->method('getUID')
@@ -130,6 +202,7 @@ class LoginControllerTest extends TestCase {
 			->willReturn('/login');
 
 		$expected = new RedirectResponse('/login');
+		$expected->addHeader('Clear-Site-Data', '"cache", "storage"');
 		$this->assertEquals($expected, $this->loginController->logout());
 	}
 
@@ -164,27 +237,60 @@ class LoginControllerTest extends TestCase {
 					],
 				]
 			);
+		$this->initialStateService->expects($this->at(0))
+			->method('provideInitialState')
+			->with(
+				'core',
+				'loginMessages',
+				[
+					'MessageArray1',
+					'MessageArray2',
+				]
+			);
+		$this->initialStateService->expects($this->at(1))
+			->method('provideInitialState')
+			->with(
+				'core',
+				'loginErrors',
+				[
+					'ErrorArray1',
+					'ErrorArray2',
+				]
+			);
 
 		$expectedResponse = new TemplateResponse(
 			'core',
 			'login',
 			[
-				'ErrorArray1' => true,
-				'ErrorArray2' => true,
-				'messages' => [
-					'MessageArray1',
-					'MessageArray2',
-				],
-				'loginName' => '',
-				'user_autofocus' => true,
-				'canResetPassword' => true,
 				'alt_login' => [],
-				'rememberLoginState' => 0,
-				'resetPasswordLink' => null,
 			],
 			'guest'
 		);
 		$this->assertEquals($expectedResponse, $this->loginController->showLoginForm('', '', ''));
+	}
+
+	public function testShowLoginFormForFlowAuth() {
+		$this->userSession
+			->expects($this->once())
+			->method('isLoggedIn')
+			->willReturn(false);
+		$this->initialStateService->expects($this->at(2))
+			->method('provideInitialState')
+			->with(
+				'core',
+				'loginRedirectUrl',
+				'login/flow'
+			);
+
+		$expectedResponse = new TemplateResponse(
+			'core',
+			'login',
+			[
+				'alt_login' => [],
+			],
+			'guest'
+		);
+		$this->assertEquals($expectedResponse, $this->loginController->showLoginForm('', 'login/flow', ''));
 	}
 
 	/**
@@ -213,11 +319,13 @@ class LoginControllerTest extends TestCase {
 			->method('isLoggedIn')
 			->willReturn(false);
 		$this->config
-			->expects($this->once())
+			->expects($this->exactly(2))
 			->method('getSystemValue')
-			->with('lost_password_link')
-			->willReturn(false);
-		$user = $this->getMockBuilder('\\OCP\\IUser')->getMock();
+			->willReturnMap([
+				['login_form_autocomplete', true, true],
+				['lost_password_link', '', false],
+			]);
+		$user = $this->createMock(IUser::class);
 		$user
 			->expects($this->once())
 			->method('canChangePassword')
@@ -227,37 +335,46 @@ class LoginControllerTest extends TestCase {
 			->method('get')
 			->with('LdapUser')
 			->willReturn($user);
+		$this->initialStateService->expects($this->at(0))
+			->method('provideInitialState')
+			->with(
+				'core',
+				'loginUsername',
+				'LdapUser'
+			);
+		$this->initialStateService->expects($this->at(4))
+			->method('provideInitialState')
+			->with(
+				'core',
+				'loginCanResetPassword',
+				$expectedResult
+			);
 
 		$expectedResponse = new TemplateResponse(
 			'core',
 			'login',
 			[
-				'messages' => [],
-				'loginName' => 'LdapUser',
-				'user_autofocus' => false,
-				'canResetPassword' => $expectedResult,
 				'alt_login' => [],
-				'rememberLoginState' => 0,
-				'resetPasswordLink' => false,
 			],
 			'guest'
 		);
 		$this->assertEquals($expectedResponse, $this->loginController->showLoginForm('LdapUser', '', ''));
 	}
 
-	public function testShowLoginFormForUserNamedNull() {
+	public function testShowLoginFormForUserNamed0() {
 		$this->userSession
 			->expects($this->once())
 			->method('isLoggedIn')
 			->willReturn(false);
 		$this->config
-			->expects($this->once())
+			->expects($this->exactly(2))
 			->method('getSystemValue')
-			->with('lost_password_link')
-			->willReturn(false);
-		$user = $this->getMockBuilder('\\OCP\\IUser')->getMock();
-		$user
-			->expects($this->once())
+			->willReturnMap([
+				['login_form_autocomplete', true, true],
+				['lost_password_link', '', false],
+			]);
+		$user = $this->createMock(IUser::class);
+		$user->expects($this->once())
 			->method('canChangePassword')
 			->willReturn(false);
 		$this->userManager
@@ -265,18 +382,33 @@ class LoginControllerTest extends TestCase {
 			->method('get')
 			->with('0')
 			->willReturn($user);
+		$this->initialStateService->expects($this->at(1))
+			->method('provideInitialState')
+			->with(
+				'core',
+				'loginAutocomplete',
+				true
+			);
+		$this->initialStateService->expects($this->at(3))
+			->method('provideInitialState')
+			->with(
+				'core',
+				'loginResetPasswordLink',
+				false
+			);
+		$this->initialStateService->expects($this->at(4))
+			->method('provideInitialState')
+			->with(
+				'core',
+				'loginCanResetPassword',
+				false
+			);
 
 		$expectedResponse = new TemplateResponse(
 			'core',
 			'login',
 			[
-				'messages' => [],
-				'loginName' => '0',
-				'user_autofocus' => false,
-				'canResetPassword' => false,
 				'alt_login' => [],
-				'rememberLoginState' => 0,
-				'resetPasswordLink' => false,
 			],
 			'guest'
 		);
@@ -286,190 +418,81 @@ class LoginControllerTest extends TestCase {
 	public function testLoginWithInvalidCredentials() {
 		$user = 'MyUserName';
 		$password = 'secret';
-		$loginPageUrl = 'some url';
+		$loginPageUrl = '/login?redirect_url=/apps/files';
 
-		$this->request
-			->expects($this->exactly(4))
-			->method('getRemoteAddress')
-			->willReturn('192.168.0.1');
 		$this->request
 			->expects($this->once())
 			->method('passesCSRFCheck')
 			->willReturn(true);
-		$this->throttler
-			->expects($this->exactly(2))
-			->method('sleepDelay')
-			->with('192.168.0.1');
-		$this->throttler
-			->expects($this->once())
-			->method('getDelay')
-			->with('192.168.0.1')
-			->willReturn(0);
-		$this->throttler
-			->expects($this->once())
-			->method('registerAttempt')
-			->with('login', '192.168.0.1', ['user' => 'MyUserName']);
-		$this->userManager->expects($this->once())
-			->method('checkPassword')
-			->will($this->returnValue(false));
+		$loginData = new LoginData(
+			$this->request,
+			$user,
+			$password,
+			'/apps/files'
+		);
+		$loginResult = LoginResult::failure($loginData, LoginController::LOGIN_MSG_INVALIDPASSWORD);
+		$this->chain->expects($this->once())
+			->method('process')
+			->with($this->equalTo($loginData))
+			->willReturn($loginResult);
 		$this->urlGenerator->expects($this->once())
 			->method('linkToRoute')
-			->with('core.login.showLoginForm')
-			->will($this->returnValue($loginPageUrl));
-
-		$this->userSession->expects($this->never())
-			->method('createSessionToken');
-		$this->userSession->expects($this->never())
-			->method('createRememberMeToken');
-		$this->config->expects($this->never())
-			->method('deleteUserValue');
-
+			->with('core.login.showLoginForm', [
+				'user' => $user,
+				'redirect_url' => '/apps/files',
+			])
+			->willReturn($loginPageUrl);
 		$expected = new \OCP\AppFramework\Http\RedirectResponse($loginPageUrl);
-		$this->assertEquals($expected, $this->loginController->tryLogin($user, $password, ''));
+		$expected->throttle(['user' => 'MyUserName']);
+
+		$response = $this->loginController->tryLogin($user, $password, '/apps/files');
+
+		$this->assertEquals($expected, $response);
 	}
 
 	public function testLoginWithValidCredentials() {
-		/** @var IUser | \PHPUnit_Framework_MockObject_MockObject $user */
-		$user = $this->getMockBuilder('\OCP\IUser')->getMock();
-		$user->expects($this->any())
-			->method('getUID')
-			->will($this->returnValue('uid'));
-		$user->expects($this->any())
-			->method('getLastLogin')
-			->willReturn(123456);
+		$user = 'MyUserName';
 		$password = 'secret';
 		$indexPageUrl = \OC_Util::getDefaultPageUrl();
 
 		$this->request
-			->expects($this->exactly(2))
-			->method('getRemoteAddress')
-			->willReturn('192.168.0.1');
-		$this->request
 			->expects($this->once())
 			->method('passesCSRFCheck')
 			->willReturn(true);
-		$this->throttler
-			->expects($this->once())
-			->method('sleepDelay')
-			->with('192.168.0.1');
-		$this->throttler
-			->expects($this->once())
-			->method('getDelay')
-			->with('192.168.0.1')
-			->willReturn(200);
-		$this->userManager->expects($this->once())
-			->method('checkPassword')
-			->will($this->returnValue($user));
-		$this->userSession->expects($this->once())
-			->method('login')
-			->with($user, $password);
-		$this->userSession->expects($this->once())
-			->method('createSessionToken')
-			->with($this->request, $user->getUID(), $user, $password, false);
-		$this->twoFactorManager->expects($this->once())
-			->method('isTwoFactorAuthenticated')
-			->with($user)
-			->will($this->returnValue(false));
-		$this->config->expects($this->once())
-			->method('deleteUserValue')
-			->with('uid', 'core', 'lostpassword');
-		$this->config->expects($this->once())
-			->method('setUserValue')
-			->with('uid', 'core', 'timezone', 'Europe/Berlin');
-		$this->userSession->expects($this->never())
-			->method('createRememberMeToken');
-
-		$this->session->expects($this->exactly(2))
-			->method('set')
-			->withConsecutive(
-				['last-password-confirm', 123456],
-				['timezone', '1']
-			);
-
+		$loginData = new LoginData(
+			$this->request,
+			$user,
+			$password
+		);
+		$loginResult = LoginResult::success($loginData);
+		$this->chain->expects($this->once())
+			->method('process')
+			->with($this->equalTo($loginData))
+			->willReturn($loginResult);
 		$expected = new \OCP\AppFramework\Http\RedirectResponse($indexPageUrl);
-		$this->assertEquals($expected, $this->loginController->tryLogin($user, $password, null, false, 'Europe/Berlin', '1'));
-	}
 
-	public function testLoginWithValidCredentialsAndRememberMe() {
-		/** @var IUser | \PHPUnit_Framework_MockObject_MockObject $user */
-		$user = $this->getMockBuilder('\OCP\IUser')->getMock();
-		$user->expects($this->any())
-			->method('getUID')
-			->will($this->returnValue('uid'));
-		$password = 'secret';
-		$indexPageUrl = \OC_Util::getDefaultPageUrl();
+		$response = $this->loginController->tryLogin($user, $password);
 
-		$this->request
-			->expects($this->exactly(2))
-			->method('getRemoteAddress')
-			->willReturn('192.168.0.1');
-		$this->request
-			->expects($this->once())
-			->method('passesCSRFCheck')
-			->willReturn(true);
-		$this->throttler
-			->expects($this->once())
-			->method('sleepDelay')
-			->with('192.168.0.1');
-		$this->throttler
-			->expects($this->once())
-			->method('getDelay')
-			->with('192.168.0.1')
-			->willReturn(200);
-		$this->userManager->expects($this->once())
-			->method('checkPassword')
-			->will($this->returnValue($user));
-		$this->userSession->expects($this->once())
-			->method('login')
-			->with($user, $password);
-		$this->userSession->expects($this->once())
-			->method('createSessionToken')
-			->with($this->request, $user->getUID(), $user, $password, true);
-		$this->twoFactorManager->expects($this->once())
-			->method('isTwoFactorAuthenticated')
-			->with($user)
-			->will($this->returnValue(false));
-		$this->config->expects($this->once())
-			->method('deleteUserValue')
-			->with('uid', 'core', 'lostpassword');
-		$this->userSession->expects($this->once())
-			->method('createRememberMeToken')
-			->with($user);
-
-		$expected = new \OCP\AppFramework\Http\RedirectResponse($indexPageUrl);
-		$this->assertEquals($expected, $this->loginController->tryLogin($user, $password, null, true));
+		$this->assertEquals($expected, $response);
 	}
 
 	public function testLoginWithoutPassedCsrfCheckAndNotLoggedIn() {
-		/** @var IUser | \PHPUnit_Framework_MockObject_MockObject $user */
-		$user = $this->getMockBuilder('\OCP\IUser')->getMock();
+		/** @var IUser|MockObject $user */
+		$user = $this->createMock(IUser::class);
 		$user->expects($this->any())
 			->method('getUID')
-			->will($this->returnValue('jane'));
+			->willReturn('jane');
 		$password = 'secret';
 		$originalUrl = 'another%20url';
 
 		$this->request
-			->expects($this->exactly(2))
-			->method('getRemoteAddress')
-			->willReturn('192.168.0.1');
-		$this->request
 			->expects($this->once())
 			->method('passesCSRFCheck')
 			->willReturn(false);
-		$this->throttler
-			->expects($this->once())
-			->method('sleepDelay')
-			->with('192.168.0.1');
-		$this->throttler
-			->expects($this->once())
-			->method('getDelay')
-			->with('192.168.0.1')
-			->willReturn(200);
 		$this->userSession->expects($this->once())
 			->method('isLoggedIn')
 			->with()
-			->will($this->returnValue(false));
+			->willReturn(false);
 		$this->config->expects($this->never())
 			->method('deleteUserValue');
 		$this->userSession->expects($this->never())
@@ -480,282 +503,111 @@ class LoginControllerTest extends TestCase {
 	}
 
 	public function testLoginWithoutPassedCsrfCheckAndLoggedIn() {
-		/** @var IUser | \PHPUnit_Framework_MockObject_MockObject $user */
-		$user = $this->getMockBuilder('\OCP\IUser')->getMock();
+		/** @var IUser|MockObject $user */
+		$user = $this->createMock(IUser::class);
 		$user->expects($this->any())
 			->method('getUID')
-			->will($this->returnValue('jane'));
+			->willReturn('jane');
 		$password = 'secret';
-		$originalUrl = 'another%20url';
+		$originalUrl = 'another url';
 		$redirectUrl = 'http://localhost/another url';
 
-		$this->request
-			->expects($this->exactly(2))
-			->method('getRemoteAddress')
-			->willReturn('192.168.0.1');
 		$this->request
 			->expects($this->once())
 			->method('passesCSRFCheck')
 			->willReturn(false);
-		$this->throttler
-			->expects($this->once())
-			->method('sleepDelay')
-			->with('192.168.0.1');
-		$this->throttler
-			->expects($this->once())
-			->method('getDelay')
-			->with('192.168.0.1')
-			->willReturn(200);
 		$this->userSession->expects($this->once())
 			->method('isLoggedIn')
 			->with()
-			->will($this->returnValue(true));
+			->willReturn(true);
 		$this->urlGenerator->expects($this->once())
 			->method('getAbsoluteURL')
 			->with(urldecode($originalUrl))
-			->will($this->returnValue($redirectUrl));
+			->willReturn($redirectUrl);
 		$this->config->expects($this->never())
 			->method('deleteUserValue');
 		$this->userSession->expects($this->never())
 			->method('createRememberMeToken');
+		$this->config
+			->method('getSystemValue')
+			->with('remember_login_cookie_lifetime')
+			->willReturn(1234);
 
 		$expected = new \OCP\AppFramework\Http\RedirectResponse($redirectUrl);
 		$this->assertEquals($expected, $this->loginController->tryLogin('Jane', $password, $originalUrl));
 	}
 
 	public function testLoginWithValidCredentialsAndRedirectUrl() {
-		/** @var IUser | \PHPUnit_Framework_MockObject_MockObject $user */
-		$user = $this->getMockBuilder('\OCP\IUser')->getMock();
-		$user->expects($this->any())
-			->method('getUID')
-			->will($this->returnValue('jane'));
+		$user = 'MyUserName';
 		$password = 'secret';
-		$originalUrl = 'another%20url';
-		$redirectUrl = 'http://localhost/another url';
+		$indexPageUrl = \OC_Util::getDefaultPageUrl();
+		$redirectUrl = 'https://next.cloud/apps/mail';
 
-		$this->request
-			->expects($this->exactly(2))
-			->method('getRemoteAddress')
-			->willReturn('192.168.0.1');
 		$this->request
 			->expects($this->once())
 			->method('passesCSRFCheck')
 			->willReturn(true);
-		$this->throttler
-			->expects($this->once())
-			->method('sleepDelay')
-			->with('192.168.0.1');
-		$this->throttler
-			->expects($this->once())
-			->method('getDelay')
-			->with('192.168.0.1')
-			->willReturn(200);
-		$this->userManager->expects($this->once())
-			->method('checkPassword')
-			->with('Jane', $password)
-			->will($this->returnValue($user));
-		$this->userSession->expects($this->once())
-			->method('createSessionToken')
-			->with($this->request, $user->getUID(), 'Jane', $password, false);
+		$loginData = new LoginData(
+			$this->request,
+			$user,
+			$password,
+			'/apps/mail'
+		);
+		$loginResult = LoginResult::success($loginData);
+		$this->chain->expects($this->once())
+			->method('process')
+			->with($this->equalTo($loginData))
+			->willReturn($loginResult);
 		$this->userSession->expects($this->once())
 			->method('isLoggedIn')
-			->with()
-			->will($this->returnValue(true));
+			->willReturn(true);
 		$this->urlGenerator->expects($this->once())
 			->method('getAbsoluteURL')
-			->with(urldecode($originalUrl))
-			->will($this->returnValue($redirectUrl));
-		$this->config->expects($this->once())
-			->method('deleteUserValue')
-			->with('jane', 'core', 'lostpassword');
+			->with('/apps/mail')
+			->willReturn($redirectUrl);
+		$expected = new \OCP\AppFramework\Http\RedirectResponse($redirectUrl);
 
-		$expected = new \OCP\AppFramework\Http\RedirectResponse(urldecode($redirectUrl));
-		$this->assertEquals($expected, $this->loginController->tryLogin('Jane', $password, $originalUrl));
-	}
-	
-	public function testLoginWithOneTwoFactorProvider() {
-		/** @var IUser | \PHPUnit_Framework_MockObject_MockObject $user */
-		$user = $this->getMockBuilder('\OCP\IUser')->getMock();
-		$user->expects($this->any())
-			->method('getUID')
-			->will($this->returnValue('john'));
-		$password = 'secret';
-		$challengeUrl = 'challenge/url';
-		$provider = $this->getMockBuilder('\OCP\Authentication\TwoFactorAuth\IProvider')->getMock();
+		$response = $this->loginController->tryLogin($user, $password, '/apps/mail');
 
-		$this->request
-			->expects($this->exactly(2))
-			->method('getRemoteAddress')
-			->willReturn('192.168.0.1');
-		$this->request
-			->expects($this->once())
-			->method('passesCSRFCheck')
-			->willReturn(true);
-		$this->throttler
-			->expects($this->once())
-			->method('sleepDelay')
-			->with('192.168.0.1');
-		$this->throttler
-			->expects($this->once())
-			->method('getDelay')
-			->with('192.168.0.1')
-			->willReturn(200);
-		$this->userManager->expects($this->once())
-			->method('checkPassword')
-			->will($this->returnValue($user));
-		$this->userSession->expects($this->once())
-			->method('login')
-			->with('john@doe.com', $password);
-		$this->userSession->expects($this->once())
-			->method('createSessionToken')
-			->with($this->request, $user->getUID(), 'john@doe.com', $password, false);
-		$this->twoFactorManager->expects($this->once())
-			->method('isTwoFactorAuthenticated')
-			->with($user)
-			->will($this->returnValue(true));
-		$this->twoFactorManager->expects($this->once())
-			->method('prepareTwoFactorLogin')
-			->with($user);
-		$this->twoFactorManager->expects($this->once())
-			->method('getProviders')
-			->with($user)
-			->will($this->returnValue([$provider]));
-		$provider->expects($this->once())
-			->method('getId')
-			->will($this->returnValue('u2f'));
-		$this->urlGenerator->expects($this->once())
-			->method('linkToRoute')
-			->with('core.TwoFactorChallenge.showChallenge', [
-				'challengeProviderId' => 'u2f',
-			])
-			->will($this->returnValue($challengeUrl));
-		$this->config->expects($this->once())
-			->method('deleteUserValue')
-			->with('john', 'core', 'lostpassword');
-		$this->userSession->expects($this->never())
-			->method('createRememberMeToken');
-
-		$expected = new RedirectResponse($challengeUrl);
-		$this->assertEquals($expected, $this->loginController->tryLogin('john@doe.com', $password, null));
-	}
-
-	public function testLoginWithMultpleTwoFactorProviders() {
-		/** @var IUser | \PHPUnit_Framework_MockObject_MockObject $user */
-		$user = $this->getMockBuilder('\OCP\IUser')->getMock();
-		$user->expects($this->any())
-			->method('getUID')
-			->will($this->returnValue('john'));
-		$password = 'secret';
-		$challengeUrl = 'challenge/url';
-		$provider1 = $this->getMockBuilder('\OCP\Authentication\TwoFactorAuth\IProvider')->getMock();
-		$provider2 = $this->getMockBuilder('\OCP\Authentication\TwoFactorAuth\IProvider')->getMock();
-
-		$this->request
-			->expects($this->exactly(2))
-			->method('getRemoteAddress')
-			->willReturn('192.168.0.1');
-		$this->request
-			->expects($this->once())
-			->method('passesCSRFCheck')
-			->willReturn(true);
-		$this->throttler
-			->expects($this->once())
-			->method('sleepDelay')
-			->with('192.168.0.1');
-		$this->throttler
-			->expects($this->once())
-			->method('getDelay')
-			->with('192.168.0.1')
-			->willReturn(200);
-		$this->userManager->expects($this->once())
-			->method('checkPassword')
-			->will($this->returnValue($user));
-		$this->userSession->expects($this->once())
-			->method('login')
-			->with('john@doe.com', $password);
-		$this->userSession->expects($this->once())
-			->method('createSessionToken')
-			->with($this->request, $user->getUID(), 'john@doe.com', $password, false);
-		$this->twoFactorManager->expects($this->once())
-			->method('isTwoFactorAuthenticated')
-			->with($user)
-			->will($this->returnValue(true));
-		$this->twoFactorManager->expects($this->once())
-			->method('prepareTwoFactorLogin')
-			->with($user);
-		$this->twoFactorManager->expects($this->once())
-			->method('getProviders')
-			->with($user)
-			->will($this->returnValue([$provider1, $provider2]));
-		$provider1->expects($this->never())
-			->method('getId');
-		$provider2->expects($this->never())
-			->method('getId');
-		$this->urlGenerator->expects($this->once())
-			->method('linkToRoute')
-			->with('core.TwoFactorChallenge.selectChallenge')
-			->will($this->returnValue($challengeUrl));
-		$this->config->expects($this->once())
-			->method('deleteUserValue')
-			->with('john', 'core', 'lostpassword');
-		$this->userSession->expects($this->never())
-			->method('createRememberMeToken');
-
-		$expected = new RedirectResponse($challengeUrl);
-		$this->assertEquals($expected, $this->loginController->tryLogin('john@doe.com', $password, null));
+		$this->assertEquals($expected, $response);
 	}
 
 	public function testToNotLeakLoginName() {
-		/** @var IUser | \PHPUnit_Framework_MockObject_MockObject $user */
-		$user = $this->getMockBuilder('\OCP\IUser')->getMock();
-		$user->expects($this->any())
-			->method('getUID')
-			->will($this->returnValue('john'));
-
-		$this->userManager->expects($this->exactly(2))
-			->method('checkPassword')
-			->withConsecutive(
-				['john@doe.com', 'just wrong'],
-				['john', 'just wrong']
-				)
-			->willReturn(false);
-		
-		$this->userManager->expects($this->once())
-			->method('getByEmail')
-			->with('john@doe.com')
-			->willReturn([$user]);
-
-		$this->urlGenerator->expects($this->once())
-			->method('linkToRoute')
-			->with('core.login.showLoginForm', ['user' => 'john@doe.com'])
-			->will($this->returnValue(''));
-		$this->request
-			->expects($this->exactly(3))
-			->method('getRemoteAddress')
-			->willReturn('192.168.0.1');
 		$this->request
 			->expects($this->once())
 			->method('passesCSRFCheck')
 			->willReturn(true);
-		$this->throttler
-			->expects($this->once())
-			->method('getDelay')
-			->with('192.168.0.1')
-			->willReturn(200);
-		$this->throttler
-			->expects($this->once())
-			->method('sleepDelay')
-			->with('192.168.0.1');
-		$this->throttler
-			->expects($this->once())
-			->method('registerAttempt')
-			->with('login', '192.168.0.1', ['user' => 'john@doe.com']);
-		$this->config->expects($this->never())
-			->method('deleteUserValue');
-		$this->userSession->expects($this->never())
-			->method('createRememberMeToken');
+		$loginPageUrl = '/login?redirect_url=/apps/files';
+		$loginData = new LoginData(
+			$this->request,
+			'john@doe.com',
+			'just wrong',
+			'/apps/files'
+		);
+		$loginResult = LoginResult::failure($loginData, LoginController::LOGIN_MSG_INVALIDPASSWORD);
+		$this->chain->expects($this->once())
+			->method('process')
+			->with($this->equalTo($loginData))
+			->willReturnCallback(function (LoginData $data) use ($loginResult) {
+				$data->setUsername('john');
+				return $loginResult;
+			});
+		$this->urlGenerator->expects($this->once())
+			->method('linkToRoute')
+			->with('core.login.showLoginForm', [
+				'user' => 'john@doe.com',
+				'redirect_url' => '/apps/files',
+			])
+			->willReturn($loginPageUrl);
+		$expected = new \OCP\AppFramework\Http\RedirectResponse($loginPageUrl);
+		$expected->throttle(['user' => 'john']);
 
-		$expected = new RedirectResponse('');
-		$this->assertEquals($expected, $this->loginController->tryLogin('john@doe.com', 'just wrong', null));
+		$response = $this->loginController->tryLogin(
+			'john@doe.com',
+			'just wrong',
+			'/apps/files'
+		);
+
+		$this->assertEquals($expected, $response);
 	}
 }

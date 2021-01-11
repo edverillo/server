@@ -1,15 +1,4 @@
-#content {
-	height: initial;
-	min-height: calc(100vh - 120px);
-}
-
-/* force layout to make sure the content element's height matches its contents' height */
-.ie #content {
-	display: inline-block;
-}
-
 #preview {
-	background: #fff;
 	text-align: center;
 }
 
@@ -31,14 +20,15 @@
 }
 
 
-#imgframe img,
-#imgframe video {
+#imgframe img {
 	max-height: 100% !important;
 	max-width: 100% !important;
 }
-#imgframe video {
-	width: 854px;
-	height: 480px;
+
+#imgframe audio {
+	display: block;
+	margin-left: auto;
+	margin-right: auto;
 }
 
 #imgframe .text-preview {
@@ -50,12 +40,6 @@
 	height: auto;
 	min-height: 200px;
 	max-height: 800px;
-	-webkit-touch-callout: none;
-	-webkit-user-select: none;
-	-khtml-user-select: none;
-	-moz-user-select: none;
-	-ms-user-select: none;
-	user-select: none;
 }
 
 #imgframe .ellipsis {
@@ -78,12 +62,6 @@ thead {
 	margin: 0;
 }
 
-
-.directDownload,
-.directLink {
-	margin-bottom: 20px;
-}
-
 /* keep long file names in one line to not overflow download button on mobile */
 .directDownload #downloadFile {
 	white-space: nowrap;
@@ -95,16 +73,8 @@ thead {
 	margin-right: auto;
 }
 
-.directLink label {
-	font-weight: normal;
-	-ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=50)";
-	filter: alpha(opacity=50);
+.download-size {
 	opacity: .5;
-}
-.directLink input {
-	margin-left: 5px;
-	width: 300px;
-	max-width: 90%;
 }
 
 /* header buttons */
@@ -124,34 +94,14 @@ thead {
 	border-color: rgba(0,0,0,0.3) !important;
 }
 
-/* within #save */
-#save .save-form {
-	position: relative;
-}
-
-#remote_address {
-	width: 200px;
-
-	margin-right: 4px;
-	height: 31px;
-}
-
-#save-button-confirm {
-	position: absolute;
-	background-color: transparent;
-	border: none;
-	margin: 2px 4px !important;
-	right: 7px;
-	top: -8px;
-	height: 30px;
-}
-
 #public-upload .avatardiv {
 	margin: 0 auto;
 }
 
-#emptycontent.has-disclaimer {
-	margin-top: 10vh;
+#emptycontent {
+	&.has-note {
+		margin-top: 5vh;
+	}
 }
 
 #public-upload #emptycontent h2 {
@@ -173,6 +123,12 @@ thead {
 	opacity: 1;
 }
 
+#public-upload #emptycontent #displayavatar .icon-folder {
+	height: 48px;
+	width: 48px;
+	background-size: 48px;
+}
+
 #public-upload #emptycontent .button {
 	display: inline-block;
 	height: auto;
@@ -188,8 +144,8 @@ thead {
 }
 
 #public-upload #emptycontent ul {
-	width: 160px;
-	margin: 5px auto;
+	width: 230px;
+	margin: 5px auto 5vh;
 	text-align: left;
 }
 
@@ -201,17 +157,71 @@ thead {
 }
 
 #public-upload #emptycontent li img {
-	vertical-align: text-bottom;
 	margin-right: 5px;
+	position: relative;
+	top: 2px;
 }
 
-#public-upload li span.icon-loading-small {
+#drop-upload-progress-indicator span.icon-loading-small {
 	padding-left: 18px;
 	margin-right: 7px;
 }
 
-.disclaimer {
-	margin: -20px auto 30px;
+#drop-uploaded-files li #drop-upload-name {
+	float: left;
+	max-width: 180px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+#drop-uploaded-files li #drop-upload-status {
+	float: right;
+}
+
+.disclaimer,
+.note {
+	margin: 0 auto 30px;
 	max-width: 400px;
 	text-align: left;
+}
+
+#note-content {
+	padding: 5px;
+	display:inline-block;
+	width: 350px;
+	.content {
+		overflow: auto;
+		max-height: 200px;
+	}
+}
+
+#show-terms-dialog {
+	cursor: pointer;
+	font-weight: bold;
+}
+
+// hide the download entry on the menu
+// on public share when NOT on mobile
+@media only screen and (min-width: $breakpoint-mobile + 1) {
+	#body-public {
+		.header-right {
+			#header-actions-menu {
+				> ul > li#download {
+					display: none;
+				}
+			}
+		}
+	}
+}
+
+// hide the primary on public share on mobile
+@media only screen and (max-width: $breakpoint-mobile) {
+	#body-public {
+		.header-right {
+			#header-primary-action {
+				display: none;
+			}
+		}
+	}
 }

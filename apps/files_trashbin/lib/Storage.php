@@ -2,10 +2,14 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
  * @author Björn Schießle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Julius Härtl <jus@bitgrid.net>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -19,7 +23,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -27,32 +31,19 @@ namespace OCA\Files_Trashbin;
 
 use OC\Files\Filesystem;
 use OC\Files\Storage\Wrapper\Wrapper;
-use OC\Files\View;
+use OCA\Files_Trashbin\Events\MoveToTrashEvent;
+use OCA\Files_Trashbin\Trash\ITrashManager;
 use OCP\Encryption\Exceptions\GenericEncryptionException;
+use OCP\Files\IRootFolder;
+use OCP\Files\Mount\IMountPoint;
+use OCP\Files\Node;
 use OCP\ILogger;
 use OCP\IUserManager;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 class Storage extends Wrapper {
-
+	/** @var IMountPoint */
 	private $mountPoint;
-	// remember already deleted files to avoid infinite loops if the trash bin
-	// move files across storages
-	private $deletedFiles = array();
-
-	/**
-	 * Disable trash logic
-	 *
-	 * @var bool
-	 */
-	private static $disableTrash = false;
-
-	/**
-	 * remember which file/folder was moved out of s shared folder
-	 * in this case we want to add a copy to the owners trash bin
-	 *
-	 * @var array
-	 */
-	private static $moveOutOfSharedFolder = [];
 
 	/** @var  IUserManager */
 	private $userManager;
@@ -60,91 +51,40 @@ class Storage extends Wrapper {
 	/** @var ILogger */
 	private $logger;
 
+	/** @var EventDispatcherInterface */
+	private $eventDispatcher;
+
+	/** @var IRootFolder */
+	private $rootFolder;
+
+	/** @var ITrashManager */
+	private $trashManager;
+
 	/**
 	 * Storage constructor.
 	 *
 	 * @param array $parameters
+	 * @param ITrashManager $trashManager
 	 * @param IUserManager|null $userManager
+	 * @param ILogger|null $logger
+	 * @param EventDispatcherInterface|null $eventDispatcher
+	 * @param IRootFolder|null $rootFolder
 	 */
-	public function __construct($parameters,
-								IUserManager $userManager = null,
-								ILogger $logger = null) {
+	public function __construct(
+		$parameters,
+		ITrashManager $trashManager = null,
+		IUserManager $userManager = null,
+		ILogger $logger = null,
+		EventDispatcherInterface $eventDispatcher = null,
+		IRootFolder $rootFolder = null
+	) {
 		$this->mountPoint = $parameters['mountPoint'];
+		$this->trashManager = $trashManager;
 		$this->userManager = $userManager;
 		$this->logger = $logger;
+		$this->eventDispatcher = $eventDispatcher;
+		$this->rootFolder = $rootFolder;
 		parent::__construct($parameters);
-	}
-
-	/**
-	 * @internal
-	 */
-	public static function preRenameHook($params) {
-		// in cross-storage cases, a rename is a copy + unlink,
-		// that last unlink must not go to trash, only exception:
-		// if the file was moved from a shared storage to a local folder,
-		// in this case the owner should get a copy in his trash bin so that
-		// they can restore the files again
-
-		$oldPath = $params['oldpath'];
-		$newPath = dirname($params['newpath']);
-		$currentUser = \OC::$server->getUserSession()->getUser();
-
-		$fileMovedOutOfSharedFolder = false;
-
-		try {
-			if ($currentUser) {
-				$currentUserId = $currentUser->getUID();
-
-				$view = new View($currentUserId . '/files');
-				$fileInfo = $view->getFileInfo($oldPath);
-				if ($fileInfo) {
-					$sourceStorage = $fileInfo->getStorage();
-					$sourceOwner = $view->getOwner($oldPath);
-					$targetOwner = $view->getOwner($newPath);
-
-					if ($sourceOwner !== $targetOwner
-						&& $sourceStorage->instanceOfStorage('OCA\Files_Sharing\SharedStorage')
-					) {
-						$fileMovedOutOfSharedFolder = true;
-					}
-				}
-			}
-		} catch (\Exception $e) {
-			// do nothing, in this case we just disable the trashbin and continue
-			$logger = \OC::$server->getLogger();
-			$logger->debug('Trashbin storage could not check if a file was moved out of a shared folder: ' . $e->getMessage());
-		}
-
-		if($fileMovedOutOfSharedFolder) {
-			self::$moveOutOfSharedFolder['/' . $currentUserId . '/files' . $oldPath] = true;
-		} else {
-			self::$disableTrash = true;
-		}
-
-	}
-
-	/**
-	 * @internal
-	 */
-	public static function postRenameHook($params) {
-		self::$disableTrash = false;
-	}
-
-	/**
-	 * Rename path1 to path2 by calling the wrapped storage.
-	 *
-	 * @param string $path1 first path
-	 * @param string $path2 second path
-	 * @return bool
-	 */
-	public function rename($path1, $path2) {
-		$result = $this->storage->rename($path1, $path2);
-		if ($result === false) {
-			// when rename failed, the post_rename hook isn't triggered,
-			// but we still want to reenable the trash logic
-			self::$disableTrash = false;
-		}
-		return $result;
 	}
 
 	/**
@@ -156,22 +96,15 @@ class Storage extends Wrapper {
 	 */
 	public function unlink($path) {
 		try {
-			if (isset(self::$moveOutOfSharedFolder[$this->mountPoint . $path])) {
-				$result = $this->doDelete($path, 'unlink', true);
-				unset(self::$moveOutOfSharedFolder[$this->mountPoint . $path]);
-			} else {
-				$result = $this->doDelete($path, 'unlink');
-			}
+			return $this->doDelete($path, 'unlink');
 		} catch (GenericEncryptionException $e) {
 			// in case of a encryption exception we delete the file right away
 			$this->logger->info(
-				"Can't move file" .  $path .
-				"to the trash bin, therefore it was deleted right away");
+				"Can't move file " . $path .
+				" to the trash bin, therefore it was deleted right away");
 
-			$result = $this->storage->unlink($path);
+			return $this->storage->unlink($path);
 		}
-
-		return $result;
 	}
 
 	/**
@@ -182,14 +115,7 @@ class Storage extends Wrapper {
 	 * @return bool true if the operation succeeded, false otherwise
 	 */
 	public function rmdir($path) {
-		if (isset(self::$moveOutOfSharedFolder[$this->mountPoint . $path])) {
-			$result = $this->doDelete($path, 'rmdir', true);
-			unset(self::$moveOutOfSharedFolder[$this->mountPoint . $path]);
-		} else {
-			$result = $this->doDelete($path, 'rmdir');
-		}
-
-		return $result;
+		return $this->doDelete($path, 'rmdir');
 	}
 
 	/**
@@ -199,14 +125,31 @@ class Storage extends Wrapper {
 	 * @param $path
 	 * @return bool
 	 */
-	protected function shouldMoveToTrash($path){
+	protected function shouldMoveToTrash($path) {
 		$normalized = Filesystem::normalizePath($this->mountPoint . '/' . $path);
 		$parts = explode('/', $normalized);
-		if (count($parts) < 4) {
+		if (count($parts) < 4 || strpos($normalized, '/appdata_') === 0) {
 			return false;
 		}
 
-		if ($this->userManager->userExists($parts[1]) && $parts[2] == 'files') {
+		// check if there is a app which want to disable the trash bin for this file
+		$fileId = $this->storage->getCache()->getId($path);
+		$owner = $this->storage->getOwner($path);
+		if ($owner === false) {
+			$nodes = $this->rootFolder->getById($fileId);
+		} else {
+			$nodes = $this->rootFolder->getUserFolder($owner)->getById($fileId);
+		}
+
+		foreach ($nodes as $node) {
+			$event = $this->createMoveToTrashEvent($node);
+			$this->eventDispatcher->dispatch('OCA\Files_Trashbin::moveToTrash', $event);
+			if ($event->shouldMoveToTrashBin() === false) {
+				return false;
+			}
+		}
+
+		if ($parts[2] === 'files' && $this->userManager->userExists($parts[1])) {
 			return true;
 		}
 
@@ -214,21 +157,30 @@ class Storage extends Wrapper {
 	}
 
 	/**
+	 * get move to trash event
+	 *
+	 * @param Node $node
+	 * @return MoveToTrashEvent
+	 */
+	protected function createMoveToTrashEvent(Node $node) {
+		return new MoveToTrashEvent($node);
+	}
+
+	/**
 	 * Run the delete operation with the given method
 	 *
 	 * @param string $path path of file or folder to delete
 	 * @param string $method either "unlink" or "rmdir"
-	 * @param bool $ownerOnly delete for owner only (if file gets moved out of a shared folder)
 	 *
 	 * @return bool true if the operation succeeded, false otherwise
 	 */
-	private function doDelete($path, $method, $ownerOnly = false) {
-		if (self::$disableTrash
-			|| !\OC_App::isEnabled('files_trashbin')
+	private function doDelete($path, $method) {
+		if (
+			!\OC::$server->getAppManager()->isEnabledForUser('files_trashbin')
 			|| (pathinfo($path, PATHINFO_EXTENSION) === 'part')
 			|| $this->shouldMoveToTrash($path) === false
 		) {
-			return call_user_func_array([$this->storage, $method], [$path]);
+			return call_user_func([$this->storage, $method], $path);
 		}
 
 		// check permissions before we continue, this is especially important for
@@ -237,28 +189,12 @@ class Storage extends Wrapper {
 			return false;
 		}
 
-		$normalized = Filesystem::normalizePath($this->mountPoint . '/' . $path, true, false, true);
-		$result = true;
-		$view = Filesystem::getView();
-		if (!isset($this->deletedFiles[$normalized]) && $view instanceof View) {
-			$this->deletedFiles[$normalized] = $normalized;
-			if ($filesPath = $view->getRelativePath($normalized)) {
-				$filesPath = trim($filesPath, '/');
-				$result = \OCA\Files_Trashbin\Trashbin::move2trash($filesPath, $ownerOnly);
-				// in cross-storage cases the file will be copied
-				// but not deleted, so we delete it here
-				if ($result) {
-					call_user_func_array([$this->storage, $method], [$path]);
-				}
-			} else {
-				$result = call_user_func_array([$this->storage, $method], [$path]);
-			}
-			unset($this->deletedFiles[$normalized]);
-		} else if ($this->storage->file_exists($path)) {
-			$result = call_user_func_array([$this->storage, $method], [$path]);
+		$isMovedToTrash = $this->trashManager->moveToTrash($this, $path);
+		if (!$isMovedToTrash) {
+			return call_user_func([$this->storage, $method], $path);
+		} else {
+			return true;
 		}
-
-		return $result;
 	}
 
 	/**
@@ -267,11 +203,17 @@ class Storage extends Wrapper {
 	public static function setupStorage() {
 		\OC\Files\Filesystem::addStorageWrapper('oc_trashbin', function ($mountPoint, $storage) {
 			return new \OCA\Files_Trashbin\Storage(
-				array('storage' => $storage, 'mountPoint' => $mountPoint),
+				['storage' => $storage, 'mountPoint' => $mountPoint],
+				\OC::$server->query(ITrashManager::class),
 				\OC::$server->getUserManager(),
-				\OC::$server->getLogger()
+				\OC::$server->getLogger(),
+				\OC::$server->getEventDispatcher(),
+				\OC::$server->getLazyRootFolder()
 			);
 		}, 1);
 	}
 
+	public function getMountPoint() {
+		return $this->mountPoint;
+	}
 }

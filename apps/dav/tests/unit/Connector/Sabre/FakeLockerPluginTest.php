@@ -2,8 +2,11 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Georg Ehrke <oc.list@georgehrke.com>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Morris Jobke <hey@morrisjobke.de>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
@@ -19,13 +22,19 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
+
 namespace OCA\DAV\Tests\unit\Connector\Sabre;
 
 use OCA\DAV\Connector\Sabre\FakeLockerPlugin;
+use Sabre\DAV\INode;
+use Sabre\DAV\PropFind;
+use Sabre\DAV\Server;
+use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\Response;
+use Sabre\HTTP\ResponseInterface;
 use Test\TestCase;
 
 /**
@@ -37,14 +46,14 @@ class FakeLockerPluginTest extends TestCase {
 	/** @var FakeLockerPlugin */
 	private $fakeLockerPlugin;
 
-	public function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 		$this->fakeLockerPlugin = new FakeLockerPlugin();
 	}
 
 	public function testInitialize() {
-		/** @var \Sabre\DAV\Server $server */
-		$server = $this->getMockBuilder('\Sabre\DAV\Server')
+		/** @var Server $server */
+		$server = $this->getMockBuilder(Server::class)
 			->disableOriginalConstructor()
 			->getMock();
 		$server
@@ -83,10 +92,10 @@ class FakeLockerPluginTest extends TestCase {
 	}
 
 	public function testPropFind() {
-		$propFind = $this->getMockBuilder('\Sabre\DAV\PropFind')
+		$propFind = $this->getMockBuilder(PropFind::class)
 			->disableOriginalConstructor()
 			->getMock();
-		$node = $this->getMockBuilder('\Sabre\DAV\INode')
+		$node = $this->getMockBuilder(INode::class)
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -143,7 +152,7 @@ class FakeLockerPluginTest extends TestCase {
 	 * @param array $expected
 	 */
 	public function testValidateTokens(array $input, array $expected) {
-		$request = $this->getMockBuilder('\Sabre\HTTP\RequestInterface')
+		$request = $this->getMockBuilder(RequestInterface::class)
 			->disableOriginalConstructor()
 			->getMock();
 		$this->fakeLockerPlugin->validateTokens($request, $input);
@@ -151,30 +160,30 @@ class FakeLockerPluginTest extends TestCase {
 	}
 
 	public function testFakeLockProvider() {
-		$request = $this->getMockBuilder('\Sabre\HTTP\RequestInterface')
+		$request = $this->getMockBuilder(RequestInterface::class)
 			->disableOriginalConstructor()
 			->getMock();
 		$response = new Response();
-		$server = $this->getMockBuilder('\Sabre\DAV\Server')
+		$server = $this->getMockBuilder(Server::class)
 			->getMock();
 		$this->fakeLockerPlugin->initialize($server);
 
 		$request->expects($this->exactly(2))
 			->method('getPath')
-			->will($this->returnValue('MyPath'));
+			->willReturn('MyPath');
 
 		$this->assertSame(false, $this->fakeLockerPlugin->fakeLockProvider($request, $response));
 
-		$expectedXml = '<?xml version="1.0" encoding="utf-8"?><d:prop xmlns:d="DAV:" xmlns:s="http://sabredav.org/ns"><d:lockdiscovery><d:activelock><d:lockscope><d:exclusive/></d:lockscope><d:locktype><d:write/></d:locktype><d:lockroot><d:href>MyPath</d:href></d:lockroot><d:depth>infinity</d:depth><d:timeout>Second-1800</d:timeout><d:locktoken><d:href>opaquelocktoken:fe4f7f2437b151fbcb4e9f5c8118c6b1</d:href></d:locktoken><d:owner/></d:activelock></d:lockdiscovery></d:prop>';
+		$expectedXml = '<?xml version="1.0" encoding="utf-8"?><d:prop xmlns:d="DAV:" xmlns:s="http://sabredav.org/ns"><d:lockdiscovery><d:activelock><d:lockscope><d:exclusive/></d:lockscope><d:locktype><d:write/></d:locktype><d:lockroot><d:href>MyPath</d:href></d:lockroot><d:depth>infinity</d:depth><d:timeout>Second-1800</d:timeout><d:locktoken><d:href>opaquelocktoken:fe4f7f2437b151fbcb4e9f5c8118c6b1</d:href></d:locktoken></d:activelock></d:lockdiscovery></d:prop>';
 
 		$this->assertXmlStringEqualsXmlString($expectedXml, $response->getBody());
 	}
 
 	public function testFakeUnlockProvider() {
-		$request = $this->getMockBuilder('\Sabre\HTTP\RequestInterface')
+		$request = $this->getMockBuilder(RequestInterface::class)
 			->disableOriginalConstructor()
 			->getMock();
-		$response = $this->getMockBuilder('\Sabre\HTTP\ResponseInterface')
+		$response = $this->getMockBuilder(ResponseInterface::class)
 			->disableOriginalConstructor()
 			->getMock();
 

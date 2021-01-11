@@ -1,9 +1,15 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Fabrizio Steiner <fabrizio.steiner@gmail.com>
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -17,7 +23,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -31,7 +37,6 @@ namespace OCP\Security;
  * Usage:
  * \OC::$server->getSecureRandom()->generate(10);
  *
- * @package OCP\Security
  * @since 8.0.0
  */
 interface ISecureRandom {
@@ -39,36 +44,17 @@ interface ISecureRandom {
 	/**
 	 * Flags for characters that can be used for <code>generate($length, $characters)</code>
 	 */
-	const CHAR_UPPER = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-	const CHAR_LOWER = 'abcdefghijklmnopqrstuvwxyz';
-	const CHAR_DIGITS = '0123456789';
-	const CHAR_SYMBOLS = '!\"#$%&\\\'()* +,-./:;<=>?@[\]^_`{|}~';
+	public const CHAR_UPPER = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+	public const CHAR_LOWER = 'abcdefghijklmnopqrstuvwxyz';
+	public const CHAR_DIGITS = '0123456789';
+	public const CHAR_SYMBOLS = '!\"#$%&\\\'()*+,-./:;<=>?@[\]^_`{|}~';
 
 	/**
-	 * Convenience method to get a low strength random number generator.
-	 *
-	 * Low Strength should be used anywhere that random strings are needed
-	 * in a non-cryptographical setting. They are not strong enough to be
-	 * used as keys or salts. They are however useful for one-time use tokens.
-	 *
-	 * @return $this
-	 * @since 8.0.0
-	 * @deprecated 9.0.0 Use \OC\Security\SecureRandom::generate directly or random_bytes() / random_int()
+	 * Characters that can be used for <code>generate($length, $characters)</code>, to
+	 * generate human readable random strings. Lower- and upper-case characters and digits
+	 * are included. Characters which are ambiguous are excluded, such as I, l, and 1 and so on.
 	 */
-	public function getLowStrengthGenerator();
-
-	/**
-	 * Convenience method to get a medium strength random number generator.
-	 *
-	 * Medium Strength should be used for most needs of a cryptographic nature.
-	 * They are strong enough to be used as keys and salts. However, they do
-	 * take some time and resources to generate, so they should not be over-used
-	 *
-	 * @return $this
-	 * @since 8.0.0
-	 * @deprecated 9.0.0 Use \OC\Security\SecureRandom::generate directly or random_bytes() / random_int()
-	 */
-	public function getMediumStrengthGenerator();
+	public const CHAR_HUMAN_READABLE = 'abcdefgijkmnopqrstwxyzABCDEFGHJKLMNPQRSTWXYZ23456789';
 
 	/**
 	 * Generate a random string of specified length.
@@ -78,7 +64,6 @@ interface ISecureRandom {
 	 * @return string
 	 * @since 8.0.0
 	 */
-	public function generate($length,
-							 $characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/');
-
+	public function generate(int $length,
+							 string $characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'): string;
 }

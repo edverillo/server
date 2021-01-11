@@ -2,10 +2,11 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Daniel Kesselberg <mail@danielkesselberg.de>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Morris Jobke <hey@morrisjobke.de>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -19,19 +20,20 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\Files\Service;
 
-use OC\Tags;
 use OCA\Files\Activity\FavoriteProvider;
 use OCP\Activity\IManager;
 use OCP\Files\Folder;
 use OCP\ITags;
 use OCP\IUser;
 use OCP\IUserSession;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\EventDispatcher\GenericEvent;
 
 /**
  * Service class to manage tags on files.
@@ -46,23 +48,28 @@ class TagService {
 	private $tagger;
 	/** @var Folder */
 	private $homeFolder;
+	/** @var EventDispatcherInterface */
+	private $dispatcher;
 
 	/**
 	 * @param IUserSession $userSession
 	 * @param IManager $activityManager
 	 * @param ITags $tagger
 	 * @param Folder $homeFolder
+	 * @param EventDispatcherInterface $dispatcher
 	 */
 	public function __construct(
 		IUserSession $userSession,
 		IManager $activityManager,
 		ITags $tagger,
-		Folder $homeFolder
+		Folder $homeFolder,
+		EventDispatcherInterface $dispatcher
 	) {
 		$this->userSession = $userSession;
 		$this->activityManager = $activityManager;
 		$this->tagger = $tagger;
 		$this->homeFolder = $homeFolder;
+		$this->dispatcher = $dispatcher;
 	}
 
 	/**
@@ -78,7 +85,7 @@ class TagService {
 	public function updateFileTags($path, $tags) {
 		$fileId = $this->homeFolder->get($path)->getId();
 
-		$currentTags = $this->tagger->getTagsForObjects(array($fileId));
+		$currentTags = $this->tagger->getTagsForObjects([$fileId]);
 
 		if (!empty($currentTags)) {
 			$currentTags = current($currentTags);
@@ -86,14 +93,14 @@ class TagService {
 
 		$newTags = array_diff($tags, $currentTags);
 		foreach ($newTags as $tag) {
-			if ($tag === Tags::TAG_FAVORITE) {
+			if ($tag === ITags::TAG_FAVORITE) {
 				$this->addActivity(true, $fileId, $path);
 			}
 			$this->tagger->tagAs($fileId, $tag);
 		}
 		$deletedTags = array_diff($currentTags, $tags);
 		foreach ($deletedTags as $tag) {
-			if ($tag === Tags::TAG_FAVORITE) {
+			if ($tag === ITags::TAG_FAVORITE) {
 				$this->addActivity(false, $fileId, $path);
 			}
 			$this->tagger->unTag($fileId, $tag);
@@ -115,6 +122,13 @@ class TagService {
 			return;
 		}
 
+		$eventName = $addToFavorite ? 'addFavorite' : 'removeFavorite';
+		$this->dispatcher->dispatch(self::class . '::' . $eventName, new GenericEvent(null, [
+			'userId' => $user->getUID(),
+			'fileId' => $fileId,
+			'path' => $path,
+		]));
+
 		$event = $this->activityManager->generateEvent();
 		try {
 			$event->setApp('files')
@@ -133,4 +147,3 @@ class TagService {
 		}
 	}
 }
-

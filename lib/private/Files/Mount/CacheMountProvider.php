@@ -16,7 +16,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -58,10 +58,12 @@ class CacheMountProvider implements IMountProvider {
 			$cacheDir = rtrim($cacheBaseDir, '/') . '/' . $user->getUID();
 			if (!file_exists($cacheDir)) {
 				mkdir($cacheDir, 0770, true);
+				mkdir($cacheDir . '/uploads', 0770, true);
 			}
 
 			return [
-				new MountPoint('\OC\Files\Storage\Local', '/' . $user->getUID() . '/cache', ['datadir' => $cacheDir, $loader])
+				new MountPoint('\OC\Files\Storage\Local', '/' . $user->getUID() . '/cache', ['datadir' => $cacheDir, $loader]),
+				new MountPoint('\OC\Files\Storage\Local', '/' . $user->getUID() . '/uploads', ['datadir' => $cacheDir . '/uploads', $loader])
 			];
 		} else {
 			return [];

@@ -23,6 +23,8 @@
 namespace Test\Authentication\Token;
 
 use OC\Authentication\Token\DefaultTokenCleanupJob;
+use OC\Authentication\Token\IProvider;
+use OC\Authentication\Token\Manager;
 use Test\TestCase;
 
 class DefaultTokenCleanupJobTest extends TestCase {
@@ -31,20 +33,14 @@ class DefaultTokenCleanupJobTest extends TestCase {
 	private $job;
 	private $tokenProvider;
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
-		$this->tokenProvider = $this->getMockBuilder('\OC\Authentication\Token\DefaultTokenProvider')
+		$this->tokenProvider = $this->getMockBuilder(Manager::class)
 			->disableOriginalConstructor()
 			->getMock();
-		$this->overwriteService('\OC\Authentication\Token\DefaultTokenProvider', $this->tokenProvider);
+		$this->overwriteService(IProvider::class, $this->tokenProvider);
 		$this->job = new DefaultTokenCleanupJob();
-	}
-
-	protected function tearDown() {
-		parent::tearDown();
-
-		$this->restoreService('\OC\Authentication\Token\DefaultTokenProvider');
 	}
 
 	public function testRun() {
@@ -53,5 +49,4 @@ class DefaultTokenCleanupJobTest extends TestCase {
 			->with();
 		$this->invokePrivate($this->job, 'run', [null]);
 	}
-
 }

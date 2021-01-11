@@ -2,7 +2,9 @@
 /**
  * @copyright Copyright (c) 2016 Lukas Reschke <lukas@statuscode.ch>
  *
+ * @author Julius Härtl <jus@bitgrid.net>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -17,7 +19,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
@@ -31,7 +33,7 @@ class AdminTest extends TestCase {
 	/** @var Admin */
 	private $admin;
 
-	public function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->admin = new Admin();
@@ -43,7 +45,7 @@ class AdminTest extends TestCase {
 	}
 
 	public function testGetSection() {
-		$this->assertSame('workflow', $this->admin->getSection());
+		$this->assertSame('server', $this->admin->getSection());
 	}
 
 	public function testGetPriority() {

@@ -1,12 +1,46 @@
 <?php
+/**
+ *
+ *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Georg Ehrke <oc.list@georgehrke.com>
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Thomas Citharel <nextcloud@tcit.fr>
+ * @author Thomas Müller <thomas.mueller@tmit.eu>
+ * @author Vinicius Cubas Brand <vinicius@eita.org.br>
+ *
+ * @license GNU AGPL version 3 or any later version
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
 
 namespace OCA\DAV\Tests\unit\CalDAV;
 
-use OCA\DAV\CalDAV\Calendar;
-use OCA\DAV\Connector\Sabre\Principal;
-use OCP\IL10N;
 use OCA\DAV\CalDAV\CalDavBackend;
+use OCA\DAV\CalDAV\Calendar;
+use OCA\DAV\CalDAV\PublicCalendar;
 use OCA\DAV\CalDAV\PublicCalendarRoot;
+use OCA\DAV\Connector\Sabre\Principal;
+use OCP\EventDispatcher\IEventDispatcher;
+use OCP\IConfig;
+use OCP\IGroupManager;
+use OCP\IL10N;
+use OCP\ILogger;
 use OCP\IUserManager;
 use OCP\Security\ISecureRandom;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
@@ -20,51 +54,79 @@ use Test\TestCase;
  * @package OCA\DAV\Tests\unit\CalDAV
  */
 class PublicCalendarRootTest extends TestCase {
-
-	const UNIT_TEST_USER = '';
+	public const UNIT_TEST_USER = '';
 	/** @var CalDavBackend */
 	private $backend;
 	/** @var PublicCalendarRoot */
 	private $publicCalendarRoot;
 	/** @var IL10N */
 	private $l10n;
-	/** @var Principal|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var Principal|\PHPUnit\Framework\MockObject\MockObject */
 	private $principal;
-	/** @var IUserManager|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var IUserManager|\PHPUnit\Framework\MockObject\MockObject */
 	protected $userManager;
+	/** @var IGroupManager|\PHPUnit\Framework\MockObject\MockObject */
+	protected $groupManager;
+	/** @var IConfig */
+	protected $config;
 
 	/** @var ISecureRandom */
 	private $random;
+	/** @var ILogger */
+	private $logger;
 
-	public function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$db = \OC::$server->getDatabaseConnection();
 		$this->principal = $this->createMock('OCA\DAV\Connector\Sabre\Principal');
 		$this->userManager = $this->createMock(IUserManager::class);
+		$this->groupManager = $this->createMock(IGroupManager::class);
 		$this->random = \OC::$server->getSecureRandom();
-		$dispatcher = $this->createMock(EventDispatcherInterface::class);
+		$this->logger = $this->createMock(ILogger::class);
+		$dispatcher = $this->createMock(IEventDispatcher::class);
+		$legacyDispatcher = $this->createMock(EventDispatcherInterface::class);
+
+		$this->principal->expects($this->any())->method('getGroupMembership')
+			->withAnyParameters()
+			->willReturn([]);
+
+		$this->principal->expects($this->any())->method('getCircleMembership')
+			->withAnyParameters()
+			->willReturn([]);
 
 		$this->backend = new CalDavBackend(
 			$db,
 			$this->principal,
 			$this->userManager,
+			$this->groupManager,
 			$this->random,
-			$dispatcher
+			$this->logger,
+			$dispatcher,
+			$legacyDispatcher
 		);
-
-		$this->publicCalendarRoot = new PublicCalendarRoot($this->backend);
-
-		$this->l10n = $this->getMockBuilder('\OCP\IL10N')
+		$this->l10n = $this->getMockBuilder(IL10N::class)
 			->disableOriginalConstructor()->getMock();
+		$this->config = $this->createMock(IConfig::class);
+
+		$this->publicCalendarRoot = new PublicCalendarRoot($this->backend,
+			$this->l10n, $this->config);
 	}
 
-	public function tearDown() {
+	protected function tearDown(): void {
 		parent::tearDown();
 
 		if (is_null($this->backend)) {
 			return;
 		}
+		$this->principal->expects($this->any())->method('getGroupMembership')
+			->withAnyParameters()
+			->willReturn([]);
+
+		$this->principal->expects($this->any())->method('getCircleMembership')
+			->withAnyParameters()
+			->willReturn([]);
+
 		$books = $this->backend->getCalendarsForUser(self::UNIT_TEST_USER);
 		foreach ($books as $book) {
 			$this->backend->deleteCalendar($book['id']);
@@ -77,7 +139,6 @@ class PublicCalendarRootTest extends TestCase {
 	}
 
 	public function testGetChild() {
-
 		$calendar = $this->createPublicCalendar();
 
 		$publicCalendars = $this->backend->getPublicCalendars();
@@ -103,13 +164,12 @@ class PublicCalendarRootTest extends TestCase {
 		$this->backend->createCalendar(self::UNIT_TEST_USER, 'Example', []);
 
 		$calendarInfo = $this->backend->getCalendarsForUser(self::UNIT_TEST_USER)[0];
-		$calendar = new Calendar($this->backend, $calendarInfo, $this->l10n);
+		$calendar = new PublicCalendar($this->backend, $calendarInfo, $this->l10n, $this->config);
 		$publicUri = $calendar->setPublishStatus(true);
 
 		$calendarInfo = $this->backend->getPublicCalendar($publicUri);
-		$calendar = new Calendar($this->backend, $calendarInfo, $this->l10n);
+		$calendar = new PublicCalendar($this->backend, $calendarInfo, $this->l10n, $this->config);
 
 		return $calendar;
 	}
-
 }

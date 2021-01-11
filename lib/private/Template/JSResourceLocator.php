@@ -3,8 +3,11 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Bart Visscher <bartv@thisnet.nl>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Kyle Fazzari <kyrofa@ubuntu.com>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -19,7 +22,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -54,12 +57,13 @@ class JSResourceLocator extends ResourceLocator {
 			$found += $this->appendIfExist($this->serverroot, $theme_dir.'core/'.$script.'.js');
 			$found += $this->appendIfExist($this->serverroot, $script.'.js');
 			$found += $this->appendIfExist($this->serverroot, $theme_dir.$script.'.js');
+			$found += $this->appendIfExist($this->serverroot, 'apps/'.$script.'.js');
 			$found += $this->appendIfExist($this->serverroot, $theme_dir.'apps/'.$script.'.js');
 
 			if ($found) {
 				return;
 			}
-		} else if ($this->appendIfExist($this->serverroot, $theme_dir.'apps/'.$script.'.js')
+		} elseif ($this->appendIfExist($this->serverroot, $theme_dir.'apps/'.$script.'.js')
 			|| $this->appendIfExist($this->serverroot, $theme_dir.$script.'.js')
 			|| $this->appendIfExist($this->serverroot, $script.'.js')
 			|| $this->cacheAndAppendCombineJsonIfExist($this->serverroot, $script.'.json')
@@ -71,15 +75,31 @@ class JSResourceLocator extends ResourceLocator {
 		}
 
 		$app = substr($script, 0, strpos($script, '/'));
-		$script = substr($script, strpos($script, '/')+1);
+		$script = substr($script, strpos($script, '/') + 1);
 		$app_path = \OC_App::getAppPath($app);
 		$app_url = \OC_App::getAppWebPath($app);
+
+		if ($app_path !== false) {
+			// Account for the possibility of having symlinks in app path. Only
+			// do this if $app_path is set, because an empty argument to realpath
+			// gets turned into cwd.
+			$app_path = realpath($app_path);
+		}
 
 		// missing translations files fill be ignored
 		if (strpos($script, 'l10n/') === 0) {
 			$this->appendIfExist($app_path, $script . '.js', $app_url);
 			return;
 		}
+
+		if ($app_path === false && $app_url === false) {
+			$this->logger->error('Could not find resource {resource} to load', [
+				'resource' => $app . '/' . $script . '.js',
+				'app' => 'jsresourceloader',
+			]);
+			return;
+		}
+
 		if (!$this->cacheAndAppendCombineJsonIfExist($app_path, $script.'.json', $app)) {
 			$this->append($app_path, $script . '.js', $app_url);
 		}

@@ -18,14 +18,14 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\User_LDAP;
 
 /**
- * @brief wraps around static ownCloud core methods
+ * @brief wraps around static Nextcloud core methods
  */
 class FilesystemHelper {
 
@@ -39,7 +39,7 @@ class FilesystemHelper {
 
 	/**
 	 * @brief initializes the filesystem for the given user
-	 * @param string $uid the ownCloud username of the user
+	 * @param string $uid the Nextcloud username of the user
 	 */
 	public function setup($uid) {
 		\OC_Util::setupFS($uid);

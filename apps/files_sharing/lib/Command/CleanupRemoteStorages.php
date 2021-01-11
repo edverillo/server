@@ -1,8 +1,11 @@
 <?php
 /**
- * @author Jörn Friedrich Dreyer <jfd@butonic.de>
- *
  * @copyright Copyright (c) 2016, ownCloud GmbH.
+ *
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Jörn Friedrich Dreyer <jfd@butonic.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ *
  * @license AGPL-3.0
  *
  * This code is free software: you can redistribute it and/or modify
@@ -15,7 +18,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -56,15 +59,14 @@ class CleanupRemoteStorages extends Command {
 			);
 	}
 
-	public function execute(InputInterface $input, OutputInterface $output) {
-
+	public function execute(InputInterface $input, OutputInterface $output): int {
 		$remoteStorages = $this->getRemoteStorages();
 
-		$output->writeln(count($remoteStorages) . " remote storage(s) need(s) to be checked");
+		$output->writeln(count($remoteStorages) . ' remote storage(s) need(s) to be checked');
 
 		$remoteShareIds = $this->getRemoteShareIds();
 
-		$output->writeln(count($remoteShareIds) . " remote share(s) exist");
+		$output->writeln(count($remoteShareIds) . ' remote share(s) exist');
 
 		foreach ($remoteShareIds as $id => $remoteShareId) {
 			if (isset($remoteStorages[$remoteShareId])) {
@@ -79,7 +81,7 @@ class CleanupRemoteStorages extends Command {
 		}
 
 		if (empty($remoteStorages)) {
-			$output->writeln("<info>no storages deleted</info>");
+			$output->writeln('<info>no storages deleted</info>');
 		} else {
 			$dryRun = $input->getOption('dry-run');
 			foreach ($remoteStorages as $id => $numericId) {
@@ -91,11 +93,12 @@ class CleanupRemoteStorages extends Command {
 				}
 			}
 		}
+		return 0;
 	}
 
 	public function countFiles($numericId, OutputInterface $output) {
 		$queryBuilder = $this->connection->getQueryBuilder();
-		$queryBuilder->select($queryBuilder->createFunction('count(fileid)'))
+		$queryBuilder->select($queryBuilder->func()->count('fileid'))
 			->from('filecache')
 			->where($queryBuilder->expr()->eq(
 				'storage',
@@ -103,7 +106,7 @@ class CleanupRemoteStorages extends Command {
 				IQueryBuilder::PARAM_STR)
 			);
 		$result = $queryBuilder->execute();
-		$count = $result->fetchColumn();
+		$count = $result->fetchOne();
 		$output->writeln("$count files can be deleted for storage $numericId");
 	}
 
@@ -135,7 +138,6 @@ class CleanupRemoteStorages extends Command {
 	}
 
 	public function getRemoteStorages() {
-
 		$queryBuilder = $this->connection->getQueryBuilder();
 		$queryBuilder->select(['id', 'numeric_id'])
 			->from('storages')
@@ -163,7 +165,6 @@ class CleanupRemoteStorages extends Command {
 	}
 
 	public function getRemoteShareIds() {
-
 		$queryBuilder = $this->connection->getQueryBuilder();
 		$queryBuilder->select(['id', 'share_token', 'remote'])
 			->from('share_external');

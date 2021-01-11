@@ -10,35 +10,6 @@
 
 (function(){
 
-// TODO: move to a separate file
-var MOUNT_OPTIONS_DROPDOWN_TEMPLATE =
-	'<div class="drop dropdown mountOptionsDropdown">' +
-	// FIXME: options are hard-coded for now
-	'	<div class="optionRow">' +
-	'		<input id="mountOptionsEncrypt" name="encrypt" type="checkbox" value="true" checked="checked"/>' +
-	'		<label for="mountOptionsEncrypt">{{t "files_external" "Enable encryption"}}</label>' +
-	'	</div>' +
-	'	<div class="optionRow">' +
-	'		<input id="mountOptionsPreviews" name="previews" type="checkbox" value="true" checked="checked"/>' +
-	'		<label for="mountOptionsPreviews">{{t "files_external" "Enable previews"}}</label>' +
-	'	</div>' +
-	'	<div class="optionRow">' +
-	'		<input id="mountOptionsSharing" name="enable_sharing" type="checkbox" value="true"/>' +
-	'		<label for="mountOptionsSharing">{{t "files_external" "Enable sharing"}}</label>' +
-	'	</div>' +
-	'	<div class="optionRow">' +
-	'		<label for="mountOptionsFilesystemCheck">{{t "files_external" "Check for changes"}}</label>' +
-	'		<select id="mountOptionsFilesystemCheck" name="filesystem_check_changes" data-type="int">' +
-	'			<option value="0">{{t "files_external" "Never"}}</option>' +
-	'			<option value="1" selected="selected">{{t "files_external" "Once every direct access"}}</option>' +
-	'		</select>' +
-	'	</div>' +
-	'	<div class="optionRow">' +
-	'		<input id="mountOptionsEncoding" name="encoding_compatibility" type="checkbox" value="true"/>' +
-	'		<label for="mountOptionsEncoding">{{mountOptionsEncodingLabel}}</label>' +
-	'	</div>' +
-	'</div>';
-
 /**
  * Returns the selection of applicable users in the given configuration row
  *
@@ -86,6 +57,14 @@ function highlightInput($input) {
  * @param {int} userListLimit page size for result list
  */
 function addSelect2 ($elements, userListLimit) {
+	var escapeHTML = function (text) {
+		return text.toString()
+			.split('&').join('&amp;')
+			.split('<').join('&lt;')
+			.split('>').join('&gt;')
+			.split('"').join('&quot;')
+			.split('\'').join('&#039;');
+	};
 	if (!$elements.length) {
 		return;
 	}
@@ -93,6 +72,7 @@ function addSelect2 ($elements, userListLimit) {
 		placeholder: t('files_external', 'All users. Type to select user or group.'),
 		allowClear: true,
 		multiple: true,
+		toggleSelect: true,
 		dropdownCssClass: 'files-external-select2',
 		//minimumInputLength: 1,
 		ajax: {
@@ -113,8 +93,8 @@ function addSelect2 ($elements, userListLimit) {
 					var userCount = 0; // users is an object
 
 					// add groups
-					$.each(data.groups, function(i, group) {
-						results.push({name:group+'(group)', displayname:group, type:'group' });
+					$.each(data.groups, function(gid, group) {
+						results.push({name:gid+'(group)', displayname:group, type:'group' });
 					});
 					// add users
 					$.each(data.users, function(id, user) {
@@ -167,7 +147,7 @@ function addSelect2 ($elements, userListLimit) {
 				.attr('data-name', element.name)
 				.attr('data-displayname', element.displayname);
 			if (element.type === 'group') {
-				var url = OC.imagePath('core','places/contacts-dark'); // TODO better group icon
+				var url = OC.imagePath('core','actions/group');
 				$div.html('<img width="32" height="32" src="'+url+'">');
 			}
 			return $result.get(0).outerHTML;
@@ -191,7 +171,7 @@ function addSelect2 ($elements, userListLimit) {
 }
 
 /**
- * @class OCA.External.Settings.StorageConfig
+ * @class OCA.Files_External.Settings.StorageConfig
  *
  * @classdesc External storage config
  */
@@ -199,7 +179,7 @@ var StorageConfig = function(id) {
 	this.id = id;
 	this.backendOptions = {};
 };
-// Keep this in sync with \OC_Mount_Config::STATUS_*
+// Keep this in sync with \OCA\Files_External\MountConfig::STATUS_*
 StorageConfig.Status = {
 	IN_PROGRESS: -1,
 	SUCCESS: 0,
@@ -213,7 +193,7 @@ StorageConfig.Visibility = {
 	DEFAULT: 3
 };
 /**
- * @memberof OCA.External.Settings
+ * @memberof OCA.Files_External.Settings
  */
 StorageConfig.prototype = {
 	_url: null,
@@ -376,8 +356,8 @@ StorageConfig.prototype = {
 };
 
 /**
- * @class OCA.External.Settings.GlobalStorageConfig
- * @augments OCA.External.Settings.StorageConfig
+ * @class OCA.Files_External.Settings.GlobalStorageConfig
+ * @augments OCA.Files_External.Settings.StorageConfig
  *
  * @classdesc Global external storage config
  */
@@ -387,10 +367,10 @@ var GlobalStorageConfig = function(id) {
 	this.applicableGroups = [];
 };
 /**
- * @memberOf OCA.External.Settings
+ * @memberOf OCA.Files_External.Settings
  */
 GlobalStorageConfig.prototype = _.extend({}, StorageConfig.prototype,
-	/** @lends OCA.External.Settings.GlobalStorageConfig.prototype */ {
+	/** @lends OCA.Files_External.Settings.GlobalStorageConfig.prototype */ {
 	_url: 'apps/files_external/globalstorages',
 
 	/**
@@ -430,8 +410,8 @@ GlobalStorageConfig.prototype = _.extend({}, StorageConfig.prototype,
 });
 
 /**
- * @class OCA.External.Settings.UserStorageConfig
- * @augments OCA.External.Settings.StorageConfig
+ * @class OCA.Files_External.Settings.UserStorageConfig
+ * @augments OCA.Files_External.Settings.StorageConfig
  *
  * @classdesc User external storage config
  */
@@ -439,13 +419,13 @@ var UserStorageConfig = function(id) {
 	this.id = id;
 };
 UserStorageConfig.prototype = _.extend({}, StorageConfig.prototype,
-	/** @lends OCA.External.Settings.UserStorageConfig.prototype */ {
+	/** @lends OCA.Files_External.Settings.UserStorageConfig.prototype */ {
 	_url: 'apps/files_external/userstorages'
 });
 
 /**
- * @class OCA.External.Settings.UserGlobalStorageConfig
- * @augments OCA.External.Settings.StorageConfig
+ * @class OCA.Files_External.Settings.UserGlobalStorageConfig
+ * @augments OCA.Files_External.Settings.StorageConfig
  *
  * @classdesc User external storage config
  */
@@ -453,13 +433,13 @@ var UserGlobalStorageConfig = function (id) {
 	this.id = id;
 };
 UserGlobalStorageConfig.prototype = _.extend({}, StorageConfig.prototype,
-	/** @lends OCA.External.Settings.UserStorageConfig.prototype */ {
+	/** @lends OCA.Files_External.Settings.UserStorageConfig.prototype */ {
 
 	_url: 'apps/files_external/userglobalstorages'
 });
 
 /**
- * @class OCA.External.Settings.MountOptionsDropdown
+ * @class OCA.Files_External.Settings.MountOptionsDropdown
  *
  * @classdesc Dropdown for mount options
  *
@@ -468,7 +448,7 @@ UserGlobalStorageConfig.prototype = _.extend({}, StorageConfig.prototype,
 var MountOptionsDropdown = function() {
 };
 /**
- * @memberof OCA.External.Settings
+ * @memberof OCA.Files_External.Settings
  */
 MountOptionsDropdown.prototype = {
 	/**
@@ -490,18 +470,22 @@ MountOptionsDropdown.prototype = {
 			MountOptionsDropdown._last.hide();
 		}
 
-		var template = MountOptionsDropdown._template;
-		if (!template) {
-			template = Handlebars.compile(MOUNT_OPTIONS_DROPDOWN_TEMPLATE);
-			MountOptionsDropdown._template = template;
-		}
-
-		var $el = $(template({
-			mountOptionsEncodingLabel: t('files_external', 'Compatibility with Mac NFD encoding (slow)')
+		var $el = $(OCA.Files_External.Templates.mountOptionsDropDown({
+			mountOptionsEncodingLabel: t('files_external', 'Compatibility with Mac NFD encoding (slow)'),
+			mountOptionsEncryptLabel: t('files_external', 'Enable encryption'),
+			mountOptionsPreviewsLabel: t('files_external', 'Enable previews'),
+			mountOptionsSharingLabel: t('files_external', 'Enable sharing'),
+			mountOptionsFilesystemCheckLabel: t('files_external', 'Check for changes'),
+			mountOptionsFilesystemCheckOnce: t('files_external', 'Never'),
+			mountOptionsFilesystemCheckDA: t('files_external', 'Once every direct access'),
+			mountOptionsReadOnlyLabel: t('files_external', 'Read only'),
+			deleteLabel: t('files_external', 'Delete')
 		}));
 		this.$el = $el;
 
-		this.setOptions(mountOptions, visibleOptions);
+		var storage = $container[0].parentNode.className;
+
+		this.setOptions(mountOptions, visibleOptions, storage);
 
 		this.$el.appendTo($container);
 		MountOptionsDropdown._last = this;
@@ -549,7 +533,13 @@ MountOptionsDropdown.prototype = {
 	 * @param {Object} options mount options
 	 * @param {Array} visibleOptions enabled mount options
 	 */
-	setOptions: function(options, visibleOptions) {
+	setOptions: function(options, visibleOptions, storage) {
+		if (storage === 'owncloud') {
+			var ind = visibleOptions.indexOf('encrypt');
+			if (ind > 0) {
+				visibleOptions.splice(ind, 1);
+			}
+		}
 		var $el = this.$el;
 		_.each(options, function(value, key) {
 			var $optionEl = $el.find('input, select').filterAttr('name', key);
@@ -565,7 +555,7 @@ MountOptionsDropdown.prototype = {
 		$el.find('.optionRow').each(function(i, row){
 			var $row = $(row);
 			var optionId = $row.find('input, select').attr('name');
-			if (visibleOptions.indexOf(optionId) === -1) {
+			if (visibleOptions.indexOf(optionId) === -1 && !$row.hasClass('persistent')) {
 				$row.hide();
 			} else {
 				$row.show();
@@ -575,7 +565,7 @@ MountOptionsDropdown.prototype = {
 };
 
 /**
- * @class OCA.External.Settings.MountConfigListView
+ * @class OCA.Files_External.Settings.MountConfigListView
  *
  * @classdesc Mount configuration list view
  *
@@ -600,7 +590,7 @@ MountConfigListView.ParameterTypes = {
 };
 
 /**
- * @memberOf OCA.External.Settings
+ * @memberOf OCA.Files_External.Settings
  */
 MountConfigListView.prototype = _.extend({
 
@@ -659,9 +649,9 @@ MountConfigListView.prototype = _.extend({
 		this.$el = $el;
 		this._isPersonal = ($el.data('admin') !== true);
 		if (this._isPersonal) {
-			this._storageConfigClass = OCA.External.Settings.UserStorageConfig;
+			this._storageConfigClass = OCA.Files_External.Settings.UserStorageConfig;
 		} else {
-			this._storageConfigClass = OCA.External.Settings.GlobalStorageConfig;
+			this._storageConfigClass = OCA.Files_External.Settings.GlobalStorageConfig;
 		}
 
 		if (options && !_.isUndefined(options.userListLimit)) {
@@ -715,15 +705,15 @@ MountConfigListView.prototype = _.extend({
 			self.recheckStorageConfig($(this).closest('tr'));
 		});
 
-		this.$el.on('click', 'td.remove>img', function() {
+		this.$el.on('click', 'td.mountOptionsToggle .icon-delete', function() {
 			self.deleteStorageConfig($(this).closest('tr'));
 		});
 
-		this.$el.on('click', 'td.save>img', function () {
+		this.$el.on('click', 'td.save>.icon-checkmark', function () {
 			self.saveStorageConfig($(this).closest('tr'));
 		});
 
-		this.$el.on('click', 'td.mountOptionsToggle>img', function() {
+		this.$el.on('click', 'td.mountOptionsToggle>.icon-more', function() {
 			self._showMountOptionsDropdown($(this).closest('tr'));
 		});
 
@@ -804,6 +794,13 @@ MountConfigListView.prototype = _.extend({
 		var mountPoint = storageConfig.mountPoint;
 		var backend = this._allBackends[storageConfig.backend];
 
+		if (!backend) {
+			backend = {
+				name: 'Unknown: ' + storageConfig.backend,
+				invalid: true
+			};
+		}
+
 		// FIXME: Replace with a proper Handlebar template
 		var $tr = this.$el.find('tr#addMountPoint');
 		this.$el.find('tbody').append($tr.clone());
@@ -827,6 +824,13 @@ MountConfigListView.prototype = _.extend({
 		$tr.find('.mountPoint input').val(mountPoint);
 		$tr.addClass(backend.identifier);
 		$tr.find('.backend').data('identifier', backend.identifier);
+
+		if (backend.invalid) {
+			$tr.find('[name=mountPoint]').prop('disabled', true);
+			$tr.find('.applicable,.mountOptionsToggle').empty();
+			this.updateStatus($tr, false, 'Unknown backend: ' + backend.name);
+			return $tr;
+		}
 
 		var selectAuthMechanism = $('<select class="selectAuthMechanism"></select>');
 		var neededVisibility = (this._isPersonal) ? StorageConfig.Visibility.PERSONAL : StorageConfig.Visibility.ADMIN;
@@ -889,7 +893,8 @@ MountConfigListView.prototype = _.extend({
 				'previews': true,
 				'enable_sharing': false,
 				'filesystem_check_changes': 1,
-				'encoding_compatibility': false
+				'encoding_compatibility': false,
+				'readonly': false,
 			}));
 		}
 
@@ -945,6 +950,7 @@ MountConfigListView.prototype = _.extend({
 					if (result.length === 0 && mainForm.attr('data-can-create') === 'false') {
 						mainForm.hide();
 						$('a[href="#external-storage"]').parent().hide();
+						$('#emptycontent').show();
 					}
 					onCompletion.resolve();
 				}
@@ -1009,6 +1015,11 @@ MountConfigListView.prototype = _.extend({
 		} else {
 			newElement = $('<input type="text" class="'+classes.join(' ')+'" data-parameter="'+parameter+'" placeholder="'+ trimmedPlaceholder+'" />');
 		}
+
+		if (placeholder.tooltip) {
+			newElement.attr('title', placeholder.tooltip);
+		}
+
 		highlightInput(newElement);
 		$td.append(newElement);
 		return newElement;
@@ -1018,7 +1029,7 @@ MountConfigListView.prototype = _.extend({
 	 * Gets the storage model from the given row
 	 *
 	 * @param $tr row element
-	 * @return {OCA.External.StorageConfig} storage model instance
+	 * @return {OCA.Files_External.StorageConfig} storage model instance
 	 */
 	getStorageConfig: function($tr) {
 		var storageId = $tr.data('id');
@@ -1114,14 +1125,21 @@ MountConfigListView.prototype = _.extend({
 			return;
 		}
 		var storage = new this._storageConfigClass(configId);
-		this.updateStatus($tr, StorageConfig.Status.IN_PROGRESS);
 
-		storage.destroy({
-			success: function() {
-				$tr.remove();
-			},
-			error: function() {
-				self.updateStatus($tr, StorageConfig.Status.ERROR);
+		OC.dialogs.confirm(t('files_external', 'Are you sure you want to delete this external storage?', {
+				storage: this.mountPoint
+			}), t('files_external', 'Delete storage?'), function(confirm) {
+			if (confirm) {
+				self.updateStatus($tr, StorageConfig.Status.IN_PROGRESS);
+
+				storage.destroy({
+					success: function () {
+						$tr.remove();
+					},
+					error: function () {
+						self.updateStatus($tr, StorageConfig.Status.ERROR);
+					}
+				});
 			}
 		});
 	},
@@ -1197,24 +1215,28 @@ MountConfigListView.prototype = _.extend({
 	 */
 	updateStatus: function($tr, status, message) {
 		var $statusSpan = $tr.find('.status span');
-		$statusSpan.removeClass('loading-small success indeterminate error');
 		switch (status) {
 			case null:
 				// remove status
 				break;
 			case StorageConfig.Status.IN_PROGRESS:
-				$statusSpan.addClass('loading-small');
+				$statusSpan.attr('class', 'icon-loading-small');
 				break;
 			case StorageConfig.Status.SUCCESS:
-				$statusSpan.addClass('success');
+				$statusSpan.attr('class', 'success icon-checkmark-white');
 				break;
 			case StorageConfig.Status.INDETERMINATE:
-				$statusSpan.addClass('indeterminate');
+				$statusSpan.attr('class', 'indeterminate icon-info-white');
 				break;
 			default:
-				$statusSpan.addClass('error');
+				$statusSpan.attr('class', 'error icon-error-white');
 		}
-		$statusSpan.attr('data-original-title', (typeof message === 'string') ? message : '');
+		if (typeof message === 'string') {
+			$statusSpan.attr('title', message);
+			$statusSpan.tooltip();
+		} else {
+			$statusSpan.tooltip('destroy');
+		}
 	},
 
 	/**
@@ -1256,11 +1278,6 @@ MountConfigListView.prototype = _.extend({
 	 * @param {Object} $tr configuration row
 	 */
 	_showMountOptionsDropdown: function($tr) {
-		if (this._preventNextDropdown) {
-			// prevented because the click was on the toggle
-			this._preventNextDropdown = false;
-			return;
-		}
 		var self = this;
 		var storage = this.getStorageConfig($tr);
 		var $toggle = $tr.find('.mountOptionsToggle');
@@ -1269,7 +1286,9 @@ MountConfigListView.prototype = _.extend({
 			'previews',
 			'filesystem_check_changes',
 			'enable_sharing',
-			'encoding_compatibility'
+			'encoding_compatibility',
+			'readonly',
+			'delete'
 		];
 		if (this._encryptionEnabled) {
 			visibleOptions.push('encrypt');
@@ -1277,15 +1296,7 @@ MountConfigListView.prototype = _.extend({
 		dropDown.show($toggle, storage.mountOptions || [], visibleOptions);
 		$('body').on('mouseup.mountOptionsDropdown', function(event) {
 			var $target = $(event.target);
-			if ($toggle.has($target).length) {
-				// why is it always so hard to make dropdowns behave ?
-				// this prevents the click on the toggle to cause
-				// the dropdown to reopen itself
-				// (preventDefault doesn't work here because the click
-				// event is already in the queue and cannot be cancelled)
-				self._preventNextDropdown = true;
-			}
-			if ($target.closest('.dropdown').length) {
+			if ($target.closest('.popovermenu').length) {
 				return;
 			}
 			dropDown.hide();
@@ -1300,7 +1311,7 @@ MountConfigListView.prototype = _.extend({
 	}
 }, OC.Backbone.Events);
 
-$(document).ready(function() {
+window.addEventListener('DOMContentLoaded', function() {
 	var enabled = $('#files_external').attr('data-encryption-enabled');
 	var encryptionEnabled = (enabled ==='true')? true: false;
 	var mountConfigListView = new MountConfigListView($('#externalStorage'), {
@@ -1355,7 +1366,7 @@ $(document).ready(function() {
 		var user = $form.find('[name=username]').val();
 		var password = $form.find('[name=password]').val();
 		var $submit = $form.find('[type=submit]');
-		$submit.val(t('files_external', 'Saving...'));
+		$submit.val(t('files_external', 'Saving …'));
 		$.ajax({
 			type: 'POST',
 			contentType: 'application/json',
@@ -1377,13 +1388,13 @@ $(document).ready(function() {
 	});
 
 	// global instance
-	OCA.External.Settings.mountConfig = mountConfigListView;
+	OCA.Files_External.Settings.mountConfig = mountConfigListView;
 
 	/**
 	 * Legacy
 	 *
 	 * @namespace
-	 * @deprecated use OCA.External.Settings.mountConfig instead
+	 * @deprecated use OCA.Files_External.Settings.mountConfig instead
 	 */
 	OC.MountConfig = {
 		saveStorage: _.bind(mountConfigListView.saveStorageConfig, mountConfigListView)
@@ -1392,14 +1403,14 @@ $(document).ready(function() {
 
 // export
 
-OCA.External = OCA.External || {};
+OCA.Files_External = OCA.Files_External || {};
 /**
  * @namespace
  */
-OCA.External.Settings = OCA.External.Settings || {};
+OCA.Files_External.Settings = OCA.Files_External.Settings || {};
 
-OCA.External.Settings.GlobalStorageConfig = GlobalStorageConfig;
-OCA.External.Settings.UserStorageConfig = UserStorageConfig;
-OCA.External.Settings.MountConfigListView = MountConfigListView;
+OCA.Files_External.Settings.GlobalStorageConfig = GlobalStorageConfig;
+OCA.Files_External.Settings.UserStorageConfig = UserStorageConfig;
+OCA.Files_External.Settings.MountConfigListView = MountConfigListView;
 
 })();

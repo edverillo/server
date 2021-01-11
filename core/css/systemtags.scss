@@ -43,12 +43,12 @@
 		position: relative;
 		input {
 			display: inline-block;
+			height: 30px;
 			width: calc(100% - 40px);
 		}
 	}
 	.label {
 		width: 85%;
-		display: -moz-inline-box;
 		display: inline-block;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -69,8 +69,15 @@
 	}
 }
 
+.systemTagsInfoView,
 .systemtags-select2-container {
 	width: 100%;
+
+	.select2-choices {
+		flex-wrap: nowrap !important;
+		max-height: 44px;
+	}
+
 	.select2-choices .select2-search-choice.select2-locked .label {
 		opacity: 0.5;
 	}

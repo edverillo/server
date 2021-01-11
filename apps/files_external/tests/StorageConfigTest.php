@@ -4,8 +4,9 @@
  *
  * @author Joas Schilling <coding@schilljs.com>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -19,21 +20,23 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\Files_External\Tests;
 
+use OCA\Files_External\Lib\Auth\AuthMechanism;
+use OCA\Files_External\Lib\Backend\Backend;
+use OCA\Files_External\Lib\DefinitionParameter;
 use OCA\Files_External\Lib\StorageConfig;
 
 class StorageConfigTest extends \Test\TestCase {
-
 	public function testJsonSerialization() {
-		$backend = $this->getMockBuilder('\OCA\Files_External\Lib\Backend\Backend')
+		$backend = $this->getMockBuilder(Backend::class)
 			->disableOriginalConstructor()
 			->getMock();
-		$parameter = $this->getMockBuilder('\OCA\Files_External\Lib\DefinitionParameter')
+		$parameter = $this->getMockBuilder(DefinitionParameter::class)
 			->disableOriginalConstructor()
 			->getMock();
 		$parameter
@@ -47,7 +50,7 @@ class StorageConfigTest extends \Test\TestCase {
 		$backend->method('getIdentifier')
 			->willReturn('storage::identifier');
 
-		$authMech = $this->getMockBuilder('\OCA\Files_External\Lib\Auth\AuthMechanism')
+		$authMech = $this->getMockBuilder(AuthMechanism::class)
 			->disableOriginalConstructor()
 			->getMock();
 		$authMech->method('getIdentifier')
@@ -77,5 +80,4 @@ class StorageConfigTest extends \Test\TestCase {
 		$this->assertSame(['group1', 'group2'], $json['applicableGroups']);
 		$this->assertSame(['preview' => false], $json['mountOptions']);
 	}
-
 }

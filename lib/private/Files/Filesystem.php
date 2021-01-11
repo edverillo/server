@@ -5,9 +5,11 @@
  * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
  * @author Bart Visscher <bartv@thisnet.nl>
  * @author Christopher Schäpers <kondou@ts.unde.re>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Florin Peter <github@florin-peter.de>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Jörn Friedrich Dreyer <jfd@butonic.de>
+ * @author korelstar <korelstar@users.noreply.github.com>
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Michael Gapczynski <GapczynskiM@gmail.com>
  * @author Morris Jobke <hey@morrisjobke.de>
@@ -16,7 +18,7 @@
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Sam Tuke <mail@samtuke.com>
  * @author Stephan Peijnik <speijnik@anexia-it.com>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -30,7 +32,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -61,11 +63,11 @@ namespace OC\Files;
 use OC\Cache\CappedMemoryCache;
 use OC\Files\Config\MountProviderCollection;
 use OC\Files\Mount\MountPoint;
-use OC\Files\Storage\StorageFactory;
 use OC\Lockdown\Filesystem\NullStorage;
 use OCP\Files\Config\IMountProvider;
-use OCP\Files\Mount\IMountPoint;
 use OCP\Files\NotFoundException;
+use OCP\Files\Storage\IStorageFactory;
+use OCP\ILogger;
 use OCP\IUserManager;
 
 class Filesystem {
@@ -79,19 +81,19 @@ class Filesystem {
 	/**
 	 * @var \OC\Files\View $defaultInstance
 	 */
-	static private $defaultInstance;
+	private static $defaultInstance;
 
-	static private $usersSetup = array();
+	private static $usersSetup = [];
 
-	static private $normalizedPathCache = null;
+	private static $normalizedPathCache = null;
 
-	static private $listeningForProviders = false;
+	private static $listeningForProviders = false;
 
 	/**
 	 * classname which used for hooks handling
 	 * used as signalclass in OC_Hooks::emit()
 	 */
-	const CLASSNAME = 'OC_Filesystem';
+	public const CLASSNAME = 'OC_Filesystem';
 
 	/**
 	 * signalname emitted before file renaming
@@ -99,7 +101,7 @@ class Filesystem {
 	 * @param string $oldpath
 	 * @param string $newpath
 	 */
-	const signal_rename = 'rename';
+	public const signal_rename = 'rename';
 
 	/**
 	 * signal emitted after file renaming
@@ -107,7 +109,7 @@ class Filesystem {
 	 * @param string $oldpath
 	 * @param string $newpath
 	 */
-	const signal_post_rename = 'post_rename';
+	public const signal_post_rename = 'post_rename';
 
 	/**
 	 * signal emitted before file/dir creation
@@ -115,7 +117,7 @@ class Filesystem {
 	 * @param string $path
 	 * @param bool $run changing this flag to false in hook handler will cancel event
 	 */
-	const signal_create = 'create';
+	public const signal_create = 'create';
 
 	/**
 	 * signal emitted after file/dir creation
@@ -123,7 +125,7 @@ class Filesystem {
 	 * @param string $path
 	 * @param bool $run changing this flag to false in hook handler will cancel event
 	 */
-	const signal_post_create = 'post_create';
+	public const signal_post_create = 'post_create';
 
 	/**
 	 * signal emits before file/dir copy
@@ -132,7 +134,7 @@ class Filesystem {
 	 * @param string $newpath
 	 * @param bool $run changing this flag to false in hook handler will cancel event
 	 */
-	const signal_copy = 'copy';
+	public const signal_copy = 'copy';
 
 	/**
 	 * signal emits after file/dir copy
@@ -140,7 +142,7 @@ class Filesystem {
 	 * @param string $oldpath
 	 * @param string $newpath
 	 */
-	const signal_post_copy = 'post_copy';
+	public const signal_post_copy = 'post_copy';
 
 	/**
 	 * signal emits before file/dir save
@@ -148,14 +150,14 @@ class Filesystem {
 	 * @param string $path
 	 * @param bool $run changing this flag to false in hook handler will cancel event
 	 */
-	const signal_write = 'write';
+	public const signal_write = 'write';
 
 	/**
 	 * signal emits after file/dir save
 	 *
 	 * @param string $path
 	 */
-	const signal_post_write = 'post_write';
+	public const signal_post_write = 'post_write';
 
 	/**
 	 * signal emitted before file/dir update
@@ -163,7 +165,7 @@ class Filesystem {
 	 * @param string $path
 	 * @param bool $run changing this flag to false in hook handler will cancel event
 	 */
-	const signal_update = 'update';
+	public const signal_update = 'update';
 
 	/**
 	 * signal emitted after file/dir update
@@ -171,38 +173,38 @@ class Filesystem {
 	 * @param string $path
 	 * @param bool $run changing this flag to false in hook handler will cancel event
 	 */
-	const signal_post_update = 'post_update';
+	public const signal_post_update = 'post_update';
 
 	/**
 	 * signal emits when reading file/dir
 	 *
 	 * @param string $path
 	 */
-	const signal_read = 'read';
+	public const signal_read = 'read';
 
 	/**
 	 * signal emits when removing file/dir
 	 *
 	 * @param string $path
 	 */
-	const signal_delete = 'delete';
+	public const signal_delete = 'delete';
 
 	/**
 	 * parameters definitions for signals
 	 */
-	const signal_param_path = 'path';
-	const signal_param_oldpath = 'oldpath';
-	const signal_param_newpath = 'newpath';
+	public const signal_param_path = 'path';
+	public const signal_param_oldpath = 'oldpath';
+	public const signal_param_newpath = 'newpath';
 
 	/**
 	 * run - changing this flag to false in hook handler will cancel event
 	 */
-	const signal_param_run = 'run';
+	public const signal_param_run = 'run';
 
-	const signal_create_mount = 'create_mount';
-	const signal_delete_mount = 'delete_mount';
-	const signal_param_mount_type = 'mounttype';
-	const signal_param_users = 'users';
+	public const signal_create_mount = 'create_mount';
+	public const signal_delete_mount = 'delete_mount';
+	public const signal_param_mount_type = 'mounttype';
+	public const signal_param_users = 'users';
 
 	/**
 	 * @var \OC\Files\Storage\StorageFactory $loader
@@ -246,11 +248,11 @@ class Filesystem {
 	/**
 	 * Returns the storage factory
 	 *
-	 * @return \OCP\Files\Storage\IStorageFactory
+	 * @return IStorageFactory
 	 */
 	public static function getLoader() {
 		if (!self::$loader) {
-			self::$loader = new StorageFactory();
+			self::$loader = \OC::$server->query(IStorageFactory::class);
 		}
 		return self::$loader;
 	}
@@ -276,7 +278,7 @@ class Filesystem {
 	 * @param string $path
 	 * @return string
 	 */
-	static public function getMountPoint($path) {
+	public static function getMountPoint($path) {
 		if (!self::$mounts) {
 			\OC_Util::setupFS();
 		}
@@ -294,11 +296,11 @@ class Filesystem {
 	 * @param string $path
 	 * @return string[]
 	 */
-	static public function getMountPoints($path) {
+	public static function getMountPoints($path) {
 		if (!self::$mounts) {
 			\OC_Util::setupFS();
 		}
-		$result = array();
+		$result = [];
 		$mounts = self::$mounts->findIn($path);
 		foreach ($mounts as $mount) {
 			$result[] = $mount->getMountPoint();
@@ -348,19 +350,19 @@ class Filesystem {
 	 * @param string $path
 	 * @return array an array consisting of the storage and the internal path
 	 */
-	static public function resolvePath($path) {
+	public static function resolvePath($path) {
 		if (!self::$mounts) {
 			\OC_Util::setupFS();
 		}
 		$mount = self::$mounts->find($path);
 		if ($mount) {
-			return array($mount->getStorage(), rtrim($mount->getInternalPath($path), '/'));
+			return [$mount->getStorage(), rtrim($mount->getInternalPath($path), '/')];
 		} else {
-			return array(null, null);
+			return [null, null];
 		}
 	}
 
-	static public function init($user, $root) {
+	public static function init($user, $root) {
 		if (self::$defaultInstance) {
 			return false;
 		}
@@ -379,7 +381,7 @@ class Filesystem {
 		return true;
 	}
 
-	static public function initMountManager() {
+	public static function initMountManager() {
 		if (!self::$mounts) {
 			self::$mounts = \OC::$server->getMountManager();
 		}
@@ -409,7 +411,7 @@ class Filesystem {
 		$userObject = $userManager->get($user);
 
 		if (is_null($userObject)) {
-			\OCP\Util::writeLog('files', ' Backends provided no user object for ' . $user, \OCP\Util::ERROR);
+			\OCP\Util::writeLog('files', ' Backends provided no user object for ' . $user, ILogger::ERROR);
 			// reset flag, this will make it possible to rethrow the exception if called again
 			unset(self::$usersSetup[$user]);
 			throw new \OC\User\NoUserException('Backends provided no user object for ' . $user);
@@ -419,7 +421,7 @@ class Filesystem {
 		// workaround in case of different casings
 		if ($user !== $realUid) {
 			$stack = json_encode(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 50));
-			\OCP\Util::writeLog('files', 'initMountPoints() called with wrong user casing. This could be a bug. Expected: "' . $realUid . '" got "' . $user . '". Stack: ' . $stack, \OCP\Util::WARN);
+			\OCP\Util::writeLog('files', 'initMountPoints() called with wrong user casing. This could be a bug. Expected: "' . $realUid . '" got "' . $user . '". Stack: ' . $stack, ILogger::WARN);
 			$user = $realUid;
 
 			// again with the correct casing
@@ -436,8 +438,12 @@ class Filesystem {
 
 			// home mounts are handled seperate since we need to ensure this is mounted before we call the other mount providers
 			$homeMount = $mountConfigManager->getHomeMountForUser($userObject);
-
 			self::getMountManager()->addMount($homeMount);
+
+			if ($homeMount->getStorageRootId() === -1) {
+				$homeMount->getStorage()->mkdir('');
+				$homeMount->getStorage()->getScanner()->scan('');
+			}
 
 			\OC\Files\Filesystem::getStorage($user);
 
@@ -459,7 +465,7 @@ class Filesystem {
 				'/' . $user . '/files'
 			));
 		}
-		\OC_Hook::emit('OC_Filesystem', 'post_initMountPoints', array('user' => $user));
+		\OC_Hook::emit('OC_Filesystem', 'post_initMountPoints', ['user' => $user]);
 	}
 
 	/**
@@ -476,7 +482,7 @@ class Filesystem {
 					$userObject = $userManager->get($user);
 					if ($userObject) {
 						$mounts = $provider->getMountsForUser($userObject, Filesystem::getLoader());
-						array_walk($mounts, array(self::$mounts, 'addMount'));
+						array_walk($mounts, [self::$mounts, 'addMount']);
 					}
 				}
 			});
@@ -488,14 +494,14 @@ class Filesystem {
 	 *
 	 * @return View
 	 */
-	static public function getView() {
+	public static function getView() {
 		return self::$defaultInstance;
 	}
 
 	/**
 	 * tear down the filesystem, removing all storage providers
 	 */
-	static public function tearDown() {
+	public static function tearDown() {
 		self::clearMounts();
 		self::$defaultInstance = null;
 	}
@@ -507,7 +513,7 @@ class Filesystem {
 	 *
 	 * Returns path like /admin/files
 	 */
-	static public function getRoot() {
+	public static function getRoot() {
 		if (!self::$defaultInstance) {
 			return null;
 		}
@@ -519,7 +525,7 @@ class Filesystem {
 	 */
 	public static function clearMounts() {
 		if (self::$mounts) {
-			self::$usersSetup = array();
+			self::$usersSetup = [];
 			self::$mounts->clear();
 		}
 	}
@@ -531,7 +537,7 @@ class Filesystem {
 	 * @param array $arguments
 	 * @param string $mountpoint
 	 */
-	static public function mount($class, $arguments, $mountpoint) {
+	public static function mount($class, $arguments, $mountpoint) {
 		if (!self::$mounts) {
 			\OC_Util::setupFS();
 		}
@@ -547,7 +553,7 @@ class Filesystem {
 	 * @param string $path
 	 * @return string
 	 */
-	static public function getLocalFile($path) {
+	public static function getLocalFile($path) {
 		return self::$defaultInstance->getLocalFile($path);
 	}
 
@@ -555,7 +561,7 @@ class Filesystem {
 	 * @param string $path
 	 * @return string
 	 */
-	static public function getLocalFolder($path) {
+	public static function getLocalFolder($path) {
 		return self::$defaultInstance->getLocalFolder($path);
 	}
 
@@ -565,7 +571,7 @@ class Filesystem {
 	 * @param string $path
 	 * @return string
 	 */
-	static public function getLocalPath($path) {
+	public static function getLocalPath($path) {
 		$datadir = \OC_User::getHome(\OC_User::getUser()) . '/files';
 		$newpath = $path;
 		if (strncmp($newpath, $datadir, strlen($datadir)) == 0) {
@@ -580,7 +586,7 @@ class Filesystem {
 	 * @param string $path
 	 * @return bool
 	 */
-	static public function isValidPath($path) {
+	public static function isValidPath($path) {
 		$path = self::normalizePath($path);
 		if (!$path || $path[0] !== '/') {
 			$path = '/' . $path;
@@ -597,10 +603,10 @@ class Filesystem {
 	 *
 	 * @param array $data from hook
 	 */
-	static public function isBlacklisted($data) {
+	public static function isBlacklisted($data) {
 		if (isset($data['path'])) {
 			$path = $data['path'];
-		} else if (isset($data['newpath'])) {
+		} elseif (isset($data['newpath'])) {
 			$path = $data['newpath'];
 		}
 		if (isset($path)) {
@@ -614,10 +620,10 @@ class Filesystem {
 	 * @param string $filename
 	 * @return bool
 	 */
-	static public function isFileBlacklisted($filename) {
+	public static function isFileBlacklisted($filename) {
 		$filename = self::normalizePath($filename);
 
-		$blacklist = \OC::$server->getConfig()->getSystemValue('blacklisted_files', array('.htaccess'));
+		$blacklist = \OC::$server->getConfig()->getSystemValue('blacklisted_files', ['.htaccess']);
 		$filename = strtolower(basename($filename));
 		return in_array($filename, $blacklist);
 	}
@@ -626,10 +632,10 @@ class Filesystem {
 	 * check if the directory should be ignored when scanning
 	 * NOTE: the special directories . and .. would cause never ending recursion
 	 *
-	 * @param String $dir
+	 * @param string $dir
 	 * @return boolean
 	 */
-	static public function isIgnoredDir($dir) {
+	public static function isIgnoredDir($dir) {
 		if ($dir === '.' || $dir === '..') {
 			return true;
 		}
@@ -639,136 +645,128 @@ class Filesystem {
 	/**
 	 * following functions are equivalent to their php builtin equivalents for arguments/return values.
 	 */
-	static public function mkdir($path) {
+	public static function mkdir($path) {
 		return self::$defaultInstance->mkdir($path);
 	}
 
-	static public function rmdir($path) {
+	public static function rmdir($path) {
 		return self::$defaultInstance->rmdir($path);
 	}
 
-	static public function opendir($path) {
-		return self::$defaultInstance->opendir($path);
-	}
-
-	static public function readdir($path) {
-		return self::$defaultInstance->readdir($path);
-	}
-
-	static public function is_dir($path) {
+	public static function is_dir($path) {
 		return self::$defaultInstance->is_dir($path);
 	}
 
-	static public function is_file($path) {
+	public static function is_file($path) {
 		return self::$defaultInstance->is_file($path);
 	}
 
-	static public function stat($path) {
+	public static function stat($path) {
 		return self::$defaultInstance->stat($path);
 	}
 
-	static public function filetype($path) {
+	public static function filetype($path) {
 		return self::$defaultInstance->filetype($path);
 	}
 
-	static public function filesize($path) {
+	public static function filesize($path) {
 		return self::$defaultInstance->filesize($path);
 	}
 
-	static public function readfile($path) {
+	public static function readfile($path) {
 		return self::$defaultInstance->readfile($path);
 	}
 
-	static public function isCreatable($path) {
+	public static function isCreatable($path) {
 		return self::$defaultInstance->isCreatable($path);
 	}
 
-	static public function isReadable($path) {
+	public static function isReadable($path) {
 		return self::$defaultInstance->isReadable($path);
 	}
 
-	static public function isUpdatable($path) {
+	public static function isUpdatable($path) {
 		return self::$defaultInstance->isUpdatable($path);
 	}
 
-	static public function isDeletable($path) {
+	public static function isDeletable($path) {
 		return self::$defaultInstance->isDeletable($path);
 	}
 
-	static public function isSharable($path) {
+	public static function isSharable($path) {
 		return self::$defaultInstance->isSharable($path);
 	}
 
-	static public function file_exists($path) {
+	public static function file_exists($path) {
 		return self::$defaultInstance->file_exists($path);
 	}
 
-	static public function filemtime($path) {
+	public static function filemtime($path) {
 		return self::$defaultInstance->filemtime($path);
 	}
 
-	static public function touch($path, $mtime = null) {
+	public static function touch($path, $mtime = null) {
 		return self::$defaultInstance->touch($path, $mtime);
 	}
 
 	/**
 	 * @return string
 	 */
-	static public function file_get_contents($path) {
+	public static function file_get_contents($path) {
 		return self::$defaultInstance->file_get_contents($path);
 	}
 
-	static public function file_put_contents($path, $data) {
+	public static function file_put_contents($path, $data) {
 		return self::$defaultInstance->file_put_contents($path, $data);
 	}
 
-	static public function unlink($path) {
+	public static function unlink($path) {
 		return self::$defaultInstance->unlink($path);
 	}
 
-	static public function rename($path1, $path2) {
+	public static function rename($path1, $path2) {
 		return self::$defaultInstance->rename($path1, $path2);
 	}
 
-	static public function copy($path1, $path2) {
+	public static function copy($path1, $path2) {
 		return self::$defaultInstance->copy($path1, $path2);
 	}
 
-	static public function fopen($path, $mode) {
+	public static function fopen($path, $mode) {
 		return self::$defaultInstance->fopen($path, $mode);
 	}
 
 	/**
 	 * @return string
 	 */
-	static public function toTmpFile($path) {
+	public static function toTmpFile($path) {
 		return self::$defaultInstance->toTmpFile($path);
 	}
 
-	static public function fromTmpFile($tmpFile, $path) {
+	public static function fromTmpFile($tmpFile, $path) {
 		return self::$defaultInstance->fromTmpFile($tmpFile, $path);
 	}
 
-	static public function getMimeType($path) {
+	public static function getMimeType($path) {
 		return self::$defaultInstance->getMimeType($path);
 	}
 
-	static public function hash($type, $path, $raw = false) {
+	public static function hash($type, $path, $raw = false) {
 		return self::$defaultInstance->hash($type, $path, $raw);
 	}
 
-	static public function free_space($path = '/') {
+	public static function free_space($path = '/') {
 		return self::$defaultInstance->free_space($path);
 	}
 
-	static public function search($query) {
+	public static function search($query) {
 		return self::$defaultInstance->search($query);
 	}
 
 	/**
 	 * @param string $query
 	 */
-	static public function searchByMime($query) {
+	public static function searchByMime($query) {
 		return self::$defaultInstance->searchByMime($query);
 	}
 
@@ -777,7 +775,7 @@ class Filesystem {
 	 * @param string $userId owner of the tags
 	 * @return FileInfo[] array or file info
 	 */
-	static public function searchByTag($tag, $userId) {
+	public static function searchByTag($tag, $userId) {
 		return self::$defaultInstance->searchByTag($tag, $userId);
 	}
 
@@ -788,7 +786,7 @@ class Filesystem {
 	 * @param int $time
 	 * @return bool
 	 */
-	static public function hasUpdated($path, $time) {
+	public static function hasUpdated($path, $time) {
 		return self::$defaultInstance->hasUpdated($path, $time);
 	}
 
@@ -803,7 +801,7 @@ class Filesystem {
 	 */
 	public static function normalizePath($path, $stripTrailingSlash = true, $isAbsolutePath = false, $keepUnicode = false) {
 		if (is_null(self::$normalizedPathCache)) {
-			self::$normalizedPathCache = new CappedMemoryCache();
+			self::$normalizedPathCache = new CappedMemoryCache(2048);
 		}
 
 		/**
@@ -816,11 +814,11 @@ class Filesystem {
 
 		$cacheKey = json_encode([$path, $stripTrailingSlash, $isAbsolutePath, $keepUnicode]);
 
-		if (isset(self::$normalizedPathCache[$cacheKey])) {
+		if ($cacheKey && isset(self::$normalizedPathCache[$cacheKey])) {
 			return self::$normalizedPathCache[$cacheKey];
 		}
 
-		if ($path == '') {
+		if ($path === '') {
 			return '/';
 		}
 
@@ -829,38 +827,29 @@ class Filesystem {
 			$path = \OC_Util::normalizeUnicode($path);
 		}
 
-		//no windows style slashes
-		$path = str_replace('\\', '/', $path);
+		//add leading slash, if it is already there we strip it anyway
+		$path = '/' . $path;
 
-		//add leading slash
-		if ($path[0] !== '/') {
-			$path = '/' . $path;
-		}
+		$patterns = [
+			'/\\\\/s',          // no windows style slashes
+			'/\/\.(\/\.)?\//s', // remove '/./'
+			'/\/{2,}/s',        // remove sequence of slashes
+			'/\/\.$/s',         // remove trailing /.
+		];
 
-		// remove '/./'
-		// ugly, but str_replace() can't replace them all in one go
-		// as the replacement itself is part of the search string
-		// which will only be found during the next iteration
-		while (strpos($path, '/./') !== false) {
-			$path = str_replace('/./', '/', $path);
-		}
-		// remove sequences of slashes
-		$path = preg_replace('#/{2,}#', '/', $path);
+		do {
+			$count = 0;
+			$path = preg_replace($patterns, '/', $path, -1, $count);
+		} while ($count > 0);
 
 		//remove trailing slash
-		if ($stripTrailingSlash and strlen($path) > 1 and substr($path, -1, 1) === '/') {
-			$path = substr($path, 0, -1);
+		if ($stripTrailingSlash && strlen($path) > 1) {
+			$path = rtrim($path, '/');
 		}
 
-		// remove trailing '/.'
-		if (substr($path, -2) == '/.') {
-			$path = substr($path, 0, -2);
-		}
+		self::$normalizedPathCache[$cacheKey] = $path;
 
-		$normalizedPath = $path;
-		self::$normalizedPathCache[$cacheKey] = $normalizedPath;
-
-		return $normalizedPath;
+		return $path;
 	}
 
 	/**
@@ -928,7 +917,7 @@ class Filesystem {
 	 * @param string $path
 	 * @return string
 	 */
-	static public function getETag($path) {
+	public static function getETag($path) {
 		return self::$defaultInstance->getETag($path);
 	}
 }

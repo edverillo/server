@@ -20,11 +20,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
+
 namespace Test\Share20;
 
 use OC\Share20\LegacyHooks;
 use OC\Share20\Manager;
+use OCP\Constants;
 use OCP\Files\File;
+use OCP\Share\IShare;
 use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\EventDispatcher\GenericEvent;
 use Test\TestCase;
@@ -40,7 +43,7 @@ class LegacyHooksTest extends TestCase {
 	/** @var Manager */
 	private $manager;
 
-	public function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->eventDispatcher = new EventDispatcher();
@@ -55,7 +58,7 @@ class LegacyHooksTest extends TestCase {
 		$share = $this->manager->newShare();
 		$share->setId(42)
 			->setProviderId('prov')
-			->setShareType(\OCP\Share::SHARE_TYPE_USER)
+			->setShareType(IShare::TYPE_USER)
 			->setSharedWith('awesomeUser')
 			->setSharedBy('sharedBy')
 			->setNode($path)
@@ -68,7 +71,7 @@ class LegacyHooksTest extends TestCase {
 			'id' => 42,
 			'itemType' => 'file',
 			'itemSource' => 1,
-			'shareType' => \OCP\Share::SHARE_TYPE_USER,
+			'shareType' => IShare::TYPE_USER,
 			'shareWith' => 'awesomeUser',
 			'itemparent' => null,
 			'uidOwner' => 'sharedBy',
@@ -92,20 +95,20 @@ class LegacyHooksTest extends TestCase {
 		$share = $this->manager->newShare();
 		$share->setId(42)
 			->setProviderId('prov')
-			->setShareType(\OCP\Share::SHARE_TYPE_USER)
+			->setShareType(IShare::TYPE_USER)
 			->setSharedWith('awesomeUser')
 			->setSharedBy('sharedBy')
 			->setNode($path)
 			->setTarget('myTarget');
 
 		$hookListner = $this->getMockBuilder('Dummy')->setMethods(['post'])->getMock();
-		\OCP\Util::connectHook('OCP\Share', 'pre_unshare', $hookListner, 'post');
+		\OCP\Util::connectHook('OCP\Share', 'post_unshare', $hookListner, 'post');
 
 		$hookListnerExpectsPost = [
 			'id' => 42,
 			'itemType' => 'file',
 			'itemSource' => 1,
-			'shareType' => \OCP\Share::SHARE_TYPE_USER,
+			'shareType' => IShare::TYPE_USER,
 			'shareWith' => 'awesomeUser',
 			'itemparent' => null,
 			'uidOwner' => 'sharedBy',
@@ -116,7 +119,7 @@ class LegacyHooksTest extends TestCase {
 					'id' => 42,
 					'itemType' => 'file',
 					'itemSource' => 1,
-					'shareType' => \OCP\Share::SHARE_TYPE_USER,
+					'shareType' => IShare::TYPE_USER,
 					'shareWith' => 'awesomeUser',
 					'itemparent' => null,
 					'uidOwner' => 'sharedBy',
@@ -134,5 +137,206 @@ class LegacyHooksTest extends TestCase {
 		$event = new GenericEvent($share);
 		$event->setArgument('deletedShares', [$share]);
 		$this->eventDispatcher->dispatch('OCP\Share::postUnshare', $event);
+	}
+
+	public function testPostUnshareFromSelf() {
+		$path = $this->createMock(File::class);
+		$path->method('getId')->willReturn(1);
+
+		$share = $this->manager->newShare();
+		$share->setId(42)
+			->setProviderId('prov')
+			->setShareType(IShare::TYPE_USER)
+			->setSharedWith('awesomeUser')
+			->setSharedBy('sharedBy')
+			->setNode($path)
+			->setTarget('myTarget');
+
+		$hookListner = $this->getMockBuilder('Dummy')->setMethods(['postFromSelf'])->getMock();
+		\OCP\Util::connectHook('OCP\Share', 'post_unshareFromSelf', $hookListner, 'postFromSelf');
+
+		$hookListnerExpectsPostFromSelf = [
+			'id' => 42,
+			'itemType' => 'file',
+			'itemSource' => 1,
+			'shareType' => IShare::TYPE_USER,
+			'shareWith' => 'awesomeUser',
+			'itemparent' => null,
+			'uidOwner' => 'sharedBy',
+			'fileSource' => 1,
+			'fileTarget' => 'myTarget',
+			'itemTarget' => 'myTarget',
+			'unsharedItems' => [
+				[
+					'id' => 42,
+					'itemType' => 'file',
+					'itemSource' => 1,
+					'shareType' => IShare::TYPE_USER,
+					'shareWith' => 'awesomeUser',
+					'itemparent' => null,
+					'uidOwner' => 'sharedBy',
+					'fileSource' => 1,
+					'fileTarget' => 'myTarget',
+					'itemTarget' => 'myTarget',
+				],
+			],
+		];
+
+		$hookListner
+			->expects($this->exactly(1))
+			->method('postFromSelf')
+			->with($hookListnerExpectsPostFromSelf);
+
+		$event = new GenericEvent($share);
+		$this->eventDispatcher->dispatch('OCP\Share::postUnshareFromSelf', $event);
+	}
+
+	public function testPreShare() {
+		$path = $this->createMock(File::class);
+		$path->method('getId')->willReturn(1);
+
+		$date = new \DateTime();
+
+		$share = $this->manager->newShare();
+		$share->setShareType(IShare::TYPE_LINK)
+			->setSharedWith('awesomeUser')
+			->setSharedBy('sharedBy')
+			->setNode($path)
+			->setTarget('myTarget')
+			->setPermissions(Constants::PERMISSION_ALL)
+			->setExpirationDate($date)
+			->setPassword('password')
+			->setToken('token');
+
+
+		$hookListner = $this->getMockBuilder('Dummy')->setMethods(['preShare'])->getMock();
+		\OCP\Util::connectHook('OCP\Share', 'pre_shared', $hookListner, 'preShare');
+
+		$run = true;
+		$error = '';
+
+		$expected = [
+			'itemType' => 'file',
+			'itemSource' => 1,
+			'shareType' => IShare::TYPE_LINK,
+			'shareWith' => 'awesomeUser',
+			'uidOwner' => 'sharedBy',
+			'fileSource' => 1,
+			'itemTarget' => 'myTarget',
+			'permissions' => Constants::PERMISSION_ALL,
+			'expiration' => $date,
+			'token' => 'token',
+			'run' => &$run,
+			'error' => &$error,
+		];
+
+		$hookListner
+			->expects($this->exactly(1))
+			->method('preShare')
+			->with($expected);
+
+		$event = new GenericEvent($share);
+		$this->eventDispatcher->dispatch('OCP\Share::preShare', $event);
+	}
+
+	public function testPreShareError() {
+		$path = $this->createMock(File::class);
+		$path->method('getId')->willReturn(1);
+
+		$date = new \DateTime();
+
+		$share = $this->manager->newShare();
+		$share->setShareType(IShare::TYPE_LINK)
+			->setSharedWith('awesomeUser')
+			->setSharedBy('sharedBy')
+			->setNode($path)
+			->setTarget('myTarget')
+			->setPermissions(Constants::PERMISSION_ALL)
+			->setExpirationDate($date)
+			->setPassword('password')
+			->setToken('token');
+
+
+		$hookListner = $this->getMockBuilder('Dummy')->setMethods(['preShare'])->getMock();
+		\OCP\Util::connectHook('OCP\Share', 'pre_shared', $hookListner, 'preShare');
+
+		$run = true;
+		$error = '';
+
+		$expected = [
+			'itemType' => 'file',
+			'itemSource' => 1,
+			'shareType' => IShare::TYPE_LINK,
+			'shareWith' => 'awesomeUser',
+			'uidOwner' => 'sharedBy',
+			'fileSource' => 1,
+			'itemTarget' => 'myTarget',
+			'permissions' => Constants::PERMISSION_ALL,
+			'expiration' => $date,
+			'token' => 'token',
+			'run' => &$run,
+			'error' => &$error,
+		];
+
+		$hookListner
+			->expects($this->exactly(1))
+			->method('preShare')
+			->with($expected)
+			->willReturnCallback(function ($data) {
+				$data['run'] = false;
+				$data['error'] = 'I error';
+			});
+
+		$event = new GenericEvent($share);
+		$this->eventDispatcher->dispatch('OCP\Share::preShare', $event);
+
+		$this->assertTrue($event->isPropagationStopped());
+		$this->assertSame('I error', $event->getArgument('error'));
+	}
+
+	public function testPostShare() {
+		$path = $this->createMock(File::class);
+		$path->method('getId')->willReturn(1);
+
+		$date = new \DateTime();
+
+		$share = $this->manager->newShare();
+		$share->setId(42)
+			->setShareType(IShare::TYPE_LINK)
+			->setSharedWith('awesomeUser')
+			->setSharedBy('sharedBy')
+			->setNode($path)
+			->setTarget('myTarget')
+			->setPermissions(Constants::PERMISSION_ALL)
+			->setExpirationDate($date)
+			->setPassword('password')
+			->setToken('token');
+
+
+		$hookListner = $this->getMockBuilder('Dummy')->setMethods(['postShare'])->getMock();
+		\OCP\Util::connectHook('OCP\Share', 'post_shared', $hookListner, 'postShare');
+
+		$expected = [
+			'id' => 42,
+			'itemType' => 'file',
+			'itemSource' => 1,
+			'shareType' => IShare::TYPE_LINK,
+			'shareWith' => 'awesomeUser',
+			'uidOwner' => 'sharedBy',
+			'fileSource' => 1,
+			'itemTarget' => 'myTarget',
+			'fileTarget' => 'myTarget',
+			'permissions' => Constants::PERMISSION_ALL,
+			'expiration' => $date,
+			'token' => 'token',
+		];
+
+		$hookListner
+			->expects($this->exactly(1))
+			->method('postShare')
+			->with($expected);
+
+		$event = new GenericEvent($share);
+		$this->eventDispatcher->dispatch('OCP\Share::postShare', $event);
 	}
 }

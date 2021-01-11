@@ -1,7 +1,9 @@
 <?php
 /**
-
  *
+ *
+ * @author Daniel Calviño Sánchez <danxuliu@gmail.com>
+ * @author Joas Schilling <coding@schilljs.com>
  * @author Sergio Bertolin <sbertolin@solidgear.es>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
@@ -18,7 +20,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 use Behat\Behat\Context\Context;
@@ -31,5 +33,7 @@ require __DIR__ . '/../../vendor/autoload.php';
  * Features context.
  */
 class FeatureContext implements Context, SnippetAcceptingContext {
+	use Search;
 	use WebDav;
+	use Trashbin;
 }

@@ -45,7 +45,7 @@ describe('OCA.SystemTags.SystemTagsInfoView tests', function() {
 			var fetchStub = sinon.stub(OC.SystemTags.SystemTagsMappingCollection.prototype, 'fetch');
 			var setDataStub = sinon.stub(OC.SystemTags.SystemTagsInputField.prototype, 'setData');
 
-			expect(view.$el.hasClass('hidden')).toEqual(true);
+			expect(view.$el.hasClass('hidden')).toEqual(false);
 
 			view.setFileInfo({id: '123'});
 			expect(view.$el.find('input[name=tags]').length).toEqual(1);
@@ -199,6 +199,51 @@ describe('OCA.SystemTags.SystemTagsInfoView tests', function() {
 			
 			expect(view.selectedTagsCollection.get('3')).toBeFalsy();
 
+		});
+	});
+	describe('visibility', function() {
+		it('reports visibility based on the "hidden" class name', function() {
+			view.$el.addClass('hidden');
+
+			expect(view.isVisible()).toBeFalsy();
+
+			view.$el.removeClass('hidden');
+
+			expect(view.isVisible()).toBeTruthy();
+		});
+		it('is visible after rendering', function() {
+			view.render();
+
+			expect(view.isVisible()).toBeTruthy();
+		});
+		it('shows and hides the element', function() {
+			view.show();
+
+			expect(view.isVisible()).toBeTruthy();
+
+			view.hide();
+
+			expect(view.isVisible()).toBeFalsy();
+
+			view.show();
+
+			expect(view.isVisible()).toBeTruthy();
+		});
+	});
+	describe('select2', function() {
+		var select2Stub;
+
+		beforeEach(function() {
+			select2Stub = sinon.stub($.fn, 'select2');
+		});
+		afterEach(function() {
+			select2Stub.restore();
+		});
+		it('opens dropdown', function() {
+			view.openDropdown();
+
+			expect(select2Stub.calledOnce).toBeTruthy();
+			expect(select2Stub.withArgs('open')).toBeTruthy();
 		});
 	});
 });

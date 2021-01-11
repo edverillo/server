@@ -2,10 +2,16 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud GmbH
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
  * @author Bart Visscher <bartv@thisnet.nl>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Daniel Kesselberg <mail@danielkesselberg.de>
+ * @author Georg Ehrke <oc.list@georgehrke.com>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author John Molakvoæ (skjnldsv) <skjnldsv@protonmail.com>
+ * @author Julius Härtl <jus@bitgrid.net>
+ * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
- * @author Robin McCorkell <robin@mccorkell.me.uk>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -20,7 +26,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -74,12 +80,7 @@ class NavigationManager implements INavigationManager {
 	}
 
 	/**
-	 * Creates a new navigation entry
-	 *
-	 * @param array|\Closure $entry Array containing: id, name, order, icon and href key
-	 *					The use of a closure is preferred, because it will avoid
-	 * 					loading the routing of your app, unless required.
-	 * @return void
+	 * @inheritDoc
 	 */
 	public function add($entry) {
 		if ($entry instanceof \Closure) {
@@ -88,35 +89,70 @@ class NavigationManager implements INavigationManager {
 		}
 
 		$entry['active'] = false;
-		if(!isset($entry['icon'])) {
+		if (!isset($entry['icon'])) {
 			$entry['icon'] = '';
 		}
-		if(!isset($entry['type'])) {
+		if (!isset($entry['classes'])) {
+			$entry['classes'] = '';
+		}
+		if (!isset($entry['type'])) {
 			$entry['type'] = 'link';
 		}
-		$this->entries[] = $entry;
+		$this->entries[$entry['id']] = $entry;
 	}
 
 	/**
-	 * returns all the added Menu entries
-	 * @param string $type
-	 * @return array an array of the added entries
+	 * @inheritDoc
 	 */
-	public function getAll($type = 'link') {
+	public function getAll(string $type = 'link'): array {
 		$this->init();
 		foreach ($this->closureEntries as $c) {
 			$this->add($c());
 		}
-		$this->closureEntries = array();
+		$this->closureEntries = [];
 
-		if ($type === 'all') {
-			return $this->entries;
+		$result = $this->entries;
+		if ($type !== 'all') {
+			$result = array_filter($this->entries, function ($entry) use ($type) {
+				return $entry['type'] === $type;
+			});
 		}
 
-		return array_filter($this->entries, function($entry) use ($type) {
-			return $entry['type'] === $type;
-		});
+		return $this->proceedNavigation($result);
 	}
+
+	/**
+	 * Sort navigation entries by order, name and set active flag
+	 *
+	 * @param array $list
+	 * @return array
+	 */
+	private function proceedNavigation(array $list): array {
+		uasort($list, function ($a, $b) {
+			if (isset($a['order']) && isset($b['order'])) {
+				return ($a['order'] < $b['order']) ? -1 : 1;
+			} elseif (isset($a['order']) || isset($b['order'])) {
+				return isset($a['order']) ? -1 : 1;
+			} else {
+				return ($a['name'] < $b['name']) ? -1 : 1;
+			}
+		});
+
+		$activeApp = $this->getActiveEntry();
+		if ($activeApp !== null) {
+			foreach ($list as $index => &$navEntry) {
+				if ($navEntry['id'] == $activeApp) {
+					$navEntry['active'] = true;
+				} else {
+					$navEntry['active'] = false;
+				}
+			}
+			unset($navEntry);
+		}
+
+		return $list;
+	}
+
 
 	/**
 	 * removes all the entries
@@ -128,19 +164,14 @@ class NavigationManager implements INavigationManager {
 	}
 
 	/**
-	 * Sets the current navigation entry of the currently running app
-	 * @param string $id of the app entry to activate (from added $entry)
+	 * @inheritDoc
 	 */
 	public function setActiveEntry($id) {
 		$this->activeEntry = $id;
 	}
 
 	/**
-	 * gets the active Menu entry
-	 * @return string id or empty string
-	 *
-	 * This function returns the id of the active navigation entry (set by
-	 * setActiveEntry
+	 * @inheritDoc
 	 */
 	public function getActiveEntry() {
 		return $this->activeEntry;
@@ -157,8 +188,8 @@ class NavigationManager implements INavigationManager {
 			$this->add([
 				'type' => 'settings',
 				'id' => 'help',
-				'order' => 5,
-				'href' => $this->urlGenerator->linkToRoute('settings_help'),
+				'order' => 6,
+				'href' => $this->urlGenerator->linkToRoute('settings.Help.help'),
 				'name' => $l->t('Help'),
 				'icon' => $this->urlGenerator->imagePath('settings', 'help.svg'),
 			]);
@@ -170,57 +201,45 @@ class NavigationManager implements INavigationManager {
 				$this->add([
 					'type' => 'settings',
 					'id' => 'core_apps',
-					'order' => 3,
+					'order' => 4,
 					'href' => $this->urlGenerator->linkToRoute('settings.AppSettings.viewApps'),
 					'icon' => $this->urlGenerator->imagePath('settings', 'apps.svg'),
 					'name' => $l->t('Apps'),
 				]);
 			}
 
-			// Personal settings
+			// Personal and (if applicable) admin settings
 			$this->add([
 				'type' => 'settings',
-				'id' => 'personal',
-				'order' => 1,
-				'href' => $this->urlGenerator->linkToRoute('settings_personal'),
-				'name' => $l->t('Personal'),
-				'icon' => $this->urlGenerator->imagePath('settings', 'personal.svg'),
+				'id' => 'settings',
+				'order' => 2,
+				'href' => $this->urlGenerator->linkToRoute('settings.PersonalSettings.index'),
+				'name' => $l->t('Settings'),
+				'icon' => $this->urlGenerator->imagePath('settings', 'admin.svg'),
 			]);
 
-			// Logout
-			$this->add([
-				'type' => 'settings',
-				'id' => 'logout',
-				'order' => 99999,
-				'href' => $this->urlGenerator->linkToRouteAbsolute(
-					'core.login.logout',
-					['requesttoken' => \OCP\Util::callRegister()]
-				),
-				'name' => $l->t('Log out'),
-				'icon' => $this->urlGenerator->imagePath('core', 'actions/logout.svg'),
-			]);
+			$logoutUrl = \OC_User::getLogoutUrl($this->urlGenerator);
+			if ($logoutUrl !== '') {
+				// Logout
+				$this->add([
+					'type' => 'settings',
+					'id' => 'logout',
+					'order' => 99999,
+					'href' => $logoutUrl,
+					'name' => $l->t('Log out'),
+					'icon' => $this->urlGenerator->imagePath('core', 'actions/logout.svg'),
+				]);
+			}
 
 			if ($this->isSubadmin()) {
 				// User management
 				$this->add([
 					'type' => 'settings',
 					'id' => 'core_users',
-					'order' => 4,
-					'href' => $this->urlGenerator->linkToRoute('settings_users'),
+					'order' => 5,
+					'href' => $this->urlGenerator->linkToRoute('settings.Users.usersList'),
 					'name' => $l->t('Users'),
 					'icon' => $this->urlGenerator->imagePath('settings', 'users.svg'),
-				]);
-			}
-
-			if ($this->isAdmin()) {
-				// Admin settings
-				$this->add([
-					'type' => 'settings',
-					'id' => 'admin',
-					'order' => 2,
-					'href' => $this->urlGenerator->linkToRoute('settings.AdminSettings.index'),
-					'name' => $l->t('Admin'),
-					'icon' => $this->urlGenerator->imagePath('settings', 'admin.svg'),
 				]);
 			}
 		}
@@ -228,13 +247,24 @@ class NavigationManager implements INavigationManager {
 		if ($this->appManager === 'null') {
 			return;
 		}
-		foreach ($this->appManager->getInstalledApps() as $app) {
-			// load plugins and collections from info.xml
-			$info = $this->appManager->getAppInfo($app);
-			if (empty($info['navigations'])) {
+
+		if ($this->userSession->isLoggedIn()) {
+			$apps = $this->appManager->getEnabledAppsForUser($this->userSession->getUser());
+		} else {
+			$apps = $this->appManager->getInstalledApps();
+		}
+
+		foreach ($apps as $app) {
+			if (!$this->userSession->isLoggedIn() && !$this->appManager->isEnabledForUser($app, $this->userSession->getUser())) {
 				continue;
 			}
-			foreach ($info['navigations'] as $nav) {
+
+			// load plugins and collections from info.xml
+			$info = $this->appManager->getAppInfo($app);
+			if (!isset($info['navigations']['navigation'])) {
+				continue;
+			}
+			foreach ($info['navigations']['navigation'] as $key => $nav) {
 				if (!isset($nav['name'])) {
 					continue;
 				}
@@ -246,10 +276,10 @@ class NavigationManager implements INavigationManager {
 					continue;
 				}
 				$l = $this->l10nFac->get($app);
-				$id = isset($nav['id']) ? $nav['id'] : $app;
+				$id = $nav['id'] ?? $app . ($key === 0 ? '' : $key);
 				$order = isset($nav['order']) ? $nav['order'] : 100;
 				$type = isset($nav['type']) ? $nav['type'] : 'link';
-				$route = $this->urlGenerator->linkToRoute($nav['route']);
+				$route = $nav['route'] !== '' ? $this->urlGenerator->linkToRoute($nav['route']) : '';
 				$icon = isset($nav['icon']) ? $nav['icon'] : 'app.svg';
 				foreach ([$icon, "$app.svg"] as $i) {
 					try {

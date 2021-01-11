@@ -3,6 +3,8 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Björn Schießle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
@@ -19,13 +21,11 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
-
 namespace OCA\Federation;
-
 
 use OC\Files\Filesystem;
 use OC\HintException;
@@ -77,7 +77,7 @@ class DbHandler {
 		$query->insert($this->dbTable)
 			->values(
 				[
-					'url' =>  $query->createParameter('url'),
+					'url' => $query->createParameter('url'),
 					'url_hash' => $query->createParameter('url_hash'),
 				]
 			)
@@ -88,11 +88,11 @@ class DbHandler {
 
 		if ($result) {
 			return (int)$this->connection->lastInsertId('*PREFIX*'.$this->dbTable);
-		} else {
-			$message = 'Internal failure, Could not add trusted server: ' . $url;
-			$message_t = $this->IL10N->t('Could not add server');
-			throw new HintException($message, $message_t);
 		}
+
+		$message = 'Internal failure, Could not add trusted server: ' . $url;
+		$message_t = $this->IL10N->t('Could not add server');
+		throw new HintException($message, $message_t);
 	}
 
 	/**
@@ -120,8 +120,10 @@ class DbHandler {
 		$query->select('*')->from($this->dbTable)
 			->where($query->expr()->eq('id', $query->createParameter('id')))
 			->setParameter('id', $id);
-		$query->execute();
-		$result = $query->execute()->fetchAll();
+
+		$qResult = $query->execute();
+		$result = $qResult->fetchAll();
+		$qResult->closeCursor();
 
 		if (empty($result)) {
 			throw new \Exception('No Server found with ID: ' . $id);
@@ -137,8 +139,11 @@ class DbHandler {
 	 */
 	public function getAllServer() {
 		$query = $this->connection->getQueryBuilder();
-		$query->select(['url', 'url_hash', 'id', 'status', 'shared_secret', 'sync_token'])->from($this->dbTable);
-		$result = $query->execute()->fetchAll();
+		$query->select(['url', 'url_hash', 'id', 'status', 'shared_secret', 'sync_token'])
+			->from($this->dbTable);
+		$statement = $query->execute();
+		$result = $statement->fetchAll();
+		$statement->closeCursor();
 		return $result;
 	}
 
@@ -151,10 +156,13 @@ class DbHandler {
 	public function serverExists($url) {
 		$hash = $this->hash($url);
 		$query = $this->connection->getQueryBuilder();
-		$query->select('url')->from($this->dbTable)
+		$query->select('url')
+			->from($this->dbTable)
 			->where($query->expr()->eq('url_hash', $query->createParameter('url_hash')))
 			->setParameter('url_hash', $hash);
-		$result = $query->execute()->fetchAll();
+		$statement = $query->execute();
+		$result = $statement->fetchAll();
+		$statement->closeCursor();
 
 		return !empty($result);
 	}
@@ -190,7 +198,9 @@ class DbHandler {
 			->where($query->expr()->eq('url_hash', $query->createParameter('url_hash')))
 			->setParameter('url_hash', $hash);
 
-		$result = $query->execute()->fetch();
+		$statement = $query->execute();
+		$result = $statement->fetch();
+		$statement->closeCursor();
 
 		if (!isset($result['token'])) {
 			throw new \Exception('No token found for: ' . $url);
@@ -229,7 +239,9 @@ class DbHandler {
 			->where($query->expr()->eq('url_hash', $query->createParameter('url_hash')))
 			->setParameter('url_hash', $hash);
 
-		$result = $query->execute()->fetch();
+		$statement = $query->execute();
+		$result = $statement->fetch();
+		$statement->closeCursor();
 		return $result['shared_secret'];
 	}
 
@@ -265,7 +277,9 @@ class DbHandler {
 				->where($query->expr()->eq('url_hash', $query->createParameter('url_hash')))
 				->setParameter('url_hash', $hash);
 
-		$result = $query->execute()->fetch();
+		$statement = $query->execute();
+		$result = $statement->fetch();
+		$statement->closeCursor();
 		return (int)$result['status'];
 	}
 
@@ -291,7 +305,7 @@ class DbHandler {
 
 		if (strpos($url, 'https://') === 0) {
 			$normalized = substr($url, strlen('https://'));
-		} else if (strpos($url, 'http://') === 0) {
+		} elseif (strpos($url, 'http://') === 0) {
 			$normalized = substr($url, strlen('http://'));
 		}
 
@@ -314,8 +328,9 @@ class DbHandler {
 		$query->select('url')->from($this->dbTable)
 				->where($query->expr()->eq('shared_secret', $query->createNamedParameter($password)));
 
-		$result = $query->execute()->fetch();
+		$statement = $query->execute();
+		$result = $statement->fetch();
+		$statement->closeCursor();
 		return !empty($result);
 	}
-
 }

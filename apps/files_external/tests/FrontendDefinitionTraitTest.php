@@ -2,6 +2,8 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
  *
@@ -17,16 +19,18 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\Files_External\Tests;
 
-class FrontendDefinitionTraitTest extends \Test\TestCase {
+use OCA\Files_External\Lib\DefinitionParameter;
+use OCA\Files_External\Lib\StorageConfig;
 
+class FrontendDefinitionTraitTest extends \Test\TestCase {
 	public function testJsonSerialization() {
-		$param = $this->getMockBuilder('\OCA\Files_External\Lib\DefinitionParameter')
+		$param = $this->getMockBuilder(DefinitionParameter::class)
 			->disableOriginalConstructor()
 			->getMock();
 		$param->method('getName')->willReturn('foo');
@@ -60,7 +64,7 @@ class FrontendDefinitionTraitTest extends \Test\TestCase {
 	public function testValidateStorage($expectedSuccess, $params) {
 		$backendParams = [];
 		foreach ($params as $name => $valid) {
-			$param = $this->getMockBuilder('\OCA\Files_External\Lib\DefinitionParameter')
+			$param = $this->getMockBuilder(DefinitionParameter::class)
 				->disableOriginalConstructor()
 				->getMock();
 			$param->method('getName')
@@ -73,7 +77,7 @@ class FrontendDefinitionTraitTest extends \Test\TestCase {
 			$backendParams[] = $param;
 		}
 
-		$storageConfig = $this->getMockBuilder('\OCA\Files_External\Lib\StorageConfig')
+		$storageConfig = $this->getMockBuilder(StorageConfig::class)
 			->disableOriginalConstructor()
 			->getMock();
 		$storageConfig->expects($this->any())
@@ -90,19 +94,19 @@ class FrontendDefinitionTraitTest extends \Test\TestCase {
 	}
 
 	public function testValidateStorageSet() {
-		$param = $this->getMockBuilder('\OCA\Files_External\Lib\DefinitionParameter')
+		$param = $this->getMockBuilder(DefinitionParameter::class)
 			->disableOriginalConstructor()
 			->getMock();
 		$param->method('getName')
 			->willReturn('param');
 		$param->expects($this->once())
 			->method('validateValue')
-			->will($this->returnCallback(function(&$value) {
+			->willReturnCallback(function (&$value) {
 				$value = 'foobar';
 				return true;
-			}));
+			});
 
-		$storageConfig = $this->getMockBuilder('\OCA\Files_External\Lib\StorageConfig')
+		$storageConfig = $this->getMockBuilder(StorageConfig::class)
 			->disableOriginalConstructor()
 			->getMock();
 		$storageConfig->expects($this->once())

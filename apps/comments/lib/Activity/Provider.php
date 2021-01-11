@@ -2,6 +2,9 @@
 /**
  * @copyright Copyright (c) 2016 Joas Schilling <coding@schilljs.com>
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
+ *
  * @license GNU AGPL version 3 or any later version
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,7 +18,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
@@ -87,7 +90,11 @@ class Provider implements IProvider {
 
 		if ($event->getSubject() === 'add_comment_subject') {
 			$this->parseMessage($event);
-			$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/comment.svg')));
+			if ($this->activityManager->getRequirePNG()) {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/comment.png')));
+			} else {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/comment.svg')));
+			}
 
 			if ($this->activityManager->isFormattingFilteredObject()) {
 				try {
@@ -109,14 +116,14 @@ class Provider implements IProvider {
 	 * @throws \InvalidArgumentException
 	 */
 	protected function parseShortVersion(IEvent $event) {
-		$subjectParameters = $event->getSubjectParameters();
+		$subjectParameters = $this->getSubjectParameters($event);
 
 		if ($event->getSubject() === 'add_comment_subject') {
-			if ($subjectParameters[0] === $this->activityManager->getCurrentUserId()) {
+			if ($subjectParameters['actor'] === $this->activityManager->getCurrentUserId()) {
 				$event->setParsedSubject($this->l->t('You commented'))
 					->setRichSubject($this->l->t('You commented'), []);
 			} else {
-				$author = $this->generateUserParameter($subjectParameters[0]);
+				$author = $this->generateUserParameter($subjectParameters['actor']);
 				$event->setParsedSubject($this->l->t('%1$s commented', [$author['name']]))
 					->setRichSubject($this->l->t('{author} commented'), [
 						'author' => $author,
@@ -135,25 +142,25 @@ class Provider implements IProvider {
 	 * @throws \InvalidArgumentException
 	 */
 	protected function parseLongVersion(IEvent $event) {
-		$subjectParameters = $event->getSubjectParameters();
+		$subjectParameters = $this->getSubjectParameters($event);
 
 		if ($event->getSubject() === 'add_comment_subject') {
-			if ($subjectParameters[0] === $this->activityManager->getCurrentUserId()) {
+			if ($subjectParameters['actor'] === $this->activityManager->getCurrentUserId()) {
 				$event->setParsedSubject($this->l->t('You commented on %1$s', [
-						trim($subjectParameters[1], '/'),
-					]))
+					$subjectParameters['filePath'],
+				]))
 					->setRichSubject($this->l->t('You commented on {file}'), [
-						'file' => $this->generateFileParameter($event->getObjectId(), $subjectParameters[1]),
+						'file' => $this->generateFileParameter($subjectParameters['fileId'], $subjectParameters['filePath']),
 					]);
 			} else {
-				$author = $this->generateUserParameter($subjectParameters[0]);
+				$author = $this->generateUserParameter($subjectParameters['actor']);
 				$event->setParsedSubject($this->l->t('%1$s commented on %2$s', [
-						$author['name'],
-						trim($subjectParameters[1], '/'),
-					]))
+					$author['name'],
+					$subjectParameters['filePath'],
+				]))
 					->setRichSubject($this->l->t('{author} commented on {file}'), [
 						'author' => $author,
-						'file' => $this->generateFileParameter($event->getObjectId(), $subjectParameters[1]),
+						'file' => $this->generateFileParameter($subjectParameters['fileId'], $subjectParameters['filePath']),
 					]);
 			}
 		} else {
@@ -163,15 +170,41 @@ class Provider implements IProvider {
 		return $event;
 	}
 
+	protected function getSubjectParameters(IEvent $event) {
+		$subjectParameters = $event->getSubjectParameters();
+		if (isset($subjectParameters['fileId'])) {
+			return $subjectParameters;
+		}
+
+		// Fix subjects from 12.0.3 and older
+		//
+		// Do NOT Remove unless necessary
+		// Removing this will break parsing of activities that were created on
+		// Nextcloud 12, so we should keep this as long as it's acceptable.
+		// Otherwise if people upgrade over multiple releases in a short period,
+		// they will get the dead entries in their stream.
+		return [
+			'actor' => $subjectParameters[0],
+			'fileId' => $event->getObjectId(),
+			'filePath' => trim($subjectParameters[1], '/'),
+		];
+	}
+
 	/**
 	 * @param IEvent $event
 	 */
 	protected function parseMessage(IEvent $event) {
 		$messageParameters = $event->getMessageParameters();
+		if (empty($messageParameters)) {
+			// Email
+			return;
+		}
+
+		$commentId = isset($messageParameters['commentId']) ? $messageParameters['commentId'] : $messageParameters[0];
+
 		try {
-			$comment = $this->commentsManager->get((int) $messageParameters[0]);
+			$comment = $this->commentsManager->get((string) $commentId);
 			$message = $comment->getMessage();
-			$message = str_replace("\n", '<br />', str_replace(['<', '>'], ['&lt;', '&gt;'], $message));
 
 			$mentionCount = 1;
 			$mentions = [];
@@ -180,8 +213,13 @@ class Provider implements IProvider {
 					continue;
 				}
 
+				$pattern = '/(^|\s)(' . '@' . $mention['id'] . ')(\b)/';
+				if (strpos($mention['id'], ' ') !== false) {
+					$pattern = '/(^|\s)(' . '@"' . $mention['id'] . '"' . ')(\b)?/';
+				}
+
 				$message = preg_replace(
-					'/(^|\s)(' . '@' . $mention['id'] . ')(\b)/',
+					$pattern,
 					//'${1}' . $this->regexSafeUser($mention['id'], $displayName) . '${3}',
 					'${1}' . '{mention' . $mentionCount . '}' . '${3}',
 					$message
@@ -206,7 +244,7 @@ class Provider implements IProvider {
 			'type' => 'file',
 			'id' => $id,
 			'name' => basename($path),
-			'path' => trim($path, '/'),
+			'path' => $path,
 			'link' => $this->url->linkToRouteAbsolute('files.viewcontroller.showFile', ['fileid' => $id]),
 		];
 	}

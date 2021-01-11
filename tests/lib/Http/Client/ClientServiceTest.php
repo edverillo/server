@@ -13,17 +13,23 @@ use OC\Http\Client\Client;
 use OC\Http\Client\ClientService;
 use OCP\ICertificateManager;
 use OCP\IConfig;
+use OCP\ILogger;
 
 /**
  * Class ClientServiceTest
  */
 class ClientServiceTest extends \Test\TestCase {
-	public function testNewClient() {
+	public function testNewClient(): void {
+		/** @var IConfig $config */
 		$config = $this->createMock(IConfig::class);
+		/** @var ICertificateManager $certificateManager */
 		$certificateManager = $this->createMock(ICertificateManager::class);
+		$logger = $this->createMock(ILogger::class);
 
-		$expected = new Client($config, $certificateManager, new GuzzleClient());
-		$clientService = new ClientService($config, $certificateManager);
-		$this->assertEquals($expected, $clientService->newClient());
+		$clientService = new ClientService($config, $logger, $certificateManager);
+		$this->assertEquals(
+			new Client($config, $logger, $certificateManager, new GuzzleClient()),
+			$clientService->newClient()
+		);
 	}
 }

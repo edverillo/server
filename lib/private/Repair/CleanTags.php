@@ -2,8 +2,11 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -18,7 +21,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -173,7 +176,7 @@ class CleanTags implements IRepairStep {
 
 		$qb->select('d.' . $deleteId)
 			->from($deleteTable, 'd')
-			->leftJoin('d', $sourceTable, 's', $qb->expr()->eq('d.' . $deleteId, ' s.' . $sourceId))
+			->leftJoin('d', $sourceTable, 's', $qb->expr()->eq('d.' . $deleteId, 's.' . $sourceId))
 			->where(
 				$qb->expr()->eq('d.type', $qb->expr()->literal('files'))
 			)
@@ -182,7 +185,7 @@ class CleanTags implements IRepairStep {
 			);
 		$result = $qb->execute();
 
-		$orphanItems = array();
+		$orphanItems = [];
 		while ($row = $result->fetch()) {
 			$orphanItems[] = (int) $row[$deleteId];
 		}
@@ -201,7 +204,7 @@ class CleanTags implements IRepairStep {
 		}
 
 		if ($repairInfo) {
-			$output->info(sprintf($repairInfo, sizeof($orphanItems)));
+			$output->info(sprintf($repairInfo, count($orphanItems)));
 		}
 	}
 }

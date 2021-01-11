@@ -22,22 +22,25 @@
 
 namespace Test;
 
+use OC\Installer;
+use OC\IntegrityCheck\Checker;
 use OC\Updater;
 use OCP\IConfig;
 use OCP\ILogger;
-use OC\IntegrityCheck\Checker;
 
 class UpdaterTest extends TestCase {
-	/** @var IConfig | \PHPUnit_Framework_MockObject_MockObject */
+	/** @var IConfig | \PHPUnit\Framework\MockObject\MockObject */
 	private $config;
-	/** @var ILogger | \PHPUnit_Framework_MockObject_MockObject */
+	/** @var ILogger | \PHPUnit\Framework\MockObject\MockObject */
 	private $logger;
 	/** @var Updater */
 	private $updater;
-	/** @var Checker | \PHPUnit_Framework_MockObject_MockObject */
+	/** @var Checker | \PHPUnit\Framework\MockObject\MockObject */
 	private $checker;
+	/** @var Installer|\PHPUnit\Framework\MockObject\MockObject */
+	private $installer;
 
-	public function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 		$this->config = $this->getMockBuilder(IConfig::class)
 			->disableOriginalConstructor()
@@ -46,13 +49,17 @@ class UpdaterTest extends TestCase {
 			->disableOriginalConstructor()
 			->getMock();
 		$this->checker = $this->getMockBuilder(Checker::class)
-				->disableOriginalConstructor()
-				->getMock();
+			->disableOriginalConstructor()
+			->getMock();
+		$this->installer = $this->getMockBuilder(Installer::class)
+			->disableOriginalConstructor()
+			->getMock();
 
 		$this->updater = new Updater(
 			$this->config,
 			$this->checker,
-			$this->logger
+			$this->logger,
+			$this->installer
 		);
 	}
 
@@ -107,12 +114,4 @@ class UpdaterTest extends TestCase {
 
 		$this->assertSame($result, $this->updater->isUpgradePossible($oldVersion, $newVersion, $allowedVersions));
 	}
-
-	public function testSetSkip3rdPartyAppsDisable() {
-		$this->updater->setSkip3rdPartyAppsDisable(true);
-		$this->assertSame(true, $this->invokePrivate($this->updater, 'skip3rdPartyAppsDisable'));
-		$this->updater->setSkip3rdPartyAppsDisable(false);
-		$this->assertSame(false, $this->invokePrivate($this->updater, 'skip3rdPartyAppsDisable'));
-	}
-
 }

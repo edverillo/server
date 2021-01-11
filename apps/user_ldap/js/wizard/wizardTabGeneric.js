@@ -53,6 +53,7 @@ OCA = OCA || {};
 		setManagedItems: function(managedItems) {
 			this.managedItems = managedItems;
 			this._enableAutoSave();
+			this._enableSaveButton();
 		},
 
 		/**
@@ -73,7 +74,7 @@ OCA = OCA || {};
 
 		/**
 		 * the method can be used to display a different error/information
-		 * message than provided by the ownCloud server response. The concrete
+		 * message than provided by the Nextcloud server response. The concrete
 		 * Tab View may optionally implement it. Returning an empty string will
 		 * avoid any notification.
 		 *
@@ -227,10 +228,12 @@ OCA = OCA || {};
 		 * @param {Array} options
 		 */
 		equipMultiSelect: function($element, options) {
-			$element.empty();
-			for (var i in options) {
-				var name = options[i];
-				$element.append($('<option>').val(name).text(name).attr('title', name));
+			if($element.find('option').length === 0) {
+				$element.empty();
+				for (var i in options) {
+					var name = options[i];
+					$element.append($('<option>').val(name).text(name).attr('title', name));
+				}
 			}
 			if(!$element.hasClass('ldapGroupList')) {
 				$element.multiselect('refresh');
@@ -319,7 +322,10 @@ OCA = OCA || {};
 
 			for(var id in this.managedItems) {
 				if(_.isUndefined(this.managedItems[id].$element)
-				   || _.isUndefined(this.managedItems[id].setMethod)) {
+					|| _.isUndefined(this.managedItems[id].setMethod)
+					|| (!_.isUndefined(this.managedItems[id].preventAutoSave)
+						&& this.managedItems[id].preventAutoSave === true)
+				) {
 					continue;
 				}
 				var $element = this.managedItems[id].$element;
@@ -328,6 +334,39 @@ OCA = OCA || {};
 						view._requestSave($(this));
 					});
 				}
+			}
+		},
+
+		/**
+		 * set's up save-button behavior (essentially used for agent dn and pwd)
+		 *
+		 * @private
+		 */
+		_enableSaveButton: function() {
+			var view = this;
+
+			// TODO: this is not nice, because it fires one request per change
+			// in the scenario this happens twice, causes detectors to run
+			// duplicated etc. To have this work properly, the wizard endpoint
+			// must accept setting multiple changes. Instead of messing around
+			// with old ajax/wizard.php use this opportunity and create a
+			// Controller
+			for(var id in this.managedItems) {
+				if(_.isUndefined(this.managedItems[id].$element)
+					|| _.isUndefined(this.managedItems[id].$saveButton)
+				) {
+					continue;
+				}
+				(function (item) {
+					item.$saveButton.click(function(event) {
+						event.preventDefault();
+						view._requestSave(item.$element);
+						item.$saveButton.removeClass('primary');
+					});
+					item.$element.change(function () {
+						item.$saveButton.addClass('primary');
+					});
+				})(this.managedItems[id]);
 			}
 		},
 
@@ -353,9 +392,9 @@ OCA = OCA || {};
 
 		/**
 		 * @typedef {object} viewSaveInfo
-		 * @property {function} val
-		 * @property {function} attr
-		 * @property {function} is
+		 * @property {Function} val
+		 * @property {Function} attr
+		 * @property {Function} is
 		 */
 
 		/**
@@ -514,7 +553,7 @@ OCA = OCA || {};
 			) {
 				toggleFnc(true);
 			} else {
-				OCdialogs.confirm(
+				OC.dialogs.confirm(
 					t('user_ldap', 'Switching the mode will enable automatic LDAP queries. Depending on your LDAP size they may take a while. Do you still want to switch the mode?'),
 					t('user_ldap', 'Mode switch'),
 					toggleFnc

@@ -2,7 +2,11 @@
 /**
  * @copyright Copyright (c) 2016, Joas Schilling <coding@schilljs.com>
  *
+ * @author Guillaume COMPAGNON <gcompagnon@outlook.com>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Julien Veyssier <eneiluj@posteo.net>
+ * @author Julius Härtl <jus@bitgrid.net>
+ * @author Morris Jobke <hey@morrisjobke.de>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -17,13 +21,14 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 namespace OCA\Theming;
 
-use OCP\Capabilities\ICapability;
+use OCP\Capabilities\IPublicCapability;
+use OCP\IConfig;
 use OCP\IURLGenerator;
 
 /**
@@ -31,22 +36,31 @@ use OCP\IURLGenerator;
  *
  * @package OCA\Theming
  */
-class Capabilities implements ICapability {
+class Capabilities implements IPublicCapability {
 
 	/** @var ThemingDefaults */
 	protected $theming;
 
+	/** @var Util */
+	protected $util;
 
 	/** @var IURLGenerator */
 	protected $url;
 
+	/** @var IConfig */
+	protected $config;
+
 	/**
 	 * @param ThemingDefaults $theming
+	 * @param Util $util
 	 * @param IURLGenerator $url
+	 * @param IConfig $config
 	 */
-	public function __construct(ThemingDefaults $theming, IURLGenerator $url) {
+	public function __construct(ThemingDefaults $theming, Util $util, IURLGenerator $url, IConfig $config) {
 		$this->theming = $theming;
+		$this->util = $util;
 		$this->url = $url;
+		$this->config = $config;
 	}
 
 	/**
@@ -55,14 +69,26 @@ class Capabilities implements ICapability {
 	 * @return array
 	 */
 	public function getCapabilities() {
+		$backgroundLogo = $this->config->getAppValue('theming', 'backgroundMime', '');
+		$color = $this->theming->getColorPrimary();
 		return [
 			'theming' => [
 				'name' => $this->theming->getName(),
 				'url' => $this->theming->getBaseUrl(),
 				'slogan' => $this->theming->getSlogan(),
-				'color' => $this->theming->getColorPrimary(),
+				'color' => $color,
+				'color-text' => $this->theming->getTextColorPrimary(),
+				'color-element' => $this->util->elementColor($color),
+				'color-element-bright' => $this->util->elementColor($color),
+				'color-element-dark' => $this->util->elementColor($color, false),
 				'logo' => $this->url->getAbsoluteURL($this->theming->getLogo()),
-				'background' => $this->url->getAbsoluteURL($this->theming->getBackground()),
+				'background' => $backgroundLogo === 'backgroundColor' || ($backgroundLogo === '' && $this->theming->getColorPrimary() !== '#0082c9') ?
+					$this->theming->getColorPrimary() :
+					$this->url->getAbsoluteURL($this->theming->getBackground()),
+				'background-plain' => $backgroundLogo === 'backgroundColor' || ($backgroundLogo === '' && $this->theming->getColorPrimary() !== '#0082c9'),
+				'background-default' => !$this->util->isBackgroundThemed(),
+				'logoheader' => $this->url->getAbsoluteURL($this->theming->getLogo()),
+				'favicon' => $this->url->getAbsoluteURL($this->theming->getLogo()),
 			],
 		];
 	}

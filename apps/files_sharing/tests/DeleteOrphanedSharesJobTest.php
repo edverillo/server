@@ -2,9 +2,11 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -18,13 +20,14 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\Files_Sharing\Tests;
 
 use OCA\Files_Sharing\DeleteOrphanedSharesJob;
+use OCP\Share\IShare;
 
 /**
  * Class DeleteOrphanedSharesJobTest
@@ -60,7 +63,7 @@ class DeleteOrphanedSharesJobTest extends \Test\TestCase {
 	 */
 	private $user2;
 
-	public static function setUpBeforeClass() {
+	public static function setUpBeforeClass(): void {
 		$appManager = \OC::$server->getAppManager();
 		self::$trashBinStatus = $appManager->isEnabledForUser('files_trashbin');
 		$appManager->disableApp('files_trashbin');
@@ -69,13 +72,13 @@ class DeleteOrphanedSharesJobTest extends \Test\TestCase {
 		\OC\Files\Filesystem::getLoader()->removeStorageWrapper('oc_trashbin');
 	}
 
-	public static function tearDownAfterClass() {
+	public static function tearDownAfterClass(): void {
 		if (self::$trashBinStatus) {
 			\OC::$server->getAppManager()->enableApp('files_trashbin');
 		}
 	}
 
-	protected function setup() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->connection = \OC::$server->getDatabaseConnection();
@@ -94,16 +97,16 @@ class DeleteOrphanedSharesJobTest extends \Test\TestCase {
 		$this->job = new DeleteOrphanedSharesJob();
 	}
 
-	protected function tearDown() {
+	protected function tearDown(): void {
 		$this->connection->executeUpdate('DELETE FROM `*PREFIX*share`');
 
 		$userManager = \OC::$server->getUserManager();
 		$user1 = $userManager->get($this->user1);
-		if($user1) {
+		if ($user1) {
 			$user1->delete();
 		}
 		$user2 = $userManager->get($this->user2);
-		if($user2) {
+		if ($user2) {
 			$user2->delete();
 		}
 
@@ -128,17 +131,20 @@ class DeleteOrphanedSharesJobTest extends \Test\TestCase {
 	public function testClearShares() {
 		$this->loginAsUser($this->user1);
 
-		$view = new \OC\Files\View('/' . $this->user1 . '/');
-		$view->mkdir('files/test');
-		$view->mkdir('files/test/sub');
+		$user1Folder = \OC::$server->getUserFolder($this->user1);
+		$testFolder = $user1Folder->newFolder('test');
+		$testSubFolder = $testFolder->newFolder('sub');
 
-		$fileInfo = $view->getFileInfo('files/test/sub');
-		$fileId = $fileInfo->getId();
+		$shareManager = \OC::$server->getShareManager();
+		$share = $shareManager->newShare();
 
-		$this->assertTrue(
-			\OCP\Share::shareItem('folder', $fileId, \OCP\Share::SHARE_TYPE_USER, $this->user2, \OCP\Constants::PERMISSION_READ),
-			'Failed asserting that user 1 successfully shared "test/sub" with user 2.'
-		);
+		$share->setNode($testSubFolder)
+			->setShareType(IShare::TYPE_USER)
+			->setPermissions(\OCP\Constants::PERMISSION_READ)
+			->setSharedWith($this->user2)
+			->setSharedBy($this->user1);
+
+		$shareManager->createShare($share);
 
 		$this->assertCount(1, $this->getShares());
 
@@ -146,28 +152,10 @@ class DeleteOrphanedSharesJobTest extends \Test\TestCase {
 
 		$this->assertCount(1, $this->getShares(), 'Linked shares not deleted');
 
-		$view->unlink('files/test');
+		$testFolder->delete();
 
 		$this->job->run([]);
 
 		$this->assertCount(0, $this->getShares(), 'Orphaned shares deleted');
 	}
-
-	public function testKeepNonFileShares() {
-		$this->loginAsUser($this->user1);
-
-		\OCP\Share::registerBackend('test', 'Test\Share\Backend');
-
-		$this->assertTrue(
-			\OCP\Share::shareItem('test', 'test.txt', \OCP\Share::SHARE_TYPE_USER, $this->user2, \OCP\Constants::PERMISSION_READ),
-			'Failed asserting that user 1 successfully shared something with user 2.'
-		);
-
-		$this->assertCount(1, $this->getShares());
-
-		$this->job->run([]);
-
-		$this->assertCount(1, $this->getShares(), 'Non-file shares kept');
-	}
 }
-

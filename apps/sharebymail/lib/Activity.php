@@ -2,6 +2,11 @@
 /**
  * @copyright Copyright (c) 2016 Joas Schilling <coding@schilljs.com>
  *
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ *
  * @license GNU AGPL version 3 or any later version
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,7 +20,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
@@ -56,8 +61,12 @@ class Activity implements IProvider {
 	/** @var array */
 	protected $contactNames = [];
 
-	const SUBJECT_SHARED_EMAIL_SELF = 'shared_with_email_self';
-	const SUBJECT_SHARED_EMAIL_BY = 'shared_with_email_by';
+	public const SUBJECT_SHARED_EMAIL_SELF = 'shared_with_email_self';
+	public const SUBJECT_SHARED_EMAIL_BY = 'shared_with_email_by';
+	public const SUBJECT_SHARED_EMAIL_PASSWORD_SEND = 'shared_with_email_password_send';
+	public const SUBJECT_SHARED_EMAIL_PASSWORD_SEND_SELF = 'shared_with_email_password_send_self';
+	public const SUBJECT_UNSHARED_EMAIL_SELF = 'unshared_with_email_self';
+	public const SUBJECT_UNSHARED_EMAIL_BY = 'unshared_with_email_by';
 
 	/**
 	 * @param IFactory $languageFactory
@@ -111,23 +120,76 @@ class Activity implements IProvider {
 
 		if ($event->getSubject() === self::SUBJECT_SHARED_EMAIL_SELF) {
 			$event->setParsedSubject($this->l->t('Shared with %1$s', [
-					$parsedParameters['email']['name'],
-				]))
+				$parsedParameters['email']['name'],
+			]))
 				->setRichSubject($this->l->t('Shared with {email}'), [
 					'email' => $parsedParameters['email'],
-				])
-				->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.svg')));
-		} else if ($event->getSubject() === self::SUBJECT_SHARED_EMAIL_BY) {
+				]);
+			if ($this->activityManager->getRequirePNG()) {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.png')));
+			} else {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.svg')));
+			}
+		} elseif ($event->getSubject() === self::SUBJECT_SHARED_EMAIL_BY) {
 			$event->setParsedSubject($this->l->t('Shared with %1$s by %2$s', [
-					$parsedParameters['email']['name'],
-					$parsedParameters['actor']['name'],
-				]))
+				$parsedParameters['email']['name'],
+				$parsedParameters['actor']['name'],
+			]))
 				->setRichSubject($this->l->t('Shared with {email} by {actor}'), [
 					'email' => $parsedParameters['email'],
 					'actor' => $parsedParameters['actor'],
-				])
-				->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.svg')));
-
+				]);
+			if ($this->activityManager->getRequirePNG()) {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.png')));
+			} else {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.svg')));
+			}
+		} elseif ($event->getSubject() === self::SUBJECT_UNSHARED_EMAIL_SELF) {
+			$event->setParsedSubject($this->l->t('Unshared from %1$s', [
+				$parsedParameters['email']['name'],
+			]))
+				->setRichSubject($this->l->t('Unshared from {email}'), [
+					'email' => $parsedParameters['email'],
+				]);
+			if ($this->activityManager->getRequirePNG()) {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.png')));
+			} else {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.svg')));
+			}
+		} elseif ($event->getSubject() === self::SUBJECT_UNSHARED_EMAIL_BY) {
+			$event->setParsedSubject($this->l->t('Unshared from %1$s by %2$s', [
+				$parsedParameters['email']['name'],
+				$parsedParameters['actor']['name'],
+			]))
+				->setRichSubject($this->l->t('Unshared from {email} by {actor}'), [
+					'email' => $parsedParameters['email'],
+					'actor' => $parsedParameters['actor'],
+				]);
+			if ($this->activityManager->getRequirePNG()) {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.png')));
+			} else {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.svg')));
+			}
+		} elseif ($event->getSubject() === self::SUBJECT_SHARED_EMAIL_PASSWORD_SEND) {
+			$event->setParsedSubject($this->l->t('Password for mail share sent to %1$s', [
+				$parsedParameters['email']['name']
+			]))
+				->setRichSubject($this->l->t('Password for mail share sent to {email}'), [
+					'email' => $parsedParameters['email']
+				]);
+			if ($this->activityManager->getRequirePNG()) {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.png')));
+			} else {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.svg')));
+			}
+		} elseif ($event->getSubject() === self::SUBJECT_SHARED_EMAIL_PASSWORD_SEND_SELF) {
+			$event->setParsedSubject($this->l->t('Password for mail share sent to you'))
+				->setRichSubject($this->l->t('Password for mail share sent to you'));
+			if ($this->activityManager->getRequirePNG()) {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.png')));
+			} else {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.svg')));
+			}
 		} else {
 			throw new \InvalidArgumentException();
 		}
@@ -146,19 +208,71 @@ class Activity implements IProvider {
 
 		if ($event->getSubject() === self::SUBJECT_SHARED_EMAIL_SELF) {
 			$event->setParsedSubject($this->l->t('You shared %1$s with %2$s by mail', [
-					$parsedParameters['file']['path'],
-					$parsedParameters['email']['name'],
-				]))
-				->setRichSubject($this->l->t('You shared {file} with {email} by mail'), $parsedParameters)
-				->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.svg')));
-		} else if ($event->getSubject() === self::SUBJECT_SHARED_EMAIL_BY) {
+				$parsedParameters['file']['path'],
+				$parsedParameters['email']['name'],
+			]))
+				->setRichSubject($this->l->t('You shared {file} with {email} by mail'), $parsedParameters);
+			if ($this->activityManager->getRequirePNG()) {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.png')));
+			} else {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.svg')));
+			}
+		} elseif ($event->getSubject() === self::SUBJECT_SHARED_EMAIL_BY) {
 			$event->setParsedSubject($this->l->t('%3$s shared %1$s with %2$s by mail', [
-					$parsedParameters['file']['path'],
-					$parsedParameters['email']['name'],
-					$parsedParameters['actor']['name'],
-				]))
-				->setRichSubject($this->l->t('{actor} shared {file} with {email} by mail'), $parsedParameters)
-				->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.svg')));
+				$parsedParameters['file']['path'],
+				$parsedParameters['email']['name'],
+				$parsedParameters['actor']['name'],
+			]))
+				->setRichSubject($this->l->t('{actor} shared {file} with {email} by mail'), $parsedParameters);
+			if ($this->activityManager->getRequirePNG()) {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.png')));
+			} else {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.svg')));
+			}
+		} elseif ($event->getSubject() === self::SUBJECT_UNSHARED_EMAIL_SELF) {
+			$event->setParsedSubject($this->l->t('You unshared %1$s from %2$s by mail', [
+				$parsedParameters['file']['path'],
+				$parsedParameters['email']['name'],
+			]))
+				->setRichSubject($this->l->t('You unshared {file} from {email} by mail'), $parsedParameters);
+			if ($this->activityManager->getRequirePNG()) {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.png')));
+			} else {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.svg')));
+			}
+		} elseif ($event->getSubject() === self::SUBJECT_UNSHARED_EMAIL_BY) {
+			$event->setParsedSubject($this->l->t('%3$s unshared %1$s from %2$s by mail', [
+				$parsedParameters['file']['path'],
+				$parsedParameters['email']['name'],
+				$parsedParameters['actor']['name'],
+			]))
+				->setRichSubject($this->l->t('{actor} unshared {file} from {email} by mail'), $parsedParameters);
+			if ($this->activityManager->getRequirePNG()) {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.png')));
+			} else {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.svg')));
+			}
+		} elseif ($event->getSubject() === self::SUBJECT_SHARED_EMAIL_PASSWORD_SEND) {
+			$event->setParsedSubject($this->l->t('Password to access %1$s was sent to %2s', [
+				$parsedParameters['file']['path'],
+				$parsedParameters['email']['name']
+			]))
+				->setRichSubject($this->l->t('Password to access {file} was sent to {email}'), $parsedParameters);
+			if ($this->activityManager->getRequirePNG()) {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.png')));
+			} else {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.svg')));
+			}
+		} elseif ($event->getSubject() === self::SUBJECT_SHARED_EMAIL_PASSWORD_SEND_SELF) {
+			$event->setParsedSubject(
+				$this->l->t('Password to access %1$s was sent to you',
+					[$parsedParameters['file']['path']]))
+				->setRichSubject($this->l->t('Password to access {file} was sent to you'), $parsedParameters);
+			if ($this->activityManager->getRequirePNG()) {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.png')));
+			} else {
+				$event->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/share.svg')));
+			}
 		} else {
 			throw new \InvalidArgumentException();
 		}
@@ -172,15 +286,26 @@ class Activity implements IProvider {
 
 		switch ($subject) {
 			case self::SUBJECT_SHARED_EMAIL_SELF:
+			case self::SUBJECT_UNSHARED_EMAIL_SELF:
 				return [
-					'file' => $this->generateFileParameter((int) $event->getObjectId(), $parameters[0]),
+					'file' => $this->generateFileParameter($event->getObjectId(), $parameters[0]),
 					'email' => $this->generateEmailParameter($parameters[1]),
 				];
 			case self::SUBJECT_SHARED_EMAIL_BY:
+			case self::SUBJECT_UNSHARED_EMAIL_BY:
 				return [
-					'file' => $this->generateFileParameter((int) $event->getObjectId(), $parameters[0]),
+					'file' => $this->generateFileParameter($event->getObjectId(), $parameters[0]),
 					'email' => $this->generateEmailParameter($parameters[1]),
 					'actor' => $this->generateUserParameter($parameters[2]),
+				];
+			case self::SUBJECT_SHARED_EMAIL_PASSWORD_SEND:
+				return [
+					'file' => $this->generateFileParameter($event->getObjectId(), $parameters[0]),
+					'email' => $this->generateEmailParameter($parameters[1]),
+				];
+			case self::SUBJECT_SHARED_EMAIL_PASSWORD_SEND_SELF:
+				return [
+					'file' => $this->generateFileParameter($event->getObjectId(), $parameters[0]),
 				];
 		}
 		throw new \InvalidArgumentException();

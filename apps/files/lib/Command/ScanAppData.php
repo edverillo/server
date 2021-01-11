@@ -1,5 +1,31 @@
 <?php
-
+/**
+ *
+ *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Daniel Kesselberg <mail@danielkesselberg.de>
+ * @author J0WI <J0WI@users.noreply.github.com>
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Joel S <joel.devbox@protonmail.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ *
+ * @license GNU AGPL version 3 or any later version
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
 
 namespace OCA\Files\Command;
 
@@ -7,17 +33,16 @@ use Doctrine\DBAL\Connection;
 use OC\Core\Command\Base;
 use OC\Core\Command\InterruptedException;
 use OC\ForbiddenException;
+use OCP\EventDispatcher\IEventDispatcher;
 use OCP\Files\IRootFolder;
 use OCP\Files\NotFoundException;
 use OCP\Files\StorageNotAvailableException;
 use OCP\IConfig;
 use OCP\IDBConnection;
-use OCP\IUserManager;
+use Symfony\Component\Console\Helper\Table;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
-use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\Console\Helper\Table;
 
 class ScanAppData extends Base {
 
@@ -44,19 +69,9 @@ class ScanAppData extends Base {
 
 		$this
 			->setName('files:scan-app-data')
-			->setDescription('rescan the AppData folder')
-			->addOption(
-				'quiet',
-				'q',
-				InputOption::VALUE_NONE,
-				'suppress any output'
-			)
-			->addOption(
-				'verbose',
-				'-v|vv|vvv',
-				InputOption::VALUE_NONE,
-				'verbose the output'
-			);
+			->setDescription('rescan the AppData folder');
+
+		$this->addArgument('folder', InputArgument::OPTIONAL, 'The appdata subfolder to scan', '');
 	}
 
 	public function checkScanWarning($fullPath, OutputInterface $output) {
@@ -68,101 +83,92 @@ class ScanAppData extends Base {
 		}
 	}
 
-	protected function scanFiles($verbose, OutputInterface $output) {
+	protected function scanFiles(OutputInterface $output, string $folder): int {
 		try {
 			$appData = $this->getAppDataFolder();
 		} catch (NotFoundException $e) {
-			$output->writeln('NoAppData folder found');
-			return;
+			$output->writeln('<error>NoAppData folder found</error>');
+			return 1;
+		}
+
+		if ($folder !== '') {
+			try {
+				$appData = $appData->get($folder);
+			} catch (NotFoundException $e) {
+				$output->writeln('<error>Could not find folder: ' . $folder . '</error>');
+				return 1;
+			}
 		}
 
 		$connection = $this->reconnectToDatabase($output);
-		$scanner = new \OC\Files\Utils\Scanner(null, $connection, \OC::$server->getLogger());
+		$scanner = new \OC\Files\Utils\Scanner(null, $connection, \OC::$server->query(IEventDispatcher::class), \OC::$server->getLogger());
+
 		# check on each file/folder if there was a user interrupt (ctrl-c) and throw an exception
-		# printout and count
-		if ($verbose) {
-			$scanner->listen('\OC\Files\Utils\Scanner', 'scanFile', function ($path) use ($output) {
-				$output->writeln("\tFile   <info>$path</info>");
-				$this->filesCounter += 1;
-				if ($this->hasBeenInterrupted()) {
-					throw new InterruptedException();
-				}
-			});
-			$scanner->listen('\OC\Files\Utils\Scanner', 'scanFolder', function ($path) use ($output) {
-				$output->writeln("\tFolder <info>$path</info>");
-				$this->foldersCounter += 1;
-				if ($this->hasBeenInterrupted()) {
-					throw new InterruptedException();
-				}
-			});
-			$scanner->listen('\OC\Files\Utils\Scanner', 'StorageNotAvailable', function (StorageNotAvailableException $e) use ($output) {
-				$output->writeln("Error while scanning, storage not available (" . $e->getMessage() . ")");
-			});
-			# count only
-		} else {
-			$scanner->listen('\OC\Files\Utils\Scanner', 'scanFile', function () use ($output) {
-				$this->filesCounter += 1;
-				if ($this->hasBeenInterrupted()) {
-					throw new InterruptedException();
-				}
-			});
-			$scanner->listen('\OC\Files\Utils\Scanner', 'scanFolder', function () use ($output) {
-				$this->foldersCounter += 1;
-				if ($this->hasBeenInterrupted()) {
-					throw new InterruptedException();
-				}
-			});
-		}
-		$scanner->listen('\OC\Files\Utils\Scanner', 'scanFile', function($path) use ($output) {
+		$scanner->listen('\OC\Files\Utils\Scanner', 'scanFile', function ($path) use ($output) {
+			$output->writeln("\tFile   <info>$path</info>", OutputInterface::VERBOSITY_VERBOSE);
+			++$this->filesCounter;
+			$this->abortIfInterrupted();
+		});
+
+		$scanner->listen('\OC\Files\Utils\Scanner', 'scanFolder', function ($path) use ($output) {
+			$output->writeln("\tFolder <info>$path</info>", OutputInterface::VERBOSITY_VERBOSE);
+			++$this->foldersCounter;
+			$this->abortIfInterrupted();
+		});
+
+		$scanner->listen('\OC\Files\Utils\Scanner', 'StorageNotAvailable', function (StorageNotAvailableException $e) use ($output) {
+			$output->writeln('Error while scanning, storage not available (' . $e->getMessage() . ')', OutputInterface::VERBOSITY_VERBOSE);
+		});
+
+		$scanner->listen('\OC\Files\Utils\Scanner', 'scanFile', function ($path) use ($output) {
 			$this->checkScanWarning($path, $output);
 		});
-		$scanner->listen('\OC\Files\Utils\Scanner', 'scanFolder', function($path) use ($output) {
+
+		$scanner->listen('\OC\Files\Utils\Scanner', 'scanFolder', function ($path) use ($output) {
 			$this->checkScanWarning($path, $output);
 		});
 
 		try {
 			$scanner->scan($appData->getPath());
 		} catch (ForbiddenException $e) {
-			$output->writeln("<error>Storage not writable</error>");
-			$output->writeln("Make sure you're running the scan command only as the user the web server runs as");
+			$output->writeln('<error>Storage not writable</error>');
+			$output->writeln('<info>Make sure you\'re running the scan command only as the user the web server runs as</info>');
+			return 1;
 		} catch (InterruptedException $e) {
 			# exit the function if ctrl-c has been pressed
-			$output->writeln('Interrupted by user');
+			$output->writeln('<info>Interrupted by user</info>');
+			return 1;
+		} catch (NotFoundException $e) {
+			$output->writeln('<error>Path not found: ' . $e->getMessage() . '</error>');
+			return 1;
 		} catch (\Exception $e) {
 			$output->writeln('<error>Exception during scan: ' . $e->getMessage() . '</error>');
 			$output->writeln('<error>' . $e->getTraceAsString() . '</error>');
+			return 1;
 		}
+
+		return 0;
 	}
 
 
-	protected function execute(InputInterface $input, OutputInterface $output) {
-		# no messaging level option means: no full printout but statistics
-		# $quiet   means no print at all
-		# $verbose means full printout including statistics
-		# -q	-v	full	stat
-		#  0	 0	no	yes
-		#  0	 1	yes	yes
-		#  1	--	no	no  (quiet overrules verbose)
-		$verbose = $input->getOption('verbose');
-		$quiet = $input->getOption('quiet');
+	protected function execute(InputInterface $input, OutputInterface $output): int {
 		# restrict the verbosity level to VERBOSITY_VERBOSE
 		if ($output->getVerbosity() > OutputInterface::VERBOSITY_VERBOSE) {
 			$output->setVerbosity(OutputInterface::VERBOSITY_VERBOSE);
 		}
-		if ($quiet) {
-			$verbose = false;
-		}
 
-		$output->writeln("\nScanning AppData for files");
+		$output->writeln('Scanning AppData for files');
+		$output->writeln('');
+
+		$folder = $input->getArgument('folder');
 
 		$this->initTools();
 
-		$this->scanFiles($verbose, $output);
-
-		# stat: printout statistics if $quiet was not set
-		if (!$quiet) {
+		$exitCode = $this->scanFiles($output, $folder);
+		if ($exitCode === 0) {
 			$this->presentStats($output);
 		}
+		return $exitCode;
 	}
 
 	/**
@@ -178,7 +184,7 @@ class ScanAppData extends Base {
 	/**
 	 * Processes PHP errors as exceptions in order to be able to keep track of problems
 	 *
-	 * @see https://secure.php.net/manual/en/function.set-error-handler.php
+	 * @see https://www.php.net/manual/en/function.set-error-handler.php
 	 *
 	 * @param int $severity the level of the error raised
 	 * @param string $message
@@ -201,7 +207,6 @@ class ScanAppData extends Base {
 	protected function presentStats(OutputInterface $output) {
 		// Stop the timer
 		$this->execTime += microtime(true);
-		$output->writeln("");
 
 		$headers = [
 			'Folders', 'Files', 'Elapsed time'
@@ -240,10 +245,9 @@ class ScanAppData extends Base {
 	 * @return string
 	 */
 	protected function formatExecTime() {
-		list($secs, $tens) = explode('.', sprintf("%.1f", ($this->execTime)));
-
-		# if you want to have microseconds add this:   . '.' . $tens;
-		return date('H:i:s', $secs);
+		$secs = round($this->execTime);
+		# convert seconds into HH:MM:SS form
+		return sprintf('%02d:%02d:%02d', ($secs / 3600), ($secs / 60 % 60), $secs % 60);
 	}
 
 	/**

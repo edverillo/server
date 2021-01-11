@@ -3,9 +3,11 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Bart Visscher <bartv@thisnet.nl>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
- * @author Manish Bisht <manish.bisht490@gmail.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  * @author Thomas Pulzer <t.pulzer@kniel.de>
  *
@@ -21,13 +23,15 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
+
 namespace OC\Setup;
 
-use OC\AllConfig;
+use OC\DB\Connection;
 use OC\DB\ConnectionFactory;
+use OC\DB\MigrationService;
 use OC\SystemConfig;
 use OCP\IL10N;
 use OCP\ILogger;
@@ -37,8 +41,6 @@ abstract class AbstractDatabase {
 
 	/** @var IL10N */
 	protected $trans;
-	/** @var string */
-	protected $dbDefinitionFile;
 	/** @var string */
 	protected $dbUser;
 	/** @var string */
@@ -58,25 +60,24 @@ abstract class AbstractDatabase {
 	/** @var ISecureRandom */
 	protected $random;
 
-	public function __construct(IL10N $trans, $dbDefinitionFile, SystemConfig $config, ILogger $logger, ISecureRandom $random) {
+	public function __construct(IL10N $trans, SystemConfig $config, ILogger $logger, ISecureRandom $random) {
 		$this->trans = $trans;
-		$this->dbDefinitionFile = $dbDefinitionFile;
 		$this->config = $config;
 		$this->logger = $logger;
 		$this->random = $random;
 	}
 
 	public function validate($config) {
-		$errors = array();
-		if(empty($config['dbuser']) && empty($config['dbname'])) {
-			$errors[] = $this->trans->t("%s enter the database username and name.", array($this->dbprettyname));
-		} else if(empty($config['dbuser'])) {
-			$errors[] = $this->trans->t("%s enter the database username.", array($this->dbprettyname));
-		} else if(empty($config['dbname'])) {
-			$errors[] = $this->trans->t("%s enter the database name.", array($this->dbprettyname));
+		$errors = [];
+		if (empty($config['dbuser']) && empty($config['dbname'])) {
+			$errors[] = $this->trans->t("%s enter the database username and name.", [$this->dbprettyname]);
+		} elseif (empty($config['dbuser'])) {
+			$errors[] = $this->trans->t("%s enter the database username.", [$this->dbprettyname]);
+		} elseif (empty($config['dbname'])) {
+			$errors[] = $this->trans->t("%s enter the database name.", [$this->dbprettyname]);
 		}
-		if(substr_count($config['dbname'], '.') >= 1) {
-			$errors[] = $this->trans->t("%s you may not use dots in the database name", array($this->dbprettyname));
+		if (substr_count($config['dbname'], '.') >= 1) {
+			$errors[] = $this->trans->t("%s you may not use dots in the database name", [$this->dbprettyname]);
 		}
 		return $errors;
 	}
@@ -90,10 +91,10 @@ abstract class AbstractDatabase {
 		$dbTablePrefix = isset($config['dbtableprefix']) ? $config['dbtableprefix'] : 'oc_';
 
 		$this->config->setValues([
-			'dbname'		=> $dbName,
-			'dbhost'		=> $dbHost,
+			'dbname' => $dbName,
+			'dbhost' => $dbHost,
 			'dbport' => $dbPort,
-			'dbtableprefix'	=> $dbTablePrefix,
+			'dbtableprefix' => $dbTablePrefix,
 		]);
 
 		$this->dbUser = $dbUser;
@@ -108,14 +109,14 @@ abstract class AbstractDatabase {
 	 * @param array $configOverwrite
 	 * @return \OC\DB\Connection
 	 */
-	protected function connect(array $configOverwrite = []) {
-		$connectionParams = array(
+	protected function connect(array $configOverwrite = []): Connection {
+		$connectionParams = [
 			'host' => $this->dbHost,
 			'user' => $this->dbUser,
 			'password' => $this->dbPassword,
 			'tablePrefix' => $this->tablePrefix,
 			'dbname' => $this->dbName
-		);
+		];
 
 		// adding port support through installer
 		if (!empty($this->dbPort)) {
@@ -124,7 +125,7 @@ abstract class AbstractDatabase {
 			} else {
 				$connectionParams['unix_socket'] = $this->dbPort;
 			}
-		} else if (strpos($this->dbHost, ':')) {
+		} elseif (strpos($this->dbHost, ':')) {
 			// Host variable may carry a port or socket.
 			list($host, $portOrSocket) = explode(':', $this->dbHost, 2);
 			if (ctype_digit($portOrSocket)) {
@@ -144,4 +145,12 @@ abstract class AbstractDatabase {
 	 * @param string $userName
 	 */
 	abstract public function setupDatabase($userName);
+
+	public function runMigrations() {
+		if (!is_dir(\OC::$SERVERROOT."/core/Migrations")) {
+			return;
+		}
+		$ms = new MigrationService('core', \OC::$server->get(Connection::class));
+		$ms->migrate('latest', true);
+	}
 }

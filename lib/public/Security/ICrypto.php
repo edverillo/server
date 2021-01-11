@@ -1,9 +1,13 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -17,7 +21,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -31,7 +35,6 @@ namespace OCP\Security;
  * $encryptWithDefaultPassword = \OC::$server->getCrypto()->encrypt('EncryptedText');
  * $encryptWithCustomPassword = \OC::$server->getCrypto()->encrypt('EncryptedText', 'password');
  *
- * @package OCP\Security
  * @since 8.0.0
  */
 interface ICrypto {
@@ -42,7 +45,7 @@ interface ICrypto {
 	 * @return string Calculated HMAC
 	 * @since 8.0.0
 	 */
-	public function calculateHMAC($message, $password = '');
+	public function calculateHMAC(string $message, string $password = ''): string;
 
 	/**
 	 * Encrypts a value and adds an HMAC (Encrypt-Then-MAC)
@@ -51,7 +54,7 @@ interface ICrypto {
 	 * @return string Authenticated ciphertext
 	 * @since 8.0.0
 	 */
-	public function encrypt($plaintext, $password = '');
+	public function encrypt(string $plaintext, string $password = ''): string;
 
 	/**
 	 * Decrypts a value and verifies the HMAC (Encrypt-Then-Mac)
@@ -59,7 +62,8 @@ interface ICrypto {
 	 * @param string $password Password to encrypt, if not specified the secret from config.php will be taken
 	 * @return string plaintext
 	 * @throws \Exception If the HMAC does not match
+	 * @throws \Exception If the decryption failed
 	 * @since 8.0.0
 	 */
-	public function decrypt($authenticatedCiphertext, $password = '');
+	public function decrypt(string $authenticatedCiphertext, string $password = ''): string;
 }

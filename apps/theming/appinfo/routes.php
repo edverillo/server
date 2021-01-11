@@ -4,6 +4,10 @@
  * @copyright Copyright (c) 2016 Lukas Reschke <lukas@statuscode.ch>
  *
  * @author Bjoern Schiessle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Julius Haertl <jus@bitgrid.net>
+ * @author Julius Härtl <jus@bitgrid.net>
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author oparoz <owncloud@interfasys.ch>
  *
@@ -20,7 +24,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
@@ -36,8 +40,8 @@ return ['routes' => [
 		'verb' => 'POST'
 	],
 	[
-		'name' => 'Theming#updateLogo',
-		'url' => '/ajax/updateLogo',
+		'name' => 'Theming#uploadImage',
+		'url' => '/ajax/uploadImage',
 		'verb' => 'POST'
 	],
 	[
@@ -46,37 +50,32 @@ return ['routes' => [
 		'verb' => 'GET',
 	],
 	[
-		'name' => 'Theming#getLogo',
-		'url' => '/logo',
+		'name' => 'Theming#getImage',
+		'url' => '/image/{key}',
 		'verb' => 'GET',
 	],
 	[
-		'name' => 'Theming#getLoginBackground',
-		'url' => '/loginbackground',
+		'name' => 'Theming#getManifest',
+		'url' => '/manifest/{app}',
 		'verb' => 'GET',
+		'defaults' => ['app' => 'core']
 	],
 	[
-		'name' => 'Theming#getJavascript',
-		'url' => '/js/theming',
-		'verb' => 'GET',
-	],
-	[
-		'name'	=> 'Icon#getFavicon',
+		'name' => 'Icon#getFavicon',
 		'url' => '/favicon/{app}',
 		'verb' => 'GET',
-		'defaults' => array('app' => 'core'),
+		'defaults' => ['app' => 'core'],
 	],
 	[
-		'name'	=> 'Icon#getTouchIcon',
+		'name' => 'Icon#getTouchIcon',
 		'url' => '/icon/{app}',
 		'verb' => 'GET',
-		'defaults' => array('app' => 'core'),
+		'defaults' => ['app' => 'core'],
 	],
 	[
-		'name'	=> 'Icon#getThemedIcon',
+		'name' => 'Icon#getThemedIcon',
 		'url' => '/img/{app}/{image}',
 		'verb' => 'GET',
-		'requirements' => array('image' => '.+')
+		'requirements' => ['image' => '.+']
 	],
 ]];
-

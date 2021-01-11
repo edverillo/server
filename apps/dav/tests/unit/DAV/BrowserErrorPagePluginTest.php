@@ -3,6 +3,7 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -17,15 +18,15 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\DAV\Tests\unit\DAV;
 
 use OCA\DAV\Files\BrowserErrorPagePlugin;
-use PHPUnit_Framework_MockObject_MockObject;
 use Sabre\DAV\Exception\NotFound;
+use Sabre\HTTP\Response;
 
 class BrowserErrorPagePluginTest extends \Test\TestCase {
 
@@ -35,14 +36,14 @@ class BrowserErrorPagePluginTest extends \Test\TestCase {
 	 * @param $exception
 	 */
 	public function test($expectedCode, $exception) {
-		/** @var BrowserErrorPagePlugin | PHPUnit_Framework_MockObject_MockObject $plugin */
-		$plugin = $this->getMockBuilder('OCA\DAV\Files\BrowserErrorPagePlugin')->setMethods(['sendResponse', 'generateBody'])->getMock();
+		/** @var BrowserErrorPagePlugin | \PHPUnit\Framework\MockObject\MockObject $plugin */
+		$plugin = $this->getMockBuilder(BrowserErrorPagePlugin::class)->setMethods(['sendResponse', 'generateBody'])->getMock();
 		$plugin->expects($this->once())->method('generateBody')->willReturn(':boom:');
 		$plugin->expects($this->once())->method('sendResponse');
-		/** @var \Sabre\DAV\Server | PHPUnit_Framework_MockObject_MockObject $server */
+		/** @var \Sabre\DAV\Server | \PHPUnit\Framework\MockObject\MockObject $server */
 		$server = $this->getMockBuilder('Sabre\DAV\Server')->disableOriginalConstructor()->getMock();
 		$server->expects($this->once())->method('on');
-		$httpResponse = $this->getMockBuilder('Sabre\HTTP\Response')->disableOriginalConstructor()->getMock();
+		$httpResponse = $this->getMockBuilder(Response::class)->disableOriginalConstructor()->getMock();
 		$httpResponse->expects($this->once())->method('addHeaders');
 		$httpResponse->expects($this->once())->method('setStatus')->with($expectedCode);
 		$httpResponse->expects($this->once())->method('setBody')->with(':boom:');

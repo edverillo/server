@@ -1,9 +1,13 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -17,14 +21,14 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\Http\Client;
 
 use OCP\Http\Client\IResponse;
-use GuzzleHttp\Message\Response as GuzzleResponse;
+use Psr\Http\Message\ResponseInterface;
 
 /**
  * Class Response
@@ -32,7 +36,7 @@ use GuzzleHttp\Message\Response as GuzzleResponse;
  * @package OC\Http
  */
 class Response implements IResponse {
-	/** @var GuzzleResponse */
+	/** @var ResponseInterface */
 	private $response;
 
 	/**
@@ -41,10 +45,10 @@ class Response implements IResponse {
 	private $stream;
 
 	/**
-	 * @param GuzzleResponse $response
+	 * @param ResponseInterface $response
 	 * @param bool $stream
 	 */
-	public function __construct(GuzzleResponse $response, $stream = false) {
+	public function __construct(ResponseInterface $response, $stream = false) {
 		$this->response = $response;
 		$this->stream = $stream;
 	}
@@ -61,22 +65,28 @@ class Response implements IResponse {
 	/**
 	 * @return int
 	 */
-	public function getStatusCode() {
+	public function getStatusCode(): int {
 		return $this->response->getStatusCode();
 	}
 
 	/**
-	 * @param $key
+	 * @param string $key
 	 * @return string
 	 */
-	public function getHeader($key) {
-		return $this->response->getHeader($key);
+	public function getHeader(string $key): string {
+		$headers = $this->response->getHeader($key);
+
+		if (count($headers) === 0) {
+			return '';
+		}
+
+		return $headers[0];
 	}
 
 	/**
 	 * @return array
 	 */
-	public function getHeaders() {
+	public function getHeaders(): array {
 		return $this->response->getHeaders();
 	}
 }

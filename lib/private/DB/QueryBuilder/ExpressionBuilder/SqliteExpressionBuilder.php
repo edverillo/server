@@ -2,6 +2,8 @@
 /**
  * @copyright Copyright (c) 2017 Robin Appelman <robin@icewind.nl>
  *
+ * @author Robin Appelman <robin@icewind.nl>
+ *
  * @license GNU AGPL version 3 or any later version
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,18 +17,11 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 namespace OC\DB\QueryBuilder\ExpressionBuilder;
-
-
-use OC\DB\QueryBuilder\QueryFunction;
-use OCP\DB\QueryBuilder\ILiteral;
-use OCP\DB\QueryBuilder\IParameter;
-use OCP\DB\QueryBuilder\IQueryBuilder;
-use OCP\DB\QueryBuilder\IQueryFunction;
 
 class SqliteExpressionBuilder extends ExpressionBuilder {
 	/**
@@ -34,5 +29,9 @@ class SqliteExpressionBuilder extends ExpressionBuilder {
 	 */
 	public function like($x, $y, $type = null) {
 		return parent::like($x, $y, $type) . " ESCAPE '\\'";
+	}
+
+	public function iLike($x, $y, $type = null) {
+		return $this->like($this->functionBuilder->lower($x), $this->functionBuilder->lower($y), $type);
 	}
 }

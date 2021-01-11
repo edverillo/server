@@ -1,5 +1,6 @@
 /**
  * @copyright Copyright (c) 2016 Joas Schilling <coding@schilljs.com>
+ * @copyright Copyright (c) 2019 Gary Kim <gary@garykim.dev>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -40,6 +41,12 @@
 				}
 			});
 
+			var self = this;
+			$('#systemtag_name').on('keyup', function(e) {
+				if (e.which === 13) {
+					_.bind(self._onClickSubmit, self)();
+				}
+			});
 			$('#systemtag_submit').on('click', _.bind(this._onClickSubmit, this));
 			$('#systemtag_delete').on('click', _.bind(this._onClickDelete, this));
 			$('#systemtag_reset').on('click', _.bind(this._onClickReset, this));
@@ -76,6 +83,11 @@
 				userVisible: level === 2 || level === 3,
 				userAssignable: level === 3
 			};
+
+			if (!data.name) {
+				OCP.Toast.error(t('systemtags_manager', 'Tag name is empty'));
+				return;
+			}
 
 			if (tagId) {
 				var model = this.collection.get(tagId);
@@ -116,12 +128,14 @@
 			if (tagId > 0) {
 				$('#systemtags').attr('data-systemtag-id', tagId);
 				$('#systemtag_delete').removeClass('hidden');
-				$('#systemtag_submit').val(t('systemtags_manager', 'Update'));
+				$('#systemtag_submit span').text(t('systemtags_manager', 'Update'));
+				$('#systemtag_create').addClass('hidden');
 			} else {
 				$('#systemtag').select2('val', '');
 				$('#systemtags').attr('data-systemtag-id', '');
 				$('#systemtag_delete').addClass('hidden');
-				$('#systemtag_submit').val(t('systemtags_manager', 'Create'));
+				$('#systemtag_submit span').text(t('systemtags_manager', 'Create'));
+				$('#systemtag_create').removeClass('hidden');
 			}
 		},
 
@@ -164,7 +178,7 @@
 	};
 })();
 
-$(document).ready(function() {
+window.addEventListener('DOMContentLoaded', function() {
 	OCA.SystemTags.Admin.init();
 });
 

@@ -21,9 +21,7 @@
  *
  */
 
-
 namespace Test\AppFramework\Utility;
-
 
 use OC\AppFramework\Utility\ControllerMethodReflector;
 
@@ -32,18 +30,20 @@ class BaseController {
 	/**
 	 * @Annotation
 	 */
-	public function test(){}
+	public function test() {
+	}
 
 	/**
 	 * @Annotation
 	 */
-	public function test2(){}
+	public function test2() {
+	}
 
 	/**
 	 * @Annotation
 	 */
-	public function test3(){}
-
+	public function test3() {
+	}
 }
 
 class MiddleController extends BaseController {
@@ -51,13 +51,15 @@ class MiddleController extends BaseController {
 	/**
 	 * @NoAnnotation
 	 */
-	public function test2() {}
+	public function test2() {
+	}
 
-	public function test3() {}
-
+	public function test3() {
+	}
 }
 
-class EndController extends MiddleController {}
+class EndController extends MiddleController {
+}
 
 class ControllerMethodReflectorTest extends \Test\TestCase {
 
@@ -65,7 +67,7 @@ class ControllerMethodReflectorTest extends \Test\TestCase {
 	/**
 	 * @Annotation
 	 */
-	public function testReadAnnotation(){
+	public function testReadAnnotation() {
 		$reader = new ControllerMethodReflector();
 		$reader->reflect(
 			'\Test\AppFramework\Utility\ControllerMethodReflectorTest',
@@ -75,25 +77,39 @@ class ControllerMethodReflectorTest extends \Test\TestCase {
 		$this->assertTrue($reader->hasAnnotation('Annotation'));
 	}
 
-
 	/**
-	 * @Annotation parameter
+	 * @Annotation(parameter=value)
 	 */
-	public function testGetAnnotationParameter(){
+	public function testGetAnnotationParameterSingle() {
 		$reader = new ControllerMethodReflector();
 		$reader->reflect(
-			'\Test\AppFramework\Utility\ControllerMethodReflectorTest',
-			'testGetAnnotationParameter'
+			__CLASS__,
+			__FUNCTION__
 		);
 
-		$this->assertSame('parameter', $reader->getAnnotationParameter('Annotation'));
+		$this->assertSame('value', $reader->getAnnotationParameter('Annotation', 'parameter'));
+	}
+
+	/**
+	 * @Annotation(parameter1=value1, parameter2=value2,parameter3=value3)
+	 */
+	public function testGetAnnotationParameterMultiple() {
+		$reader = new ControllerMethodReflector();
+		$reader->reflect(
+			__CLASS__,
+			__FUNCTION__
+		);
+
+		$this->assertSame('value1', $reader->getAnnotationParameter('Annotation', 'parameter1'));
+		$this->assertSame('value2', $reader->getAnnotationParameter('Annotation', 'parameter2'));
+		$this->assertSame('value3', $reader->getAnnotationParameter('Annotation', 'parameter3'));
 	}
 
 	/**
 	 * @Annotation
 	 * @param test
 	 */
-	public function testReadAnnotationNoLowercase(){
+	public function testReadAnnotationNoLowercase() {
 		$reader = new ControllerMethodReflector();
 		$reader->reflect(
 			'\Test\AppFramework\Utility\ControllerMethodReflectorTest',
@@ -109,7 +125,7 @@ class ControllerMethodReflectorTest extends \Test\TestCase {
 	 * @Annotation
 	 * @param int $test
 	 */
-	public function testReadTypeIntAnnotations(){
+	public function testReadTypeIntAnnotations() {
 		$reader = new ControllerMethodReflector();
 		$reader->reflect(
 			'\Test\AppFramework\Utility\ControllerMethodReflectorTest',
@@ -124,12 +140,13 @@ class ControllerMethodReflectorTest extends \Test\TestCase {
 	 * @param int $a
 	 * @param int $b
 	 */
-	public function arguments3($a, float $b, int $c, $d){}
+	public function arguments3($a, float $b, int $c, $d) {
+	}
 
 	/**
 	 * @requires PHP 7
 	 */
-	public function testReadTypeIntAnnotationsScalarTypes(){
+	public function testReadTypeIntAnnotationsScalarTypes() {
 		$reader = new ControllerMethodReflector();
 		$reader->reflect(
 			'\Test\AppFramework\Utility\ControllerMethodReflectorTest',
@@ -147,7 +164,7 @@ class ControllerMethodReflectorTest extends \Test\TestCase {
 	 * @Annotation
 	 * @param double $test something special
 	 */
-	public function testReadTypeDoubleAnnotations(){
+	public function testReadTypeDoubleAnnotations() {
 		$reader = new ControllerMethodReflector();
 		$reader->reflect(
 			'\Test\AppFramework\Utility\ControllerMethodReflectorTest',
@@ -161,7 +178,7 @@ class ControllerMethodReflectorTest extends \Test\TestCase {
 	 * @Annotation
 	 * @param 	string  $foo
 	 */
-	public function testReadTypeWhitespaceAnnotations(){
+	public function testReadTypeWhitespaceAnnotations() {
 		$reader = new ControllerMethodReflector();
 		$reader->reflect(
 			'\Test\AppFramework\Utility\ControllerMethodReflectorTest',
@@ -172,7 +189,8 @@ class ControllerMethodReflectorTest extends \Test\TestCase {
 	}
 
 
-	public function arguments($arg, $arg2='hi') {}
+	public function arguments($arg, $arg2 = 'hi') {
+	}
 	public function testReflectParameters() {
 		$reader = new ControllerMethodReflector();
 		$reader->reflect(
@@ -180,11 +198,12 @@ class ControllerMethodReflectorTest extends \Test\TestCase {
 			'arguments'
 		);
 
-		$this->assertEquals(array('arg' => null, 'arg2' => 'hi'), $reader->getParameters());
+		$this->assertEquals(['arg' => null, 'arg2' => 'hi'], $reader->getParameters());
 	}
 
 
-	public function arguments2($arg) {}
+	public function arguments2($arg) {
+	}
 	public function testReflectParameters2() {
 		$reader = new ControllerMethodReflector();
 		$reader->reflect(
@@ -192,7 +211,7 @@ class ControllerMethodReflectorTest extends \Test\TestCase {
 			'arguments2'
 		);
 
-		$this->assertEquals(array('arg' => null), $reader->getParameters());
+		$this->assertEquals(['arg' => null], $reader->getParameters());
 	}
 
 
@@ -219,5 +238,4 @@ class ControllerMethodReflectorTest extends \Test\TestCase {
 
 		$this->assertFalse($reader->hasAnnotation('Annotation'));
 	}
-
 }

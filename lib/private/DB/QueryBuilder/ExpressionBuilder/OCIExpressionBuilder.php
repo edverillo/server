@@ -18,12 +18,11 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\DB\QueryBuilder\ExpressionBuilder;
-
 
 use OC\DB\QueryBuilder\QueryFunction;
 use OCP\DB\QueryBuilder\ILiteral;
@@ -138,6 +137,28 @@ class OCIExpressionBuilder extends ExpressionBuilder {
 	}
 
 	/**
+	 * Creates a $x = '' statement, because Oracle needs a different check
+	 *
+	 * @param string $x The field in string format to be inspected by the comparison.
+	 * @return string
+	 * @since 13.0.0
+	 */
+	public function emptyString($x) {
+		return $this->isNull($x);
+	}
+
+	/**
+	 * Creates a `$x <> ''` statement, because Oracle needs a different check
+	 *
+	 * @param string $x The field in string format to be inspected by the comparison.
+	 * @return string
+	 * @since 13.0.0
+	 */
+	public function nonEmptyString($x) {
+		return $this->isNotNull($x);
+	}
+
+	/**
 	 * Returns a IQueryFunction that casts the column to the given type
 	 *
 	 * @param string $column
@@ -148,6 +169,10 @@ class OCIExpressionBuilder extends ExpressionBuilder {
 		if ($type === IQueryBuilder::PARAM_STR) {
 			$column = $this->helper->quoteColumnName($column);
 			return new QueryFunction('to_char(' . $column . ')');
+		}
+		if ($type === IQueryBuilder::PARAM_INT) {
+			$column = $this->helper->quoteColumnName($column);
+			return new QueryFunction('to_number(to_char(' . $column . '))');
 		}
 
 		return parent::castColumn($column, $type);
@@ -164,8 +189,6 @@ class OCIExpressionBuilder extends ExpressionBuilder {
 	 * @inheritdoc
 	 */
 	public function iLike($x, $y, $type = null) {
-		$x = $this->helper->quoteColumnName($x);
-		$y = $this->helper->quoteColumnName($y);
-		return new QueryFunction('REGEXP_LIKE('.$x.', \'^\' || REPLACE('.$y.', \'%\', \'.*\') || \'$\', \'i\')');
+		return $this->like($this->functionBuilder->lower($x), $this->functionBuilder->lower($y));
 	}
 }

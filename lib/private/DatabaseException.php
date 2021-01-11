@@ -17,22 +17,11 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC;
 
 class DatabaseException extends \Exception {
-	private $query;
-
-	//FIXME getQuery seems to be unused, maybe use parent constructor with $message, $code and $previous
-	public function __construct($message, $query = null){
-		parent::__construct($message);
-		$this->query = $query;
-	}
-
-	public function getQuery() {
-		return $this->query;
-	}
 }

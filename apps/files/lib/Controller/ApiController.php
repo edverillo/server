@@ -2,14 +2,22 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
- * @author Christoph Wurst <christoph@owncloud.com>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Daniel Kesselberg <mail@danielkesselberg.de>
+ * @author Felix Nüsse <Felix.nuesse@t-online.de>
+ * @author fnuesse <felix.nuesse@t-online.de>
+ * @author fnuesse <fnuesse@techfak.uni-bielefeld.de>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author John Molakvoæ (skjnldsv) <skjnldsv@protonmail.com>
+ * @author Julius Härtl <jus@bitgrid.net>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Max Kovalenko <mxss1998@yandex.ru>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Richard Steinmetz <richard@steinmetz.cloud>
+ * @author Robin Appelman <robin@icewind.nl>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
  * @author Tobias Kaminsky <tobias@kaminsky.me>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -23,27 +31,29 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\Files\Controller;
 
-use OCP\AppFramework\Http;
+use OC\Files\Node\Node;
+use OCA\Files\Service\TagService;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\DataResponse;
+use OCP\AppFramework\Http\FileDisplayResponse;
+use OCP\AppFramework\Http\JSONResponse;
+use OCP\AppFramework\Http\Response;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\NotFoundException;
 use OCP\IConfig;
-use OCP\IRequest;
-use OCP\AppFramework\Http\DataResponse;
-use OCP\AppFramework\Http\FileDisplayResponse;
-use OCP\AppFramework\Http\Response;
-use OCA\Files\Service\TagService;
 use OCP\IPreview;
-use OCP\Share\IManager;
-use OC\Files\Node\Node;
+use OCP\IRequest;
 use OCP\IUserSession;
+use OCP\Share\IManager;
+use OCP\Share\IShare;
 
 /**
  * Class ApiController
@@ -53,7 +63,7 @@ use OCP\IUserSession;
 class ApiController extends Controller {
 	/** @var TagService */
 	private $tagService;
-	/** @var IManager **/
+	/** @var IManager * */
 	private $shareManager;
 	/** @var IPreview */
 	private $previewManager;
@@ -106,7 +116,7 @@ class ApiController extends Controller {
 	 * @return DataResponse|FileDisplayResponse
 	 */
 	public function getThumbnail($x, $y, $file) {
-		if($x < 1 || $y < 1) {
+		if ($x < 1 || $y < 1) {
 			return new DataResponse(['message' => 'Requested size must be numeric and a positive value.'], Http::STATUS_BAD_REQUEST);
 		}
 
@@ -171,6 +181,7 @@ class ApiController extends Controller {
 			/** @var \OC\Files\Node\Node $shareTypes */
 			$shareTypes = $this->getShareTypes($node);
 			$file = \OCA\Files\Helper::formatFileInfo($node->getFileInfo());
+			$file['hasPreview'] = $this->previewManager->isAvailable($node);
 			$parts = explode('/', dirname($node->getPath()), 4);
 			if (isset($parts[3])) {
 				$file['path'] = '/' . $parts[3];
@@ -208,11 +219,13 @@ class ApiController extends Controller {
 		$userId = $this->userSession->getUser()->getUID();
 		$shareTypes = [];
 		$requestedShareTypes = [
-			\OCP\Share::SHARE_TYPE_USER,
-			\OCP\Share::SHARE_TYPE_GROUP,
-			\OCP\Share::SHARE_TYPE_LINK,
-			\OCP\Share::SHARE_TYPE_REMOTE,
-			\OCP\Share::SHARE_TYPE_EMAIL
+			IShare::TYPE_USER,
+			IShare::TYPE_GROUP,
+			IShare::TYPE_LINK,
+			IShare::TYPE_REMOTE,
+			IShare::TYPE_EMAIL,
+			IShare::TYPE_ROOM,
+			IShare::TYPE_DECK,
 		];
 		foreach ($requestedShareTypes as $requestedShareType) {
 			// one of each type is enough to find out about the types
@@ -238,6 +251,7 @@ class ApiController extends Controller {
 	 * @param string $mode
 	 * @param string $direction
 	 * @return Response
+	 * @throws \OCP\PreConditionNotMetException
 	 */
 	public function updateFileSorting($mode, $direction) {
 		$allowedMode = ['name', 'size', 'mtime'];
@@ -258,10 +272,75 @@ class ApiController extends Controller {
 	 * @NoAdminRequired
 	 *
 	 * @param bool $show
+	 * @return Response
+	 * @throws \OCP\PreConditionNotMetException
 	 */
 	public function showHiddenFiles($show) {
-		$this->config->setUserValue($this->userSession->getUser()->getUID(), 'files', 'show_hidden', (int) $show);
+		$this->config->setUserValue($this->userSession->getUser()->getUID(), 'files', 'show_hidden', (int)$show);
 		return new Response();
 	}
 
+	/**
+	 * Toggle default for files grid view
+	 *
+	 * @NoAdminRequired
+	 *
+	 * @param bool $show
+	 * @return Response
+	 * @throws \OCP\PreConditionNotMetException
+	 */
+	public function showGridView($show) {
+		$this->config->setUserValue($this->userSession->getUser()->getUID(), 'files', 'show_grid', (int)$show);
+		return new Response();
+	}
+
+	/**
+	 * Get default settings for the grid view
+	 *
+	 * @NoAdminRequired
+	 */
+	public function getGridView() {
+		$status = $this->config->getUserValue($this->userSession->getUser()->getUID(), 'files', 'show_grid', '0') === '1';
+		return new JSONResponse(['gridview' => $status]);
+	}
+
+	/**
+	 * Toggle default for showing/hiding xxx folder
+	 *
+	 * @NoAdminRequired
+	 *
+	 * @param int $show
+	 * @param string $key the key of the folder
+	 *
+	 * @return Response
+	 * @throws \OCP\PreConditionNotMetException
+	 */
+	public function toggleShowFolder(int $show, string $key) {
+		// ensure the edited key exists
+		$navItems = \OCA\Files\App::getNavigationManager()->getAll();
+		foreach ($navItems as $item) {
+			// check if data is valid
+			if (($show === 0 || $show === 1) && isset($item['expandedState']) && $key === $item['expandedState']) {
+				$this->config->setUserValue($this->userSession->getUser()->getUID(), 'files', $key, $show);
+				return new Response();
+			}
+		}
+		$response = new Response();
+		$response->setStatus(Http::STATUS_FORBIDDEN);
+		return $response;
+	}
+
+	/**
+	 * Get sorting-order for custom sorting
+	 *
+	 * @NoAdminRequired
+	 *
+	 * @param string $folderpath
+	 * @return string
+	 * @throws \OCP\Files\NotFoundException
+	 */
+	public function getNodeType($folderpath) {
+		$node = $this->userFolder->get($folderpath);
+		return $node->getType();
+	}
 }

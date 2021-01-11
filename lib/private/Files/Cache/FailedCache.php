@@ -16,7 +16,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -71,15 +71,12 @@ class FailedCache implements ICache {
 	}
 
 	public function put($file, array $data) {
-		return;
 	}
 
 	public function insert($file, array $data) {
-		return;
 	}
 
 	public function update($id, array $data) {
-		return;
 	}
 
 	public function getId($file) {
@@ -95,19 +92,15 @@ class FailedCache implements ICache {
 	}
 
 	public function remove($file) {
-		return;
 	}
 
 	public function move($source, $target) {
-		return;
 	}
 
 	public function moveFromCache(ICache $sourceCache, $sourcePath, $targetPath) {
-		return;
 	}
 
 	public function clear() {
-		return;
 	}
 
 	public function getStatus($file) {
@@ -119,10 +112,6 @@ class FailedCache implements ICache {
 	}
 
 	public function searchByMime($mimetype) {
-		return [];
-	}
-
-	public function searchByTag($tag, $userId) {
 		return [];
 	}
 

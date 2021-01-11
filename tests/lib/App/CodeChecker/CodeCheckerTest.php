@@ -22,8 +22,13 @@ class CodeCheckerTest extends TestCase {
 	 * @param string $fileToVerify
 	 */
 	public function testFindInvalidUsage($expectedErrorToken, $expectedErrorCode, $fileToVerify) {
+		if (PHP_MAJOR_VERSION > 7) {
+			$this->markTestSkipped('Only run on php7');
+		}
+
 		$checker = new CodeChecker(
-			new PrivateCheck(new EmptyCheck())
+			new PrivateCheck(new EmptyCheck()),
+			false
 		);
 		$errors = $checker->analyseFile(\OC::$SERVERROOT . "/tests/data/app/code-checker/$fileToVerify");
 
@@ -48,8 +53,13 @@ class CodeCheckerTest extends TestCase {
 	 * @param string $fileToVerify
 	 */
 	public function testPassValidUsage($fileToVerify) {
+		if (PHP_MAJOR_VERSION > 7) {
+			$this->markTestSkipped('Only run on php7');
+		}
+
 		$checker = new CodeChecker(
-			new PrivateCheck(new EmptyCheck())
+			new PrivateCheck(new EmptyCheck()),
+			false
 		);
 		$errors = $checker->analyseFile(\OC::$SERVERROOT . "/tests/data/app/code-checker/$fileToVerify");
 

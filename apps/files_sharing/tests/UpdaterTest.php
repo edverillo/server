@@ -3,12 +3,15 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Björn Schießle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Tobia De Koninck <tobia@ledfan.be>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -22,11 +25,15 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\Files_Sharing\Tests;
+
+use OCA\Files_Trashbin\AppInfo\Application;
+use OCP\AppFramework\Bootstrap\IBootContext;
+use OCP\Share\IShare;
 
 /**
  * Class UpdaterTest
@@ -34,15 +41,14 @@ namespace OCA\Files_Sharing\Tests;
  * @group DB
  */
 class UpdaterTest extends TestCase {
+	public const TEST_FOLDER_NAME = '/folder_share_updater_test';
 
-	const TEST_FOLDER_NAME = '/folder_share_updater_test';
-
-	public static function setUpBeforeClass() {
+	public static function setUpBeforeClass(): void {
 		parent::setUpBeforeClass();
 		\OCA\Files_Sharing\Helper::registerHooks();
 	}
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->folder = self::TEST_FOLDER_NAME;
@@ -55,7 +61,7 @@ class UpdaterTest extends TestCase {
 		$this->view->file_put_contents($this->folder . '/' . $this->filename, $this->data);
 	}
 
-	protected function tearDown() {
+	protected function tearDown(): void {
 		if ($this->view) {
 			$this->view->unlink($this->filename);
 			$this->view->deleteAll($this->folder);
@@ -69,18 +75,19 @@ class UpdaterTest extends TestCase {
 	 * points should be unshared before the folder gets deleted so
 	 * that the mount point doesn't end up at the trash bin
 	 */
-	function testDeleteParentFolder() {
-		$status = \OC_App::isEnabled('files_trashbin');
+	public function testDeleteParentFolder() {
+		$status = \OC::$server->getAppManager()->isEnabledForUser('files_trashbin');
 		(new \OC_App())->enable('files_trashbin');
 
-
-		\OCA\Files_Trashbin\Trashbin::registerHooks();
+		// register trashbin hooks
+		$trashbinApp = new Application();
+		$trashbinApp->boot($this->createMock(IBootContext::class));
 
 		$fileinfo = \OC\Files\Filesystem::getFileInfo($this->folder);
 		$this->assertTrue($fileinfo instanceof \OC\Files\FileInfo);
 
 		$this->share(
-			\OCP\Share::SHARE_TYPE_USER,
+			IShare::TYPE_USER,
 			$this->folder,
 			self::TEST_FILES_SHARING_API_USER1,
 			self::TEST_FILES_SHARING_API_USER2,
@@ -93,11 +100,11 @@ class UpdaterTest extends TestCase {
 		// check if user2 can see the shared folder
 		$this->assertTrue($view->file_exists($this->folder));
 
-		$foldersShared = \OCP\Share::getItemsSharedWith('folder');
+		$foldersShared = \OC\Share\Share::getItemsSharedWith('folder');
 		$this->assertSame(1, count($foldersShared));
 
-		$view->mkdir("localFolder");
-		$view->file_put_contents("localFolder/localFile.txt", "local file");
+		$view->mkdir('localFolder');
+		$view->file_put_contents('localFolder/localFile.txt', 'local file');
 
 		$view->rename($this->folder, 'localFolder/' . $this->folder);
 
@@ -110,7 +117,7 @@ class UpdaterTest extends TestCase {
 		$this->loginHelper(self::TEST_FILES_SHARING_API_USER2);
 
 		// shared folder should be unshared
-		$foldersShared = \OCP\Share::getItemsSharedWith('folder');
+		$foldersShared = \OC\Share\Share::getItemsSharedWith('folder');
 		$this->assertTrue(empty($foldersShared));
 
 		// trashbin should contain the local file but not the mount point
@@ -126,7 +133,7 @@ class UpdaterTest extends TestCase {
 		$rootView->deleteAll('files_trashin');
 
 		if ($status === false) {
-			\OC_App::disable('files_trashbin');
+			\OC::$server->getAppManager()->disableApp('files_trashbin');
 		}
 
 		\OC\Files\Filesystem::getLoader()->removeStorageWrapper('oc_trashbin');
@@ -164,7 +171,7 @@ class UpdaterTest extends TestCase {
 		$this->loginHelper(self::TEST_FILES_SHARING_API_USER1);
 
 		$share = $this->share(
-			\OCP\Share::SHARE_TYPE_USER,
+			IShare::TYPE_USER,
 			$this->folder,
 			self::TEST_FILES_SHARING_API_USER1,
 			self::TEST_FILES_SHARING_API_USER2,
@@ -196,12 +203,11 @@ class UpdaterTest extends TestCase {
 	/**
 	 * if a folder gets renamed all children mount points should be renamed too
 	 */
-	function testRename() {
-
+	public function testRename() {
 		$fileinfo = \OC\Files\Filesystem::getFileInfo($this->folder);
 
 		$share = $this->share(
-			\OCP\Share::SHARE_TYPE_USER,
+			IShare::TYPE_USER,
 			$this->folder,
 			self::TEST_FILES_SHARING_API_USER1,
 			self::TEST_FILES_SHARING_API_USER2,
@@ -232,5 +238,4 @@ class UpdaterTest extends TestCase {
 		// cleanup
 		$this->shareManager->deleteShare($share);
 	}
-
 }

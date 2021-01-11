@@ -1,9 +1,13 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Joas Schilling <coding@schilljs.com>
- * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Julius Härtl <jus@bitgrid.net>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -17,12 +21,11 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\UpdateNotification\Notification;
-
 
 use OCP\IConfig;
 use OCP\IGroupManager;
@@ -30,9 +33,11 @@ use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserSession;
 use OCP\L10N\IFactory;
+use OCP\Notification\AlreadyProcessedException;
 use OCP\Notification\IManager;
 use OCP\Notification\INotification;
 use OCP\Notification\INotifier;
+use OCP\Util;
 
 class Notifier implements INotifier {
 
@@ -78,15 +83,36 @@ class Notifier implements INotifier {
 	}
 
 	/**
+	 * Identifier of the notifier, only use [a-z0-9_]
+	 *
+	 * @return string
+	 * @since 17.0.0
+	 */
+	public function getID(): string {
+		return 'updatenotification';
+	}
+
+	/**
+	 * Human readable name describing the notifier
+	 *
+	 * @return string
+	 * @since 17.0.0
+	 */
+	public function getName(): string {
+		return $this->l10NFactory->get('updatenotification')->t('Update notifications');
+	}
+
+	/**
 	 * @param INotification $notification
 	 * @param string $languageCode The code of the language that should be used to prepare the notification
 	 * @return INotification
 	 * @throws \InvalidArgumentException When the notification was not prepared by a notifier
+	 * @throws AlreadyProcessedException When the notification is not needed anymore and should be deleted
 	 * @since 9.0.0
 	 */
-	public function prepare(INotification $notification, $languageCode) {
+	public function prepare(INotification $notification, string $languageCode): INotification {
 		if ($notification->getApp() !== 'updatenotification') {
-			throw new \InvalidArgumentException();
+			throw new \InvalidArgumentException('Unknown app id');
 		}
 
 		$l = $this->l10NFactory->get('updatenotification', $languageCode);
@@ -94,11 +120,11 @@ class Notifier implements INotifier {
 			$errors = (int) $this->config->getAppValue('updatenotification', 'update_check_errors', 0);
 			if ($errors === 0) {
 				$this->notificationManager->markProcessed($notification);
-				throw new \InvalidArgumentException();
+				throw new \InvalidArgumentException('Update checked worked again');
 			}
 
 			$notification->setParsedSubject($l->t('The update server could not be reached since %d days to check for new updates.', [$errors]))
-				->setParsedMessage($l->t('Please check the nextcloud and server log files for errors.'));
+				->setParsedMessage($l->t('Please check the Nextcloud and server log files for errors.'));
 		} elseif ($notification->getObjectType() === 'core') {
 			$this->updateAlreadyInstalledCheck($notification, $this->getCoreVersions());
 
@@ -106,7 +132,7 @@ class Notifier implements INotifier {
 			$notification->setParsedSubject($l->t('Update to %1$s is available.', [$parameters['version']]));
 
 			if ($this->isAdmin()) {
-				$notification->setLink($this->url->linkToRouteAbsolute('settings.AdminSettings.index') . '#updater');
+				$notification->setLink($this->url->linkToRouteAbsolute('settings.AdminSettings.index', ['section' => 'overview']) . '#version');
 			}
 		} else {
 			$appInfo = $this->getAppInfo($notification->getObjectType());
@@ -117,7 +143,7 @@ class Notifier implements INotifier {
 			}
 
 			$notification->setParsedSubject($l->t('Update for %1$s to version %2$s is available.', [$appName, $notification->getObjectId()]))
-				->setRichSubject($l->t('Update for {app} to version %s is available.', $notification->getObjectId()), [
+				->setRichSubject($l->t('Update for {app} to version %s is available.', [$notification->getObjectId()]), [
 					'app' => [
 						'type' => 'app',
 						'id' => $notification->getObjectType(),
@@ -126,7 +152,7 @@ class Notifier implements INotifier {
 				]);
 
 			if ($this->isAdmin()) {
-				$notification->setLink($this->url->linkToRouteAbsolute('settings.AppSettings.viewApps') . '#app-' . $notification->getObjectType());
+				$notification->setLink($this->url->linkToRouteAbsolute('settings.AppSettings.viewApps', ['category' => 'updates']) . '#app-' . $notification->getObjectType());
 			}
 		}
 
@@ -140,19 +166,18 @@ class Notifier implements INotifier {
 	 *
 	 * @param INotification $notification
 	 * @param string $installedVersion
-	 * @throws \InvalidArgumentException When the update is already installed
+	 * @throws AlreadyProcessedException When the update is already installed
 	 */
 	protected function updateAlreadyInstalledCheck(INotification $notification, $installedVersion) {
 		if (version_compare($notification->getObjectId(), $installedVersion, '<=')) {
-			$this->notificationManager->markProcessed($notification);
-			throw new \InvalidArgumentException();
+			throw new AlreadyProcessedException();
 		}
 	}
 
 	/**
 	 * @return bool
 	 */
-	protected function isAdmin() {
+	protected function isAdmin(): bool {
 		$user = $this->userSession->getUser();
 
 		if ($user instanceof IUser) {
@@ -162,11 +187,11 @@ class Notifier implements INotifier {
 		return false;
 	}
 
-	protected function getCoreVersions() {
-		return implode('.', \OCP\Util::getVersion());
+	protected function getCoreVersions(): string {
+		return implode('.', Util::getVersion());
 	}
 
-	protected function getAppVersions() {
+	protected function getAppVersions(): array {
 		return \OC_App::getAppVersions();
 	}
 

@@ -3,11 +3,12 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Bart Visscher <bartv@thisnet.nl>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author David Prévot <taffit@debian.org>
- * @author Felix Moeller <mail@felixmoeller.de>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Tanghus <thomas@tanghus.net>
  *
  * @license AGPL-3.0
@@ -22,7 +23,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -133,7 +134,7 @@ class Route extends SymfonyRoute implements IRoute {
 	 * to the class with $function
 	 */
 	public function action($class, $function = null) {
-		$action = array($class, $function);
+		$action = [$class, $function];
 		if (is_null($function)) {
 			$action = $class;
 		}
@@ -148,11 +149,12 @@ class Route extends SymfonyRoute implements IRoute {
 	 * @return void
 	 */
 	public function actionInclude($file) {
-		$function = create_function('$param',
-			'unset($param["_route"]);'
-			.'$_GET=array_merge($_GET, $param);'
-			.'unset($param);'
-			.'require_once "'.$file.'";');
+		$function = function ($param) use ($file) {
+			unset($param["_route"]);
+			$_GET = array_merge($_GET, $param);
+			unset($param);
+			require_once "$file";
+		} ;
 		$this->action($function);
 	}
 }

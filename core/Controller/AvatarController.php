@@ -2,13 +2,15 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Daniel Kesselberg <mail@danielkesselberg.de>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author John Molakvoæ (skjnldsv) <skjnldsv@protonmail.com>
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
- * @author Robin Appelman <robin@icewind.nl>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -22,9 +24,10 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
+
 namespace OC\Core\Controller;
 
 use OC\AppFramework\Utility\TimeFactory;
@@ -35,11 +38,10 @@ use OCP\AppFramework\Http\FileDisplayResponse;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\Files\File;
 use OCP\Files\IRootFolder;
-use OCP\Files\NotFoundException;
 use OCP\IAvatarManager;
 use OCP\ICache;
-use OCP\ILogger;
 use OCP\IL10N;
+use OCP\ILogger;
 use OCP\IRequest;
 use OCP\IUserManager;
 use OCP\IUserSession;
@@ -78,18 +80,6 @@ class AvatarController extends Controller {
 	/** @var TimeFactory */
 	protected $timeFactory;
 
-	/**
-	 * @param string $appName
-	 * @param IRequest $request
-	 * @param IAvatarManager $avatarManager
-	 * @param ICache $cache
-	 * @param IL10N $l10n
-	 * @param IUserManager $userManager
-	 * @param IRootFolder $rootFolder
-	 * @param ILogger $logger
-	 * @param string $userId
-	 * @param TimeFactory $timeFactory
-	 */
 	public function __construct($appName,
 								IRequest $request,
 								IAvatarManager $avatarManager,
@@ -112,9 +102,11 @@ class AvatarController extends Controller {
 		$this->timeFactory = $timeFactory;
 	}
 
+
 	/**
 	 * @NoAdminRequired
 	 * @NoCSRFRequired
+	 * @NoSameSiteCookieRequired
 	 * @PublicPage
 	 *
 	 * @param string $userId
@@ -122,6 +114,7 @@ class AvatarController extends Controller {
 	 * @return JSONResponse|FileDisplayResponse
 	 */
 	public function getAvatar($userId, $size) {
+		// min/max size
 		if ($size > 2048) {
 			$size = 2048;
 		} elseif ($size <= 0) {
@@ -129,36 +122,20 @@ class AvatarController extends Controller {
 		}
 
 		try {
-			$avatar = $this->avatarManager->getAvatar($userId)->getFile($size);
-			$resp = new FileDisplayResponse($avatar,
+			$avatar = $this->avatarManager->getAvatar($userId);
+			$avatarFile = $avatar->getFile($size);
+			$response = new FileDisplayResponse(
+				$avatarFile,
 				Http::STATUS_OK,
-				['Content-Type' => $avatar->getMimeType()]);
-		} catch (NotFoundException $e) {
-			$user = $this->userManager->get($userId);
-			$resp = new JSONResponse([
-				'data' => [
-					'displayname' => $user->getDisplayName(),
-				],
-			]);
+				['Content-Type' => $avatarFile->getMimeType(), 'X-NC-IsCustomAvatar' => (int)$avatar->isCustomAvatar()]
+			);
 		} catch (\Exception $e) {
-			$resp = new JSONResponse([
-				'data' => [
-					'displayname' => '',
-				],
-			]);
+			return new JSONResponse([], Http::STATUS_NOT_FOUND);
 		}
 
-		// Let cache this!
-		$resp->addHeader('Pragma', 'public');
-		// Cache for 30 minutes
-		$resp->cacheFor(1800);
-
-		$expires = new \DateTime();
-		$expires->setTimestamp($this->timeFactory->getTime());
-		$expires->add(new \DateInterval('PT30M'));
-		$resp->addHeader('Expires', $expires->format(\DateTime::RFC1123));
-
-		return $resp;
+		// Cache for 1 day
+		$response->cacheFor(60 * 60 * 24);
+		return $response;
 	}
 
 	/**
@@ -173,11 +150,12 @@ class AvatarController extends Controller {
 		if (isset($path)) {
 			$path = stripslashes($path);
 			$userFolder = $this->rootFolder->getUserFolder($this->userId);
+			/** @var File $node */
 			$node = $userFolder->get($path);
 			if (!($node instanceof File)) {
 				return new JSONResponse(['data' => ['message' => $this->l->t('Please select a file.')]]);
 			}
-			if ($node->getSize() > 20*1024*1024) {
+			if ($node->getSize() > 20 * 1024 * 1024) {
 				return new JSONResponse(
 					['data' => ['message' => $this->l->t('File is too big')]],
 					Http::STATUS_BAD_REQUEST
@@ -205,7 +183,7 @@ class AvatarController extends Controller {
 				 is_uploaded_file($files['tmp_name'][0]) &&
 				!\OC\Files\Filesystem::isFileBlacklisted($files['tmp_name'][0])
 			) {
-				if ($files['size'][0] > 20*1024*1024) {
+				if ($files['size'][0] > 20 * 1024 * 1024) {
 					return new JSONResponse(
 						['data' => ['message' => $this->l->t('File is too big')]],
 						Http::STATUS_BAD_REQUEST
@@ -262,7 +240,7 @@ class AvatarController extends Controller {
 
 	/**
 	 * @NoAdminRequired
-     *
+	 *
 	 * @return JSONResponse
 	 */
 	public function deleteAvatar() {
@@ -285,18 +263,19 @@ class AvatarController extends Controller {
 		$tmpAvatar = $this->cache->get('tmpAvatar');
 		if (is_null($tmpAvatar)) {
 			return new JSONResponse(['data' => [
-										'message' => $this->l->t("No temporary profile picture available, try again")
-									]],
+				'message' => $this->l->t("No temporary profile picture available, try again")
+			]],
 									Http::STATUS_NOT_FOUND);
 		}
 
-		$image = new \OC_Image($tmpAvatar);
+		$image = new \OC_Image();
+		$image->loadFromData($tmpAvatar);
 
 		$resp = new DataDisplayResponse($image->data(),
 				Http::STATUS_OK,
 				['Content-Type' => $image->mimeType()]);
 
-		$resp->setETag(crc32($image->data()));
+		$resp->setETag((string)crc32($image->data()));
 		$resp->cacheFor(0);
 		$resp->setLastModified(new \DateTime('now', new \DateTimeZone('GMT')));
 		return $resp;
@@ -322,13 +301,14 @@ class AvatarController extends Controller {
 		$tmpAvatar = $this->cache->get('tmpAvatar');
 		if (is_null($tmpAvatar)) {
 			return new JSONResponse(['data' => [
-										'message' => $this->l->t("No temporary profile picture available, try again")
-									]],
+				'message' => $this->l->t("No temporary profile picture available, try again")
+			]],
 									Http::STATUS_BAD_REQUEST);
 		}
 
-		$image = new \OC_Image($tmpAvatar);
-		$image->crop($crop['x'], $crop['y'], round($crop['w']), round($crop['h']));
+		$image = new \OC_Image();
+		$image->loadFromData($tmpAvatar);
+		$image->crop($crop['x'], $crop['y'], (int)round($crop['w']), (int)round($crop['h']));
 		try {
 			$avatar = $this->avatarManager->getAvatar($this->userId);
 			$avatar->set($image);

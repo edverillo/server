@@ -85,6 +85,7 @@ OCA = OCA || {};
 		setModel: function(configModel) {
 			this._super(configModel);
 			this.configModel.on('configLoaded', this.onConfigSwitch, this);
+			this.configModel.on('configUpdated', this.onConfigUpdated, this);
 			this.configModel.on('receivedLdapFeature', this.onFeatureReceived, this);
 		},
 
@@ -142,16 +143,16 @@ OCA = OCA || {};
 				var usersFound = parseInt(result.changes.ldap_test_loginname, 10);
 				if(usersFound < 1) {
 					var filter = $('<p>').text(result.changes.ldap_test_effective_filter).html();
-					message = t('user_ldap', 'User not found. Please check your login attributes and username. Effective filter (to copy-and-paste for command line validation): <br/>' + filter);
+					message = t('user_ldap', 'User not found. Please check your login attributes and username. Effective filter (to copy-and-paste for command-line validation): <br/>' + filter);
 					console.warn(filter);
 					isHtml = true;
 				} else if(usersFound === 1) {
 					message = t('user_ldap', 'User found and settings verified.');
 				} else if(usersFound > 1) {
-					message = t('user_ldap', 'Settings verified, but more than one user found. Only the first will be able to login. Consider a more narrow filter.');
+					message = t('user_ldap', 'Consider narrowing your search, as it encompassed many users, only the first one of whom will be able to log in.');
 				}
 			} else {
-				message = t('user_ldap', 'An unspecified error occurred. Please check the settings and the log.');
+				message = t('user_ldap', 'An unspecified error occurred. Please check log and settings.');
 				if(!_.isUndefined(result.message) && result.message) {
 					message = result.message;
 				}
@@ -160,7 +161,7 @@ OCA = OCA || {};
 				} else if(message === 'connection error') {
 					message = t('user_ldap', 'A connection error to LDAP / AD occurred, please check host, port and credentials.');
 				} else if(message === 'missing placeholder') {
-					message = t('user_ldap', 'The %uid placeholder is missing. It will be replaced with the login name when querying LDAP / AD.');
+					message = t('user_ldap', 'The "%uid" placeholder is missing. It will be replaced with the login name when querying LDAP / AD.');
 				}
 			}
 			OC.Notification.showTemporary(message, {isHTML: isHtml});
@@ -202,6 +203,22 @@ OCA = OCA || {};
 			view.managedItems.ldap_loginfilter_attributes.$element.find('option').remove();
 
 			view.onConfigLoaded(view, configuration);
+		},
+
+		/**
+		 * @param {WizardTabLoginFilter} view
+		 * @param {Object} configuration
+		 */
+		onConfigUpdated: function(view, configuration) {
+			// When the user list filter is updated in assisted mode, also
+			// update the login filter automatically.
+			if(
+				!_.isUndefined(configuration.ldap_userlist_filter)
+				&& view.parsedFilterMode === view.configModel.FILTER_MODE_ASSISTED
+				&& _.toArray(configuration).length === 1
+			) {
+				view.configModel.requestWizard('ldap_login_filter');
+			}
 		},
 
 		/**

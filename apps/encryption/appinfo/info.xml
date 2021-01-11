@@ -1,6 +1,9 @@
 <?xml version="1.0"?>
-<info>
+<info xmlns:xsi= "http://www.w3.org/2001/XMLSchema-instance"
+	  xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
 	<id>encryption</id>
+	<name>Default encryption module</name>
+	<summary>Default encryption module for server-side encryption</summary>
 	<description>
 		In order to use this encryption module you need to enable server-side
 		encryption in the admin settings. Once enabled this module will encrypt
@@ -11,26 +14,41 @@
 		Please read the documentation to know all implications before you decide
 		to enable server-side encryption.
 	</description>
-	<name>Default encryption module</name>
-	<licence>AGPL</licence>
-	<author>Bjoern Schiessle, Clark Tomlinson</author>
+	<version>2.9.0</version>
+	<licence>agpl</licence>
+	<author>Bjoern Schiessle</author>
+	<author>Clark Tomlinson</author>
+	<types>
+		<filesystem/>
+	</types>
 	<documentation>
 		<user>user-encryption</user>
 		<admin>admin-encryption</admin>
 	</documentation>
-	<version>1.6.0</version>
-	<types>
-		<filesystem/>
-	</types>
+	<category>files</category>
+	<category>security</category>
+	<bugs>https://github.com/nextcloud/server/issues</bugs>
+
 	<dependencies>
 		<lib>openssl</lib>
-		<nextcloud min-version="12" max-version="12" />
+		<nextcloud min-version="21" max-version="21"/>
 	</dependencies>
-	<settings>
-		<admin>OCA\Encryption\Settings\Admin</admin>
-	</settings>
+
+	<repair-steps>
+		<post-migration>
+			<step>OCA\Encryption\Migration\SetMasterKeyStatus</step>
+		</post-migration>
+	</repair-steps>
+
 	<commands>
 		<command>OCA\Encryption\Command\EnableMasterKey</command>
-		<command>OCA\Encryption\Command\MigrateKeys</command>
+		<command>OCA\Encryption\Command\DisableMasterKey</command>
+		<command>OCA\Encryption\Command\RecoverUser</command>
+		<command>OCA\Encryption\Command\ScanLegacyFormat</command>
 	</commands>
+
+	<settings>
+		<admin>OCA\Encryption\Settings\Admin</admin>
+		<personal>OCA\Encryption\Settings\Personal</personal>
+	</settings>
 </info>

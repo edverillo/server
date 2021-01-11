@@ -1,6 +1,13 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016 Lukas Reschke <lukas@statuscode.ch>
+ *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -15,7 +22,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
@@ -54,7 +61,7 @@ class Signer {
 	 * @param IUser $user
 	 * @return array ['message', 'signature']
 	 */
-	public function sign($type, array $data, IUser $user) {
+	public function sign(string $type, array $data, IUser $user): array {
 		$privateKey = $this->keyManager->getKey($user)->getPrivate();
 		$data = [
 			'data' => $data,
@@ -76,8 +83,8 @@ class Signer {
 	 * @param array $data
 	 * @return bool
 	 */
-	public function verify(array $data) {
-		if(isset($data['message'])
+	public function verify(array $data): bool {
+		if (isset($data['message'])
 			&& isset($data['signature'])
 			&& isset($data['message']['signer'])
 		) {
@@ -85,7 +92,7 @@ class Signer {
 			$userId = substr($data['message']['signer'], 0, $location);
 
 			$user = $this->userManager->get($userId);
-			if($user !== null) {
+			if ($user !== null) {
 				$key = $this->keyManager->getKey($user);
 				return (bool)openssl_verify(
 					json_encode($data['message']),

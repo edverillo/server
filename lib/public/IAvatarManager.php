@@ -1,9 +1,13 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
  * @author Christopher Schäpers <kondou@ts.unde.re>
+ * @author John Molakvoæ (skjnldsv) <skjnldsv@protonmail.com>
+ * @author Michael Weimann <mail@michael-weimann.eu>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
@@ -20,7 +24,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -35,12 +39,21 @@ interface IAvatarManager {
 
 	/**
 	 * return a user specific instance of \OCP\IAvatar
-	 * @see \OCP\IAvatar
+	 * @see IAvatar
 	 * @param string $user the ownCloud user id
-	 * @return \OCP\IAvatar
+	 * @return IAvatar
 	 * @throws \Exception In case the username is potentially dangerous
 	 * @throws \OCP\Files\NotFoundException In case there is no user folder yet
 	 * @since 6.0.0
 	 */
-	public function getAvatar($user);
+	public function getAvatar(string $user) : IAvatar;
+
+	/**
+	 * Returns a guest user avatar instance.
+	 *
+	 * @param string $name The guest name, e.g. "Albert".
+	 * @return IAvatar
+	 * @since 16.0.0
+	 */
+	public function getGuestAvatar(string $name): IAvatar;
 }

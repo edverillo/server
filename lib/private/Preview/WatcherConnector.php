@@ -1,4 +1,7 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, Roeland Jago Douma <roeland@famdouma.nl>
  *
@@ -17,14 +20,15 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
+
 namespace OC\Preview;
 
 use OC\SystemConfig;
-use OCP\Files\Node;
 use OCP\Files\IRootFolder;
+use OCP\Files\Node;
 
 class WatcherConnector {
 
@@ -49,7 +53,7 @@ class WatcherConnector {
 	/**
 	 * @return Watcher
 	 */
-	private function getWatcher() {
+	private function getWatcher(): Watcher {
 		return \OC::$server->query(Watcher::class);
 	}
 
@@ -60,13 +64,7 @@ class WatcherConnector {
 				$this->getWatcher()->postWrite($node);
 			});
 
-			$this->root->listen('\OC\Files', 'preDelete', function (Node $node) {
-				$this->getWatcher()->preDelete($node);
-			});
-
-			$this->root->listen('\OC\Files', 'postDelete', function (Node $node) {
-				$this->getWatcher()->postDelete($node);
-			});
+			\OC_Hook::connect('\OCP\Versions', 'rollback', $this->getWatcher(), 'versionRollback');
 		}
 	}
 }

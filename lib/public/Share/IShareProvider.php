@@ -2,6 +2,10 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
+ * @author Daniel Calviño Sánchez <danxuliu@gmail.com>
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Robin Appelman <robin@icewind.nl>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
@@ -16,20 +20,20 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCP\Share;
 
 use OCP\Files\Folder;
-use OCP\Share\Exceptions\ShareNotFound;
 use OCP\Files\Node;
+use OCP\Share\Exceptions\GenericShareException;
+use OCP\Share\Exceptions\ShareNotFound;
 
 /**
  * Interface IShareProvider
  *
- * @package OCP\Share
  * @since 9.0.0
  */
 interface IShareProvider {
@@ -44,7 +48,7 @@ interface IShareProvider {
 
 	/**
 	 * Create a share
-	 * 
+	 *
 	 * @param \OCP\Share\IShare $share
 	 * @return \OCP\Share\IShare The share object
 	 * @since 9.0.0
@@ -59,6 +63,16 @@ interface IShareProvider {
 	 * @since 9.0.0
 	 */
 	public function update(\OCP\Share\IShare $share);
+
+	/**
+	 * Accept a share.
+	 *
+	 * @param IShare $share
+	 * @param string $recipient
+	 * @return IShare The share object
+	 * @since 17.0.0
+	 */
+//	public function acceptShare(IShare $share, string $recipient): IShare;
 
 	/**
 	 * Delete a share
@@ -78,6 +92,18 @@ interface IShareProvider {
 	 * @since 9.0.0
 	 */
 	public function deleteFromSelf(\OCP\Share\IShare $share, $recipient);
+
+	/**
+	 * Restore a share for a given recipient. The implementation could be provider independant.
+	 *
+	 * @param IShare $share
+	 * @param string $recipient
+	 * @return IShare The restored share object
+	 *
+	 * @since 14.0.0
+	 * @throws GenericShareException In case the share could not be restored
+	 */
+	public function restore(IShare $share, string $recipient): IShare;
 
 	/**
 	 * Move a share as a recipient.
@@ -190,4 +216,25 @@ interface IShareProvider {
 	 * @since 9.1.0
 	 */
 	public function userDeletedFromGroup($uid, $gid);
+
+	/**
+	 * Get the access list to the array of provided nodes.
+	 *
+	 * @see IManager::getAccessList() for sample docs
+	 *
+	 * @param Node[] $nodes The list of nodes to get access for
+	 * @param bool $currentAccess If current access is required (like for removed shares that might get revived later)
+	 * @return array
+	 * @since 12
+	 */
+	public function getAccessList($nodes, $currentAccess);
+
+	/**
+	 * Get all the shares in this provider returned as iterable to reduce memory
+	 * overhead
+	 *
+	 * @return iterable
+	 * @since 18.0.0
+	 */
+	public function getAllShares(): iterable;
 }

@@ -3,7 +3,9 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
@@ -18,38 +20,45 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\DAV\Tests\unit\Comments;
 
+use OCA\DAV\Comments\EntityCollection;
+use OCP\Comments\IComment;
+use OCP\Comments\ICommentsManager;
+use OCP\ILogger;
+use OCP\IUserManager;
+use OCP\IUserSession;
+
 class EntityCollectionTest extends \Test\TestCase {
 
-	/** @var \OCP\Comments\ICommentsManager|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OCP\Comments\ICommentsManager|\PHPUnit\Framework\MockObject\MockObject */
 	protected $commentsManager;
-	/** @var \OCP\IUserManager|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var IUserManager|\PHPUnit\Framework\MockObject\MockObject */
 	protected $userManager;
-	/** @var \OCP\ILogger|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var ILogger|\PHPUnit\Framework\MockObject\MockObject */
 	protected $logger;
-	/** @var \OCA\DAV\Comments\EntityCollection */
+	/** @var EntityCollection */
 	protected $collection;
-	/** @var \OCP\IUserSession|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var IUserSession|\PHPUnit\Framework\MockObject\MockObject */
 	protected $userSession;
 
-	public function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
-		$this->commentsManager = $this->getMockBuilder('\OCP\Comments\ICommentsManager')
+		$this->commentsManager = $this->getMockBuilder(ICommentsManager::class)
 			->disableOriginalConstructor()
 			->getMock();
-		$this->userManager = $this->getMockBuilder('\OCP\IUserManager')
+		$this->userManager = $this->getMockBuilder(IUserManager::class)
 			->disableOriginalConstructor()
 			->getMock();
-		$this->userSession = $this->getMockBuilder('\OCP\IUserSession')
+		$this->userSession = $this->getMockBuilder(IUserSession::class)
 			->disableOriginalConstructor()
 			->getMock();
-		$this->logger = $this->getMockBuilder('\OCP\ILogger')
+		$this->logger = $this->getMockBuilder(ILogger::class)
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -71,20 +80,20 @@ class EntityCollectionTest extends \Test\TestCase {
 		$this->commentsManager->expects($this->once())
 			->method('get')
 			->with('55')
-			->will($this->returnValue(
-				$this->getMockBuilder('\OCP\Comments\IComment')
+			->willReturn(
+				$this->getMockBuilder(IComment::class)
 					->disableOriginalConstructor()
 					->getMock()
-			));
+			);
 
 		$node = $this->collection->getChild('55');
 		$this->assertTrue($node instanceof \OCA\DAV\Comments\CommentNode);
 	}
 
-	/**
-	 * @expectedException \Sabre\DAV\Exception\NotFound
-	 */
+
 	public function testGetChildException() {
+		$this->expectException(\Sabre\DAV\Exception\NotFound::class);
+
 		$this->commentsManager->expects($this->once())
 			->method('get')
 			->with('55')
@@ -97,11 +106,11 @@ class EntityCollectionTest extends \Test\TestCase {
 		$this->commentsManager->expects($this->once())
 			->method('getForObject')
 			->with('files', '19')
-			->will($this->returnValue([
-				$this->getMockBuilder('\OCP\Comments\IComment')
+			->willReturn([
+				$this->getMockBuilder(IComment::class)
 					->disableOriginalConstructor()
 					->getMock()
-			]));
+			]);
 
 		$result = $this->collection->getChildren();
 
@@ -114,11 +123,11 @@ class EntityCollectionTest extends \Test\TestCase {
 		$this->commentsManager->expects($this->once())
 			->method('getForObject')
 			->with('files', '19', 5, 15, $dt)
-			->will($this->returnValue([
-				$this->getMockBuilder('\OCP\Comments\IComment')
+			->willReturn([
+				$this->getMockBuilder(IComment::class)
 					->disableOriginalConstructor()
 					->getMock()
-			]));
+			]);
 
 		$result = $this->collection->findChildren(5, 15, $dt);
 

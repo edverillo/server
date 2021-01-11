@@ -1,6 +1,9 @@
 <?php
 /**
  * Copyright (c) 2014-2015 Lukas Reschke <lukas@owncloud.com>
+ *
+ * @author Arne Hamann <github@arne.email>
+ *
  * This file is licensed under the Affero General Public License version 3 or
  * later.
  * See the COPYING-README file.
@@ -8,93 +11,159 @@
 
 namespace Test\Mail;
 
+use OC\Mail\EMailTemplate;
 use OC\Mail\Mailer;
+use OC\Mail\Message;
+use OCP\Defaults;
+use OCP\EventDispatcher\IEventDispatcher;
 use OCP\IConfig;
-use OC_Defaults;
+use OCP\IL10N;
 use OCP\ILogger;
+use OCP\IURLGenerator;
+use OCP\L10N\IFactory;
+use OCP\Mail\Events\BeforeMessageSent;
 use Test\TestCase;
+use Swift_SwiftException;
 
 class MailerTest extends TestCase {
-	/** @var IConfig */
+	/** @var IConfig|\PHPUnit\Framework\MockObject\MockObject */
 	private $config;
-	/** @var OC_Defaults */
+	/** @var Defaults|\PHPUnit\Framework\MockObject\MockObject */
 	private $defaults;
-	/** @var ILogger */
+	/** @var ILogger|\PHPUnit\Framework\MockObject\MockObject */
 	private $logger;
+	/** @var IURLGenerator|\PHPUnit\Framework\MockObject\MockObject */
+	private $urlGenerator;
+	/** @var IL10N|\PHPUnit\Framework\MockObject\MockObject */
+	private $l10n;
 	/** @var Mailer */
 	private $mailer;
+	/** @var IEventDispatcher */
+	private $dispatcher;
 
-	function setUp() {
+
+	protected function setUp(): void {
 		parent::setUp();
 
-		$this->config = $this->getMockBuilder('\OCP\IConfig')
-			->disableOriginalConstructor()->getMock();
-		$this->defaults = $this->getMockBuilder('\OC_Defaults')
-			->disableOriginalConstructor()->getMock();
-		$this->logger = $this->getMockBuilder('\OCP\ILogger')
-			->disableOriginalConstructor()->getMock();
-		$this->mailer = new Mailer($this->config, $this->logger, $this->defaults);
+		$this->config = $this->createMock(IConfig::class);
+		$this->defaults = $this->createMock(Defaults::class);
+		$this->logger = $this->createMock(ILogger::class);
+		$this->urlGenerator = $this->createMock(IURLGenerator::class);
+		$this->l10n = $this->createMock(IL10N::class);
+		$this->dispatcher = $this->createMock(IEventDispatcher::class);
+		$this->mailer = new Mailer(
+			$this->config,
+			$this->logger,
+			$this->defaults,
+			$this->urlGenerator,
+			$this->l10n,
+			$this->dispatcher,
+			$this->createMock(IFactory::class)
+		);
 	}
 
-	public function testGetMailInstance() {
-		$this->assertEquals(\Swift_MailTransport::newInstance(), self::invokePrivate($this->mailer, 'getMailinstance'));
+	/**
+	 * @return array
+	 */
+	public function sendmailModeProvider(): array {
+		return [
+			'smtp' => ['smtp', ' -bs'],
+			'pipe' => ['pipe', ' -t'],
+		];
 	}
 
-	public function testGetSendMailInstanceSendMail() {
+	/**
+	 * @dataProvider sendmailModeProvider
+	 * @param $sendmailMode
+	 * @param $binaryParam
+	 */
+	public function testGetSendmailInstanceSendMail($sendmailMode, $binaryParam) {
 		$this->config
-			->expects($this->once())
+			->expects($this->exactly(2))
 			->method('getSystemValue')
-			->with('mail_smtpmode', 'php')
-			->will($this->returnValue('sendmail'));
+			->willReturnMap([
+				['mail_smtpmode', 'smtp', 'sendmail'],
+				['mail_sendmailmode', 'smtp', $sendmailMode],
+			]);
 
-		$this->assertEquals(\Swift_SendmailTransport::newInstance('/usr/sbin/sendmail -bs'), self::invokePrivate($this->mailer, 'getSendMailInstance'));
+		$path = \OC_Helper::findBinaryPath('sendmail');
+		if ($path === null) {
+			$path = '/usr/sbin/sendmail';
+		}
+
+		$expected = new \Swift_SendmailTransport($path . $binaryParam);
+		$this->assertEquals($expected, self::invokePrivate($this->mailer, 'getSendMailInstance'));
 	}
 
-	public function testGetSendMailInstanceSendMailQmail() {
+	/**
+	 * @dataProvider sendmailModeProvider
+	 * @param $sendmailMode
+	 * @param $binaryParam
+	 */
+	public function testGetSendmailInstanceSendMailQmail($sendmailMode, $binaryParam) {
 		$this->config
-			->expects($this->once())
+			->expects($this->exactly(2))
 			->method('getSystemValue')
-			->with('mail_smtpmode', 'php')
-			->will($this->returnValue('qmail'));
+			->willReturnMap([
+				['mail_smtpmode', 'smtp', 'qmail'],
+				['mail_sendmailmode', 'smtp', $sendmailMode],
+			]);
 
-		$this->assertEquals(\Swift_SendmailTransport::newInstance('/var/qmail/bin/sendmail -bs'), self::invokePrivate($this->mailer, 'getSendMailInstance'));
+		$this->assertEquals(new \Swift_SendmailTransport('/var/qmail/bin/sendmail' . $binaryParam), self::invokePrivate($this->mailer, 'getSendMailInstance'));
 	}
 
 	public function testGetInstanceDefault() {
-		$this->assertInstanceOf('\Swift_MailTransport', self::invokePrivate($this->mailer, 'getInstance'));
-	}
-
-	public function testGetInstancePhp() {
-		$this->config
-			->expects($this->any())
-			->method('getSystemValue')
-			->will($this->returnValue('php'));
-
-		$this->assertInstanceOf('\Swift_MailTransport', self::invokePrivate($this->mailer, 'getInstance'));
+		$mailer = self::invokePrivate($this->mailer, 'getInstance');
+		$this->assertInstanceOf(\Swift_Mailer::class, $mailer);
+		$this->assertInstanceOf(\Swift_SmtpTransport::class, $mailer->getTransport());
 	}
 
 	public function testGetInstanceSendmail() {
 		$this->config
-			->expects($this->any())
 			->method('getSystemValue')
-			->will($this->returnValue('sendmail'));
+			->willReturnMap([
+				['mail_smtpmode', 'smtp', 'sendmail'],
+				['mail_sendmailmode', 'smtp', 'smtp'],
+			]);
 
-		$this->assertInstanceOf('\Swift_Mailer', self::invokePrivate($this->mailer, 'getInstance'));
+		$mailer = self::invokePrivate($this->mailer, 'getInstance');
+		$this->assertInstanceOf(\Swift_Mailer::class, $mailer);
+		$this->assertInstanceOf(\Swift_SendmailTransport::class, $mailer->getTransport());
+	}
+
+	public function testEvents() {
+		$message = $this->createMock(Message::class);
+
+		$event = new BeforeMessageSent($message);
+		$this->dispatcher->expects($this->at(0))
+			->method('dispatchTyped')
+			->with($this->equalTo($event));
+
+		# We do not care at this point about errors in Swiftmailer
+		try {
+			$this->mailer->send($message);
+		} catch (Swift_SwiftException $e) {
+		}
 	}
 
 	public function testCreateMessage() {
+		$this->config
+			->expects($this->any())
+			->method('getSystemValue')
+			->with('mail_send_plaintext_only', false)
+			->willReturn(false);
 		$this->assertInstanceOf('\OC\Mail\Message', $this->mailer->createMessage());
 	}
 
-	/**
-	 * @expectedException \Exception
-	 */
+
 	public function testSendInvalidMailException() {
+		$this->expectException(\Exception::class);
+
 		$message = $this->getMockBuilder('\OC\Mail\Message')
 			->disableOriginalConstructor()->getMock();
 		$message->expects($this->once())
 			->method('getSwiftMessage')
-			->will($this->returnValue(new \Swift_Message()));
+			->willReturn(new \Swift_Message());
 
 		$this->mailer->send($message);
 	}
@@ -120,4 +189,32 @@ class MailerTest extends TestCase {
 		$this->assertSame($expected, $this->mailer->validateMailAddress($email));
 	}
 
+	public function testCreateEMailTemplate() {
+		$this->config->method('getSystemValue')
+			->with('mail_template_class', '')
+			->willReturnArgument(1);
+
+		$this->assertSame(EMailTemplate::class, get_class($this->mailer->createEMailTemplate('tests.MailerTest')));
+	}
+
+	public function testStreamingOptions() {
+		$this->config->method('getSystemValue')
+			->willReturnMap([
+				['mail_smtpmode', 'smtp', 'smtp'],
+				['mail_smtpstreamoptions', [], ['foo' => 1]]
+			]);
+		$mailer = self::invokePrivate($this->mailer, 'getInstance');
+		$this->assertEquals(1, count($mailer->getTransport()->getStreamOptions()));
+		$this->assertTrue(isset($mailer->getTransport()->getStreamOptions()['foo']));
+	}
+
+	public function testStreamingOptionsWrongType() {
+		$this->config->method('getSystemValue')
+			->willReturnMap([
+				['mail_smtpmode', 'smtp', 'smtp'],
+				['mail_smtpstreamoptions', [], 'bar']
+			]);
+		$mailer = self::invokePrivate($this->mailer, 'getInstance');
+		$this->assertEquals(0, count($mailer->getTransport()->getStreamOptions()));
+	}
 }

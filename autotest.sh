@@ -13,17 +13,16 @@
 # @copyright 2012-2015 Thomas Müller thomas.mueller@tmit.eu
 #
 
-#$EXECUTOR_NUMBER is set by Jenkins and allows us to run autotest in parallel
-DATABASENAME=oc_autotest$EXECUTOR_NUMBER
-DATABASEUSER=oc_autotest$EXECUTOR_NUMBER
+DATABASENAME=oc_autotest
+DATABASEUSER=oc_autotest
 DATABASEHOST=localhost
-ADMINLOGIN=admin$EXECUTOR_NUMBER
+ADMINLOGIN=admin
 BASEDIR=$PWD
 
 PRIMARY_STORAGE_CONFIGS="local swift"
 DBCONFIGS="sqlite mysql mariadb pgsql oci mysqlmb4"
 
-# $PHP_EXE is run through 'which' and as such e.g. 'php' or 'hhvm' is usually
+# $PHP_EXE is run through 'which' and as such e.g. 'php' is usually
 # sufficient. Due to the behaviour of 'which', $PHP_EXE may also be a path
 # (absolute or not) to an executable, e.g. ./code/projects/php-src/sapi/cli/php.
 if [ -z "$PHP_EXE" ]; then
@@ -54,7 +53,7 @@ else
 fi
 
 if ! [ -x "$PHPUNIT" ]; then
-	echo "phpunit executable not found, please install phpunit version >= 4.8" >&2
+	echo "phpunit executable not found, please install phpunit version >= 6.5" >&2
 	exit 3
 fi
 
@@ -69,8 +68,8 @@ PHPUNIT_VERSION=$($PHPUNIT --version | cut -d" " -f2)
 PHPUNIT_MAJOR_VERSION=$(echo "$PHPUNIT_VERSION" | cut -d"." -f1)
 PHPUNIT_MINOR_VERSION=$(echo "$PHPUNIT_VERSION" | cut -d"." -f2)
 
-if ! [ "$PHPUNIT_MAJOR_VERSION" -gt 4 -o \( "$PHPUNIT_MAJOR_VERSION" -eq 4 -a "$PHPUNIT_MINOR_VERSION" -ge 8 \) ]; then
-	echo "phpunit version >= 4.8 required. Version found: $PHPUNIT_VERSION" >&2
+if ! [ "$PHPUNIT_MAJOR_VERSION" -gt 6 -o \( "$PHPUNIT_MAJOR_VERSION" -eq 6 -a "$PHPUNIT_MINOR_VERSION" -ge 5 \) ]; then
+	echo "phpunit version >= 6.5 required. Version found: $PHPUNIT_VERSION" >&2
 	exit 4
 fi
 
@@ -110,9 +109,6 @@ else
 	PRIMARY_STORAGE_CONFIG="local"
 fi
 
-# check for the presence of @since in all OCP methods
-$PHP build/OCPSinceChecker.php
-
 # Back up existing (dev) config if one exists and backup not already there
 if [ -f config/config.php ] && [ ! -f config/config-autotest-backup.php ]; then
 	mv config/config.php config/config-autotest-backup.php
@@ -142,6 +138,10 @@ function cleanup_config {
 	# Remove autotest swift storage config
 	if [ -f config/autotest-storage-swift.config.php ]; then
 		rm config/autotest-storage-swift.config.php
+	fi
+	# Remove autotest redis config
+	if [ -f config/redis.config.php ]; then
+		rm config/redis.config.php
 	fi
 	# Remove mysqlmb4.config.php
 	rm -f config/mysqlmb4.config.php
@@ -178,6 +178,12 @@ function execute_tests {
 	fi
 	cp tests/preseed-config.php config/config.php
 
+	if [ "$ENABLE_REDIS" == "true" ] ; then
+		cp tests/redis.config.php config/redis.config.php
+	elif [ "$ENABLE_REDIS_CLUSTER" == "true" ] ; then
+		cp tests/redis-cluster.config.php config/redis.config.php
+	fi
+
 	_DB=$DB
 
 	# drop database
@@ -195,21 +201,21 @@ function execute_tests {
 
 		else
 			if [ -z "$DRONE" ] ; then # no need to drop the DB when we are on CI
-                if [ "mysql" != "$(mysql --version | grep -o mysql)" ] ; then
-                    echo "Your mysql binary is not provided by mysql"
-                    echo "To use the docker container set the USEDOCKER environment variable"
-                    exit -1
-                fi
-                mysql -u "$DATABASEUSER" -powncloud -e "DROP DATABASE IF EXISTS $DATABASENAME" -h $DATABASEHOST || true
-            else
-                DATABASEHOST=127.0.0.1
-            fi
+				if [ "mysql" != "$(mysql --version | grep -o mysql)" ] ; then
+					echo "Your mysql binary is not provided by mysql"
+					echo "To use the docker container set the USEDOCKER environment variable"
+					exit -1
+				fi
+				mysql -u "$DATABASEUSER" -powncloud -e "DROP DATABASE IF EXISTS $DATABASENAME" -h $DATABASEHOST || true
+			else
+				DATABASEHOST=mysql
+			fi
 		fi
-        echo "Waiting for MySQL initialisation ..."
-        if ! apps/files_external/tests/env/wait-for-connection $DATABASEHOST 3306 600; then
-            echo "[ERROR] Waited 600 seconds, no response" >&2
-            exit 1
-        fi
+		echo "Waiting for MySQL initialisation ..."
+		if ! apps/files_external/tests/env/wait-for-connection $DATABASEHOST 3306 300; then
+			echo "[ERROR] Waited 300 seconds, no response" >&2
+			exit 1
+		fi
 	fi
 	if [ "$DB" == "mysqlmb4" ] ; then
 		if [ ! -z "$USEDOCKER" ] ; then
@@ -220,9 +226,9 @@ function execute_tests {
 				-e MYSQL_USER="$DATABASEUSER" \
 				-e MYSQL_PASSWORD=owncloud \
 				-e MYSQL_DATABASE="$DATABASENAME" \
-				-d mysql:5.7
-				--innodb_large_prefix=true
-				--innodb_file_format=barracuda
+				-d mysql:5.7 \
+				--innodb_large_prefix=true \
+				--innodb_file_format=barracuda \
 				--innodb_file_per_table=true)
 
 			DATABASEHOST=$(docker inspect --format="{{.NetworkSettings.IPAddress}}" "$DOCKER_CONTAINER_ID")
@@ -236,14 +242,14 @@ function execute_tests {
 				fi
 				mysql -u "$DATABASEUSER" -powncloud -e "DROP DATABASE IF EXISTS $DATABASENAME" -h $DATABASEHOST || true
 			else
-				DATABASEHOST=127.0.0.1
+				DATABASEHOST=mysqlmb4
 			fi
 		fi
 
 		echo "Waiting for MySQL(utf8mb4) initialisation ..."
 
-		if ! apps/files_external/tests/env/wait-for-connection $DATABASEHOST 3306 600; then
-			echo "[ERROR] Waited 600 seconds, no response" >&2
+		if ! apps/files_external/tests/env/wait-for-connection $DATABASEHOST 3306 300; then
+			echo "[ERROR] Waited 300 seconds, no response" >&2
 			exit 1
 		fi
 		sleep 1
@@ -266,20 +272,30 @@ function execute_tests {
 			DATABASEHOST=$(docker inspect --format="{{.NetworkSettings.IPAddress}}" "$DOCKER_CONTAINER_ID")
 
 			echo "Waiting for MariaDB initialisation ..."
-			if ! apps/files_external/tests/env/wait-for-connection $DATABASEHOST 3306 600; then
-				echo "[ERROR] Waited 600 seconds, no response" >&2
+			if ! apps/files_external/tests/env/wait-for-connection $DATABASEHOST 3306 300; then
+				echo "[ERROR] Waited 300 seconds, no response" >&2
 				exit 1
 			fi
 
 			echo "MariaDB is up."
 
 		else
-			if [ "MariaDB" != "$(mysql --version | grep -o MariaDB)" ] ; then
-				echo "Your mysql binary is not provided by MariaDB"
-				echo "To use the docker container set the USEDOCKER environment variable"
-				exit -1
+			if [ -z "$DRONE" ] ; then # no need to drop the DB when we are on CI
+				if [ "MariaDB" != "$(mysql --version | grep -o MariaDB)" ] ; then
+					echo "Your mysql binary is not provided by MariaDB"
+					echo "To use the docker container set the USEDOCKER environment variable"
+					exit -1
+				fi
+				mysql -u "$DATABASEUSER" -powncloud -e "DROP DATABASE IF EXISTS $DATABASENAME" -h $DATABASEHOST || true
+			else
+				DATABASEHOST=mariadb
 			fi
-			mysql -u "$DATABASEUSER" -powncloud -e "DROP DATABASE IF EXISTS $DATABASENAME" -h $DATABASEHOST || true
+		fi
+
+		echo "Waiting for MariaDB initialisation ..."
+		if ! apps/files_external/tests/env/wait-for-connection $DATABASEHOST 3306 300; then
+			echo "[ERROR] Waited 300 seconds, no response" >&2
+			exit 1
 		fi
 
 		#Reset _DB to mysql since that is what we use internally
@@ -298,6 +314,17 @@ function execute_tests {
 
 			echo "Postgres is up."
 		else
+			if [ ! -z "$DRONE" ] ; then
+				DATABASEHOST="postgres-$POSTGRES"
+			fi
+			echo "Waiting for Postgres to be available ..."
+			if ! apps/files_external/tests/env/wait-for-connection $DATABASEHOST 5432 60; then
+				echo "[ERROR] Waited 60 seconds for $DATABASEHOST, no response" >&2
+				exit 1
+			fi
+			echo "Give it 10 additional seconds ..."
+			sleep 10
+
 			if [ -z "$DRONE" ] ; then # no need to drop the DB when we are on CI
 				dropdb -U "$DATABASEUSER" "$DATABASENAME" || true
 			fi
@@ -311,13 +338,13 @@ function execute_tests {
 		echo "Waiting for Oracle initialization ... "
 
 		# Try to connect to the OCI host via sqlplus to ensure that the connection is already running
-      		for i in {1..48}
-                do
-                        if sqlplus "autotest/owncloud@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(Host=$DATABASEHOST)(Port=1521))(CONNECT_DATA=(SID=XE)))" < /dev/null | grep 'Connected to'; then
-                                break;
-                        fi
-                        sleep 5
-                done
+		for i in {1..48}
+		do
+			if sqlplus "autotest/owncloud@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(Host=$DATABASEHOST)(Port=1521))(CONNECT_DATA=(SID=XE)))" < /dev/null | grep 'Connected to'; then
+				break;
+			fi
+			sleep 5
+		done
 
 		DATABASEUSER=autotest
 		DATABASENAME='XE'
@@ -325,7 +352,7 @@ function execute_tests {
 
 	# trigger installation
 	echo "Installing ...."
-	"$PHP" ./occ maintenance:install -vvv --database="$_DB" --database-name="$DATABASENAME" --database-host="$DATABASEHOST" --database-user="$DATABASEUSER" --database-pass=owncloud --database-table-prefix=oc_ --admin-user="$ADMINLOGIN" --admin-pass=admin --data-dir="$DATADIR"
+	"$PHP" ./occ maintenance:install -vvv --database="$_DB" --database-name="$DATABASENAME" --database-host="$DATABASEHOST" --database-user="$DATABASEUSER" --database-pass=owncloud --admin-user="$ADMINLOGIN" --admin-pass=admin --data-dir="$DATADIR"
 
 	#test execution
 	echo "Testing with $DB ..."
@@ -349,6 +376,12 @@ function execute_tests {
 	if [ "$TEST_SELECTION" == "PRIMARY-s3" ]; then
 		GROUP='--group PRIMARY-s3'
 	fi
+	if [ "$TEST_SELECTION" == "PRIMARY-azure" ]; then
+		GROUP='--group PRIMARY-azure'
+	fi
+	if [ "$TEST_SELECTION" == "PRIMARY-swift" ]; then
+		GROUP='--group PRIMARY-swift'
+	fi
 
 	COVER=''
 	if [ -z "$NOCOVERAGE" ]; then
@@ -357,17 +390,9 @@ function execute_tests {
 		echo "No coverage"
 	fi
 
-	if [ -d "$2" ]; then
-	    for f in $(find "$2" -name '*.php'); do
-			echo "${PHPUNIT[@]}" --configuration phpunit-autotest.xml $GROUP $COVER --log-junit "autotest-results-$DB.xml" "$2" / "$f" "$3"
-			"${PHPUNIT[@]}" --configuration phpunit-autotest.xml $GROUP $COVER --log-junit "autotest-results-$DB.xml" "$f" "$3"
-			RESULT=$?
-	    done;
-	else
-	    echo "${PHPUNIT[@]}" --configuration phpunit-autotest.xml $GROUP $COVER --log-junit "autotest-results-$DB.xml" "$2" "$3"
-	    "${PHPUNIT[@]}" --configuration phpunit-autotest.xml $GROUP $COVER --log-junit "autotest-results-$DB.xml" "$2" "$3"
-		RESULT=$?
-	fi
+	echo "${PHPUNIT[@]}" --configuration phpunit-autotest.xml $GROUP $COVER --log-junit "autotest-results-$DB.xml" "$2" "$3"
+	"${PHPUNIT[@]}" --configuration phpunit-autotest.xml $GROUP $COVER --log-junit "autotest-results-$DB.xml" "$2" "$3"
+	RESULT=$?
 
 	if [ "$PRIMARY_STORAGE_CONFIG" == "swift" ] ; then
 		cd ..
@@ -414,7 +439,8 @@ fi
 # NOTES on pgsql:
 #  - su - postgres
 #  - createuser -P oc_autotest (enter password and enable superuser)
-#  - to enable dropdb I decided to add following line to pg_hba.conf (this is not the safest way but I don't care for the testing machine):
+#  - to enable dropdb I decided to add following line to pg_hba.conf
+#    (this is not the safest way but I don't care for the testing machine):
 # local	all	all	trust
 #
 #  - for parallel executor support with EXECUTOR_NUMBER=0:

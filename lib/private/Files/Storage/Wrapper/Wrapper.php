@@ -2,11 +2,17 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author J0WI <J0WI@users.noreply.github.com>
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Tigran Mkrtchyan <tigran.mkrtchyan@desy.de>
+ * @author Vincent Petry <vincent@nextcloud.com>
+ * @author Vinicius Cubas Brand <vinicius@eita.org.br>
  *
  * @license AGPL-3.0
  *
@@ -20,7 +26,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -28,9 +34,11 @@ namespace OC\Files\Storage\Wrapper;
 
 use OCP\Files\InvalidPathException;
 use OCP\Files\Storage\ILockingStorage;
+use OCP\Files\Storage\IStorage;
+use OCP\Files\Storage\IWriteStreamStorage;
 use OCP\Lock\ILockingProvider;
 
-class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
+class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage, IWriteStreamStorage {
 	/**
 	 * @var \OC\Files\Storage\Storage $storage
 	 */
@@ -68,7 +76,7 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.mkdir.php
+	 * see https://www.php.net/manual/en/function.mkdir.php
 	 *
 	 * @param string $path
 	 * @return bool
@@ -78,7 +86,7 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.rmdir.php
+	 * see https://www.php.net/manual/en/function.rmdir.php
 	 *
 	 * @param string $path
 	 * @return bool
@@ -88,17 +96,17 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.opendir.php
+	 * see https://www.php.net/manual/en/function.opendir.php
 	 *
 	 * @param string $path
-	 * @return resource
+	 * @return resource|bool
 	 */
 	public function opendir($path) {
 		return $this->getWrapperStorage()->opendir($path);
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.is_dir.php
+	 * see https://www.php.net/manual/en/function.is_dir.php
 	 *
 	 * @param string $path
 	 * @return bool
@@ -108,7 +116,7 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.is_file.php
+	 * see https://www.php.net/manual/en/function.is_file.php
 	 *
 	 * @param string $path
 	 * @return bool
@@ -118,32 +126,32 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.stat.php
+	 * see https://www.php.net/manual/en/function.stat.php
 	 * only the following keys are required in the result: size and mtime
 	 *
 	 * @param string $path
-	 * @return array
+	 * @return array|bool
 	 */
 	public function stat($path) {
 		return $this->getWrapperStorage()->stat($path);
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.filetype.php
+	 * see https://www.php.net/manual/en/function.filetype.php
 	 *
 	 * @param string $path
-	 * @return bool
+	 * @return string|bool
 	 */
 	public function filetype($path) {
 		return $this->getWrapperStorage()->filetype($path);
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.filesize.php
+	 * see https://www.php.net/manual/en/function.filesize.php
 	 * The result for filesize when called on a folder is required to be 0
 	 *
 	 * @param string $path
-	 * @return int
+	 * @return int|bool
 	 */
 	public function filesize($path) {
 		return $this->getWrapperStorage()->filesize($path);
@@ -211,7 +219,7 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.file_exists.php
+	 * see https://www.php.net/manual/en/function.file_exists.php
 	 *
 	 * @param string $path
 	 * @return bool
@@ -221,38 +229,38 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.filemtime.php
+	 * see https://www.php.net/manual/en/function.filemtime.php
 	 *
 	 * @param string $path
-	 * @return int
+	 * @return int|bool
 	 */
 	public function filemtime($path) {
 		return $this->getWrapperStorage()->filemtime($path);
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.file_get_contents.php
+	 * see https://www.php.net/manual/en/function.file_get_contents.php
 	 *
 	 * @param string $path
-	 * @return string
+	 * @return string|bool
 	 */
 	public function file_get_contents($path) {
 		return $this->getWrapperStorage()->file_get_contents($path);
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.file_put_contents.php
+	 * see https://www.php.net/manual/en/function.file_put_contents.php
 	 *
 	 * @param string $path
-	 * @param string $data
-	 * @return bool
+	 * @param mixed $data
+	 * @return int|false
 	 */
 	public function file_put_contents($path, $data) {
 		return $this->getWrapperStorage()->file_put_contents($path, $data);
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.unlink.php
+	 * see https://www.php.net/manual/en/function.unlink.php
 	 *
 	 * @param string $path
 	 * @return bool
@@ -262,7 +270,7 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.rename.php
+	 * see https://www.php.net/manual/en/function.rename.php
 	 *
 	 * @param string $path1
 	 * @param string $path2
@@ -273,7 +281,7 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.copy.php
+	 * see https://www.php.net/manual/en/function.copy.php
 	 *
 	 * @param string $path1
 	 * @param string $path2
@@ -284,11 +292,11 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.fopen.php
+	 * see https://www.php.net/manual/en/function.fopen.php
 	 *
 	 * @param string $path
 	 * @param string $mode
-	 * @return resource
+	 * @return resource|bool
 	 */
 	public function fopen($path, $mode) {
 		return $this->getWrapperStorage()->fopen($path, $mode);
@@ -299,29 +307,29 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	 * The mimetype for a folder is required to be "httpd/unix-directory"
 	 *
 	 * @param string $path
-	 * @return string
+	 * @return string|bool
 	 */
 	public function getMimeType($path) {
 		return $this->getWrapperStorage()->getMimeType($path);
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.hash.php
+	 * see https://www.php.net/manual/en/function.hash.php
 	 *
 	 * @param string $type
 	 * @param string $path
 	 * @param bool $raw
-	 * @return string
+	 * @return string|bool
 	 */
 	public function hash($type, $path, $raw = false) {
 		return $this->getWrapperStorage()->hash($type, $path, $raw);
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.free_space.php
+	 * see https://www.php.net/manual/en/function.free_space.php
 	 *
 	 * @param string $path
-	 * @return int
+	 * @return int|bool
 	 */
 	public function free_space($path) {
 		return $this->getWrapperStorage()->free_space($path);
@@ -331,14 +339,14 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	 * search for occurrences of $query in file names
 	 *
 	 * @param string $query
-	 * @return array
+	 * @return array|bool
 	 */
 	public function search($query) {
 		return $this->getWrapperStorage()->search($query);
 	}
 
 	/**
-	 * see http://php.net/manual/en/function.touch.php
+	 * see https://www.php.net/manual/en/function.touch.php
 	 * If the backend does not support the operation, false should be returned
 	 *
 	 * @param string $path
@@ -354,7 +362,7 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	 * The local version of the file can be temporary and doesn't have to be persistent across requests
 	 *
 	 * @param string $path
-	 * @return string
+	 * @return string|bool
 	 */
 	public function getLocalFile($path) {
 		return $this->getWrapperStorage()->getLocalFile($path);
@@ -452,7 +460,7 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	 * get the ETag for a file or folder
 	 *
 	 * @param string $path
-	 * @return string
+	 * @return string|bool
 	 */
 	public function getETag($path) {
 		return $this->getWrapperStorage()->getETag($path);
@@ -498,7 +506,7 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	 * @return mixed
 	 */
 	public function __call($method, $args) {
-		return call_user_func_array(array($this->getWrapperStorage(), $method), $args);
+		return call_user_func_array([$this->getWrapperStorage(), $method], $args);
 	}
 
 	/**
@@ -507,7 +515,7 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	 * For now the returned array can hold the parameter url - in future more attributes might follow.
 	 *
 	 * @param string $path
-	 * @return array
+	 * @return array|bool
 	 */
 	public function getDirectDownload($path) {
 		return $this->getWrapperStorage()->getDirectDownload($path);
@@ -542,12 +550,12 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	}
 
 	/**
-	 * @param \OCP\Files\Storage $sourceStorage
+	 * @param IStorage $sourceStorage
 	 * @param string $sourceInternalPath
 	 * @param string $targetInternalPath
 	 * @return bool
 	 */
-	public function copyFromStorage(\OCP\Files\Storage $sourceStorage, $sourceInternalPath, $targetInternalPath) {
+	public function copyFromStorage(IStorage $sourceStorage, $sourceInternalPath, $targetInternalPath) {
 		if ($sourceStorage === $this) {
 			return $this->copy($sourceInternalPath, $targetInternalPath);
 		}
@@ -556,12 +564,12 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	}
 
 	/**
-	 * @param \OCP\Files\Storage $sourceStorage
+	 * @param IStorage $sourceStorage
 	 * @param string $sourceInternalPath
 	 * @param string $targetInternalPath
 	 * @return bool
 	 */
-	public function moveFromStorage(\OCP\Files\Storage $sourceStorage, $sourceInternalPath, $targetInternalPath) {
+	public function moveFromStorage(IStorage $sourceStorage, $sourceInternalPath, $targetInternalPath) {
 		if ($sourceStorage === $this) {
 			return $this->rename($sourceInternalPath, $targetInternalPath);
 		}
@@ -616,5 +624,23 @@ class Wrapper implements \OC\Files\Storage\Storage, ILockingStorage {
 	 */
 	public function needsPartFile() {
 		return $this->getWrapperStorage()->needsPartFile();
+	}
+
+	public function writeStream(string $path, $stream, int $size = null): int {
+		$storage = $this->getWrapperStorage();
+		if ($storage->instanceOfStorage(IWriteStreamStorage::class)) {
+			/** @var IWriteStreamStorage $storage */
+			return $storage->writeStream($path, $stream, $size);
+		} else {
+			$target = $this->fopen($path, 'w');
+			list($count, $result) = \OC_Helper::streamCopy($stream, $target);
+			fclose($stream);
+			fclose($target);
+			return $count;
+		}
+	}
+
+	public function getDirectoryContent($directory): \Traversable {
+		return $this->getWrapperStorage()->getDirectoryContent($directory);
 	}
 }

@@ -1,9 +1,14 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Andreas Fischer <bantu@owncloud.com>
- * @author Georg Ehrke <georg@owncloud.com>
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Georg Ehrke <oc.list@georgehrke.com>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Markus Goetz <markus@woboq.com>
@@ -11,8 +16,7 @@
  * @author Robin Appelman <robin@icewind.nl>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -26,13 +30,14 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC;
 
 use \OCP\AutoloadNotAllowedException;
+use OCP\ILogger;
 
 class Autoloader {
 	/** @var bool */
@@ -63,7 +68,7 @@ class Autoloader {
 	 *
 	 * @param string $root
 	 */
-	public function addValidRoot($root) {
+	public function addValidRoot(string $root) {
 		$root = stream_resolve_include_path($root);
 		$this->validRoots[$root] = true;
 	}
@@ -86,12 +91,12 @@ class Autoloader {
 	 * get the possible paths for a class
 	 *
 	 * @param string $class
-	 * @return array|bool an array of possible paths or false if the class is not part of ownCloud
+	 * @return array an array of possible paths
 	 */
-	public function findClass($class) {
+	public function findClass(string $class): array {
 		$class = trim($class, '\\');
 
-		$paths = array();
+		$paths = [];
 		if ($this->useGlobalClassPath && array_key_exists($class, \OC::$CLASSPATH)) {
 			$paths[] = \OC::$CLASSPATH[$class];
 			/**
@@ -99,7 +104,7 @@ class Autoloader {
 			 * Remove "apps/" from inclusion path for smooth migration to multi app dir
 			 */
 			if (strpos(\OC::$CLASSPATH[$class], 'apps/') === 0) {
-				\OCP\Util::writeLog('core', 'include path for class "' . $class . '" starts with "apps/"', \OCP\Util::DEBUG);
+				\OCP\Util::writeLog('core', 'include path for class "' . $class . '" starts with "apps/"', ILogger::DEBUG);
 				$paths[] = str_replace('apps/', '', \OC::$CLASSPATH[$class]);
 			}
 		} elseif (strpos($class, 'OC_') === 0) {
@@ -124,8 +129,9 @@ class Autoloader {
 	/**
 	 * @param string $fullPath
 	 * @return bool
+	 * @throws AutoloadNotAllowedException
 	 */
-	protected function isValidPath($fullPath) {
+	protected function isValidPath(string $fullPath): bool {
 		foreach ($this->validRoots as $root => $true) {
 			if (substr($fullPath, 0, strlen($root) + 1) === $root . '/') {
 				return true;
@@ -139,20 +145,21 @@ class Autoloader {
 	 *
 	 * @param string $class
 	 * @return bool
+	 * @throws AutoloadNotAllowedException
 	 */
-	public function load($class) {
+	public function load(string $class): bool {
 		$pathsToRequire = null;
 		if ($this->memoryCache) {
 			$pathsToRequire = $this->memoryCache->get($class);
 		}
 
-		if(class_exists($class, false)) {
+		if (class_exists($class, false)) {
 			return false;
 		}
 
 		if (!is_array($pathsToRequire)) {
 			// No cache or cache miss
-			$pathsToRequire = array();
+			$pathsToRequire = [];
 			foreach ($this->findClass($class) as $path) {
 				$fullPath = stream_resolve_include_path($path);
 				if ($fullPath && $this->isValidPath($fullPath)) {

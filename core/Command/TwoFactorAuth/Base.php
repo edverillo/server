@@ -2,6 +2,11 @@
 /**
  * @copyright Copyright (c) 2016 Joas Schilling <coding@schilljs.com>
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ *
  * @license GNU AGPL version 3 or any later version
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,18 +20,17 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 namespace OC\Core\Command\TwoFactorAuth;
 
-use OCP\IUserManager;
 use OCP\IUser;
-use Stecman\Component\Symfony\Console\BashCompletion\Completion\CompletionAwareInterface;
+use OCP\IUserManager;
 use Stecman\Component\Symfony\Console\BashCompletion\CompletionContext;
 
-class Base extends \OC\Core\Command\Base implements CompletionAwareInterface {
+class Base extends \OC\Core\Command\Base {
 
 	/** @var IUserManager */
 	protected $userManager;
@@ -51,7 +55,7 @@ class Base extends \OC\Core\Command\Base implements CompletionAwareInterface {
 	 */
 	public function completeArgumentValues($argumentName, CompletionContext $context) {
 		if ($argumentName === 'uid') {
-			return array_map(function(IUser $user) {
+			return array_map(function (IUser $user) {
 				return $user->getUID();
 			}, $this->userManager->search($context->getCurrentWord(), 100));
 		}

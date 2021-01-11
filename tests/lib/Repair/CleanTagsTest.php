@@ -7,7 +7,9 @@
  */
 
 namespace Test\Repair;
+
 use OCP\DB\QueryBuilder\IQueryBuilder;
+use OCP\IUserManager;
 use OCP\Migration\IOutput;
 
 /**
@@ -25,7 +27,7 @@ class CleanTagsTest extends \Test\TestCase {
 	/** @var \OCP\IDBConnection */
 	protected $connection;
 
-	/** @var \OCP\IUserManager|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OCP\IUserManager|\PHPUnit\Framework\MockObject\MockObject */
 	protected $userManager;
 
 	/** @var int */
@@ -34,14 +36,14 @@ class CleanTagsTest extends \Test\TestCase {
 	/** @var IOutput */
 	private $outputMock;
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->outputMock = $this->getMockBuilder('\OCP\Migration\IOutput')
 			->disableOriginalConstructor()
 			->getMock();
 
-		$this->userManager = $this->getMockBuilder('\OCP\IUserManager')
+		$this->userManager = $this->getMockBuilder(IUserManager::class)
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -50,7 +52,7 @@ class CleanTagsTest extends \Test\TestCase {
 		$this->cleanUpTables();
 	}
 
-	protected function tearDown() {
+	protected function tearDown(): void {
 		$this->cleanUpTables();
 
 		parent::tearDown();
@@ -116,11 +118,11 @@ class CleanTagsTest extends \Test\TestCase {
 	 */
 	protected function assertEntryCount($tableName, $expected, $message = '') {
 		$qb = $this->connection->getQueryBuilder();
-		$result = $qb->select($qb->createFunction('COUNT(*)'))
+		$result = $qb->select($qb->func()->count('*'))
 			->from($tableName)
 			->execute();
 
-		$this->assertEquals($expected, $result->fetchColumn(), $message);
+		$this->assertEquals($expected, $result->fetchOne(), $message);
 	}
 
 	/**
@@ -135,9 +137,9 @@ class CleanTagsTest extends \Test\TestCase {
 		$qb = $this->connection->getQueryBuilder();
 		$qb->insert('vcategory')
 			->values([
-				'uid'		=> $qb->createNamedParameter($user),
-				'category'	=> $qb->createNamedParameter($category),
-				'type'		=> $qb->createNamedParameter($type),
+				'uid' => $qb->createNamedParameter($user),
+				'category' => $qb->createNamedParameter($category),
+				'type' => $qb->createNamedParameter($type),
 			])
 			->execute();
 
@@ -154,9 +156,9 @@ class CleanTagsTest extends \Test\TestCase {
 		$qb = $this->connection->getQueryBuilder();
 		$qb->insert('vcategory_to_object')
 			->values([
-				'objid'			=> $qb->createNamedParameter($objectId, IQueryBuilder::PARAM_INT),
-				'categoryid'	=> $qb->createNamedParameter($category, IQueryBuilder::PARAM_INT),
-				'type'			=> $qb->createNamedParameter($type),
+				'objid' => $qb->createNamedParameter($objectId, IQueryBuilder::PARAM_INT),
+				'categoryid' => $qb->createNamedParameter($category, IQueryBuilder::PARAM_INT),
+				'type' => $qb->createNamedParameter($type),
 			])
 			->execute();
 	}
@@ -176,15 +178,15 @@ class CleanTagsTest extends \Test\TestCase {
 		$fileName = $this->getUniqueID('TestRepairCleanTags', 12);
 		$qb->insert('filecache')
 			->values([
-				'path'			=> $qb->createNamedParameter($fileName),
-				'path_hash'		=> $qb->createNamedParameter(md5($fileName)),
+				'path' => $qb->createNamedParameter($fileName),
+				'path_hash' => $qb->createNamedParameter(md5($fileName)),
 			])
 			->execute();
 		$fileName = $this->getUniqueID('TestRepairCleanTags', 12);
 		$qb->insert('filecache')
 			->values([
-				'path'			=> $qb->createNamedParameter($fileName),
-				'path_hash'		=> $qb->createNamedParameter(md5($fileName)),
+				'path' => $qb->createNamedParameter($fileName),
+				'path_hash' => $qb->createNamedParameter(md5($fileName)),
 			])
 			->execute();
 

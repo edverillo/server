@@ -2,6 +2,8 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Julius Härtl <jus@bitgrid.net>
  * @author Robin Appelman <robin@icewind.nl>
  *
  * @license AGPL-3.0
@@ -16,7 +18,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -27,7 +29,7 @@ use OCP\Command\ICommand;
 
 class QueueBus implements IBus {
 	/**
-	 * @var (ICommand|callable)[]
+	 * @var ICommand[]|callable[]
 	 */
 	private $queue = [];
 
@@ -55,7 +57,7 @@ class QueueBus implements IBus {
 		if ($command instanceof ICommand) {
 			// ensure the command can be serialized
 			$serialized = serialize($command);
-			if(strlen($serialized) > 4000) {
+			if (strlen($serialized) > 4000) {
 				throw new \InvalidArgumentException('Trying to push a command which serialized form can not be stored in the database (>4000 character)');
 			}
 			$unserialized = unserialize($serialized);

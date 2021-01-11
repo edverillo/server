@@ -3,7 +3,10 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Björn Schießle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -17,16 +20,25 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\Encryption\Tests\Controller;
 
 use OCA\Encryption\Controller\SettingsController;
+use OCA\Encryption\Crypto\Crypt;
+use OCA\Encryption\KeyManager;
 use OCA\Encryption\Session;
+use OCA\Encryption\Util;
 use OCP\AppFramework\Http;
+use OCP\IL10N;
 use OCP\IRequest;
+use OCP\ISession;
+use OCP\IUser;
+use OCP\IUserManager;
+use OCP\IUserSession;
+use PHPUnit\Framework\MockObject\MockObject;
 use Test\TestCase;
 
 class SettingsControllerTest extends TestCase {
@@ -34,84 +46,74 @@ class SettingsControllerTest extends TestCase {
 	/** @var SettingsController */
 	private $controller;
 
-	/** @var \OCP\IRequest|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OCP\IRequest|\PHPUnit\Framework\MockObject\MockObject */
 	private $requestMock;
 
-	/** @var \OCP\IL10N|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OCP\IL10N|\PHPUnit\Framework\MockObject\MockObject */
 	private $l10nMock;
 
-	/** @var \OCP\IUserManager|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OCP\IUserManager|\PHPUnit\Framework\MockObject\MockObject */
 	private $userManagerMock;
 
-	/** @var \OCP\IUserSession|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OCP\IUserSession|\PHPUnit\Framework\MockObject\MockObject */
 	private $userSessionMock;
 
-	/** @var \OCA\Encryption\KeyManager|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OCA\Encryption\KeyManager|\PHPUnit\Framework\MockObject\MockObject */
 	private $keyManagerMock;
 
-	/** @var \OCA\Encryption\Crypto\Crypt|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OCA\Encryption\Crypto\Crypt|\PHPUnit\Framework\MockObject\MockObject */
 	private $cryptMock;
 
-	/** @var \OCA\Encryption\Session|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OCA\Encryption\Session|\PHPUnit\Framework\MockObject\MockObject */
 	private $sessionMock;
+	/** @var MockObject|IUser */
+	private $user;
 
-	/** @var \OCP\ISession|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OCP\ISession|\PHPUnit\Framework\MockObject\MockObject */
 	private $ocSessionMock;
 
-	/** @var \OCA\Encryption\Util|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var \OCA\Encryption\Util|\PHPUnit\Framework\MockObject\MockObject */
 	private $utilMock;
 
-	protected function setUp() {
-
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->requestMock = $this->createMock(IRequest::class);
 
-		$this->l10nMock = $this->getMockBuilder('OCP\IL10N')
+		$this->l10nMock = $this->getMockBuilder(IL10N::class)
 			->disableOriginalConstructor()->getMock();
 
 		$this->l10nMock->expects($this->any())
 			->method('t')
-			->will($this->returnCallback(function($message) {
+			->willReturnCallback(function ($message) {
 				return $message;
-			}));
+			});
 
-		$this->userManagerMock = $this->getMockBuilder('OCP\IUserManager')
+		$this->userManagerMock = $this->getMockBuilder(IUserManager::class)
 			->disableOriginalConstructor()->getMock();
 
-		$this->keyManagerMock = $this->getMockBuilder('OCA\Encryption\KeyManager')
+		$this->keyManagerMock = $this->getMockBuilder(KeyManager::class)
 			->disableOriginalConstructor()->getMock();
 
-		$this->cryptMock = $this->getMockBuilder('OCA\Encryption\Crypto\Crypt')
+		$this->cryptMock = $this->getMockBuilder(Crypt::class)
 			->disableOriginalConstructor()->getMock();
 
-		$this->userSessionMock = $this->getMockBuilder('OCP\IUserSession')
-			->disableOriginalConstructor()
-			->setMethods([
-				'isLoggedIn',
-				'getUID',
-				'login',
-				'logout',
-				'setUser',
-				'getUser',
-				'canChangePassword',
-			])
-			->getMock();
+		$this->ocSessionMock = $this->getMockBuilder(ISession::class)->disableOriginalConstructor()->getMock();
 
-		$this->ocSessionMock = $this->getMockBuilder('OCP\ISession')->disableOriginalConstructor()->getMock();
-
-		$this->userSessionMock->expects($this->any())
+		$this->user = $this->createMock(IUser::class);
+		$this->user->expects($this->any())
 			->method('getUID')
 			->willReturn('testUserUid');
 
+		$this->userSessionMock = $this->createMock(IUserSession::class);
 		$this->userSessionMock->expects($this->any())
-			->method($this->anything())
-			->will($this->returnSelf());
+			->method('getUser')
+			->willReturn($this->user);
 
-		$this->sessionMock = $this->getMockBuilder('OCA\Encryption\Session')
+		$this->sessionMock = $this->getMockBuilder(Session::class)
 			->disableOriginalConstructor()->getMock();
 
-		$this->utilMock = $this->getMockBuilder('OCA\Encryption\Util')
+		$this->utilMock = $this->getMockBuilder(Util::class)
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -133,11 +135,12 @@ class SettingsControllerTest extends TestCase {
 	 * test updatePrivateKeyPassword() if wrong new password was entered
 	 */
 	public function testUpdatePrivateKeyPasswordWrongNewPassword() {
-
 		$oldPassword = 'old';
 		$newPassword = 'new';
 
-		$this->userSessionMock->expects($this->once())->method('getUID')->willReturn('uid');
+		$this->user->expects($this->any())
+			->method('getUID')
+			->willReturn('uid');
 
 		$this->userManagerMock
 			->expects($this->exactly(2))
@@ -157,7 +160,6 @@ class SettingsControllerTest extends TestCase {
 	 * test updatePrivateKeyPassword() if wrong old password was entered
 	 */
 	public function testUpdatePrivateKeyPasswordWrongOldPassword() {
-
 		$oldPassword = 'old';
 		$newPassword = 'new';
 
@@ -184,7 +186,6 @@ class SettingsControllerTest extends TestCase {
 	 * test updatePrivateKeyPassword() with the correct old and new password
 	 */
 	public function testUpdatePrivateKeyPassword() {
-
 		$oldPassword = 'old';
 		$newPassword = 'new';
 
@@ -244,10 +245,9 @@ class SettingsControllerTest extends TestCase {
 			$data['message']);
 	}
 
-	function testSetEncryptHomeStorage() {
+	public function testSetEncryptHomeStorage() {
 		$value = true;
 		$this->utilMock->expects($this->once())->method('setEncryptHomeStorage')->with($value);
 		$this->controller->setEncryptHomeStorage($value);
 	}
-
 }

@@ -31,7 +31,7 @@ abstract class ObjectStoreTest extends TestCase {
 	 */
 	abstract protected function getInstance();
 
-	private function stringToStream($data) {
+	protected function stringToStream($data) {
 		$stream = fopen('php://temp', 'w+');
 		fwrite($stream, $data);
 		rewind($stream);
@@ -49,7 +49,6 @@ abstract class ObjectStoreTest extends TestCase {
 		$instance->deleteObject('1');
 
 		$this->assertEquals('foobar', stream_get_contents($result));
-
 	}
 
 	public function testDelete() {
@@ -93,5 +92,36 @@ abstract class ObjectStoreTest extends TestCase {
 			// dummy assert to keep phpunit happy
 			$this->assertEquals(1, 1);
 		}
+	}
+
+	public function testExists() {
+		$stream = $this->stringToStream('foobar');
+
+		$instance = $this->getInstance();
+		$this->assertFalse($instance->objectExists('2'));
+
+		$instance->writeObject('2', $stream);
+
+		$this->assertTrue($instance->objectExists('2'));
+
+		$instance->deleteObject('2');
+
+		$this->assertFalse($instance->objectExists('2'));
+	}
+
+	public function testCopy() {
+		$stream = $this->stringToStream('foobar');
+
+		$instance = $this->getInstance();
+
+		$instance->writeObject('source', $stream);
+
+		$this->assertFalse($instance->objectExists('target'));
+
+		$instance->copyObject('source', 'target');
+
+		$this->assertTrue($instance->objectExists('target'));
+
+		$this->assertEquals('foobar', stream_get_contents($instance->readObject('target')));
 	}
 }

@@ -8,7 +8,7 @@ Feature: webdav-related
 		Then the HTTP status code should be "401"
 		And there are no duplicate headers
 		And The following headers should be set
-			|WWW-Authenticate|Basic realm="Nextcloud"|
+			|WWW-Authenticate|Basic realm="Nextcloud", charset="UTF-8"|
 
 	Scenario: Unauthenticated call new dav path
 		Given using new dav path
@@ -16,7 +16,7 @@ Feature: webdav-related
 		Then the HTTP status code should be "401"
 		And there are no duplicate headers
 		And The following headers should be set
-			|WWW-Authenticate|Basic realm="Nextcloud"|
+			|WWW-Authenticate|Basic realm="Nextcloud", charset="UTF-8"|
 
 	Scenario: Moving a file
 		Given using old dav path
@@ -48,6 +48,7 @@ Feature: webdav-related
 		  | shareType | 0 |
 		  | permissions | 1 |
 		  | shareWith | user0 |
+		And user "user0" accepts last share
 		And As an "user0"
 		And User "user0" moves file "/textfile0.txt" to "/testshare/textfile0.txt"
 		And the HTTP status code should be "403"
@@ -66,6 +67,7 @@ Feature: webdav-related
 		  | shareType | 0 |
 		  | permissions | 1 |
 		  | shareWith | user0 |
+		And user "user0" accepts last share
 		And User "user1" copies file "/welcome.txt" to "/testshare/overwritethis.txt"
 		And As an "user0"
 		When User "user0" moves file "/textfile0.txt" to "/testshare/overwritethis.txt"
@@ -102,6 +104,7 @@ Feature: webdav-related
 		  | shareType | 0 |
 		  | permissions | 1 |
 		  | shareWith | user0 |
+		And user "user0" accepts last share
 		And As an "user0"
 		When User "user0" copies file "/textfile0.txt" to "/testshare/textfile0.txt"
 		Then the HTTP status code should be "403"
@@ -120,6 +123,7 @@ Feature: webdav-related
 		  | shareType | 0 |
 		  | permissions | 1 |
 		  | shareWith | user0 |
+		And user "user0" accepts last share
 		And User "user1" copies file "/welcome.txt" to "/testshare/overwritethis.txt"
 		And As an "user0"
 		When User "user0" copies file "/textfile0.txt" to "/testshare/overwritethis.txt"
@@ -172,6 +176,7 @@ Feature: webdav-related
 		  | shareType | 0 |
 		  | permissions | 31 |
 		  | shareWith | user0 |
+		And user "user0" accepts last share
 		Then as "user0" gets properties of folder "/testquota" with
 		  |{DAV:}quota-available-bytes|
 		And the single response should contain a property "{DAV:}quota-available-bytes" with value "10485421"
@@ -190,6 +195,7 @@ Feature: webdav-related
 		  | shareType | 0 |
 		  | permissions | 31 |
 		  | shareWith | user0 |
+		And user "user0" accepts last share
 		And As an "user0"
 		When User "user0" uploads file "data/textfile.txt" to "/testquota/asdf.txt"
 		Then the HTTP status code should be "201"
@@ -204,7 +210,7 @@ Feature: webdav-related
 		  |{DAV:}quota-available-bytes|
 		Then the single response should contain a property "{DAV:}quota-available-bytes" with value "592"
 
-	Scenario: Retrieving folder quota when quota is set and a file was recieved
+	Scenario: Retrieving folder quota when quota is set and a file was received
 		Given using old dav path
 		And As an "admin"
 		And user "user0" exists
@@ -212,6 +218,7 @@ Feature: webdav-related
 		And user "user1" has a quota of "1 KB"
 		And user "user0" adds a file of 93 bytes to "/user0.txt"
 		And file "user0.txt" of user "user0" is shared with user "user1"
+		And user "user1" accepts last share
 		When as "user1" gets properties of folder "/" with
 		  |{DAV:}quota-available-bytes|
 		Then the single response should contain a property "{DAV:}quota-available-bytes" with value "685"
@@ -243,7 +250,7 @@ Feature: webdav-related
 			|Content-Security-Policy|default-src 'none';|
 			|X-Content-Type-Options |nosniff|
 			|X-Download-Options|noopen|
-			|X-Frame-Options|Sameorigin|
+			|X-Frame-Options|SAMEORIGIN|
 			|X-Permitted-Cross-Domain-Policies|none|
 			|X-Robots-Tag|none|
 			|X-XSS-Protection|1; mode=block|
@@ -425,6 +432,7 @@ Feature: webdav-related
 			| shareType | 0 |
 			| permissions | 31 |
 			| shareWith | user0 |
+		And user "user0" accepts last share
 		And User "user0" uploads file with content "copytest" to "/copytest.txt"
 		When User "user0" copies file "/copytest.txt" to "/testcopypermissionsAllowed/copytest.txt"
 		Then the HTTP status code should be "201"
@@ -440,6 +448,7 @@ Feature: webdav-related
 			| shareType | 0 |
 			| permissions | 1 |
 			| shareWith | user0 |
+		And user "user0" accepts last share
 		And User "user0" uploads file with content "copytest" to "/copytest.txt"
 		When User "user0" copies file "/copytest.txt" to "/testcopypermissionsNotAllowed/copytest.txt"
 		Then the HTTP status code should be "403"
@@ -458,6 +467,7 @@ Feature: webdav-related
 			| shareType   | 0          |
 			| permissions | 23         |
 			| shareWith   | user0      |
+		And user "user0" accepts last share
 		And As an "user0"
 		And User "user0" uploads file "data/textfile.txt" to "/testfolder/asdf.txt"
 		And As an "user1"
@@ -517,3 +527,84 @@ Feature: webdav-related
 			| /textfile2.txt |
 			| /textfile3.txt |
 			| /textfile4.txt |
+
+	Scenario: Checking file id after a move using new endpoint
+		Given using new dav path
+		And user "user0" exists
+		And User "user0" stores id of file "/textfile0.txt"
+		When User "user0" moves file "/textfile0.txt" to "/FOLDER/textfile0.txt"
+		Then User "user0" checks id of file "/FOLDER/textfile0.txt"
+
+	Scenario: Checking file id after a move overwrite using new chunking endpoint
+		Given using new dav path
+		And user "user0" exists
+		And User "user0" copies file "/textfile0.txt" to "/existingFile.txt"
+		And User "user0" stores id of file "/existingFile.txt"
+		And user "user0" creates a new chunking upload with id "chunking-42"
+		And user "user0" uploads new chunk file "1" with "AAAAA" to id "chunking-42"
+		And user "user0" uploads new chunk file "2" with "BBBBB" to id "chunking-42"
+		And user "user0" uploads new chunk file "3" with "CCCCC" to id "chunking-42"
+		When user "user0" moves new chunk file with id "chunking-42" to "/existingFile.txt"
+		Then User "user0" checks id of file "/existingFile.txt"
+
+	Scenario: Renaming a folder to a backslash encoded should return an error using old endpoint
+		Given using old dav path
+		And user "user0" exists
+		And user "user0" created a folder "/testshare"
+		When User "user0" moves folder "/testshare" to "/%5C"
+		Then the HTTP status code should be "400"
+
+	Scenario: Renaming a folder beginning with a backslash encoded should return an error using old endpoint
+		Given using old dav path
+		And user "user0" exists
+		And user "user0" created a folder "/testshare"
+		When User "user0" moves folder "/testshare" to "/%5Ctestshare"
+		Then the HTTP status code should be "400"
+
+	Scenario: Renaming a folder including a backslash encoded should return an error using old endpoint
+		Given using old dav path
+		And user "user0" exists
+		And user "user0" created a folder "/testshare"
+		When User "user0" moves folder "/testshare" to "/hola%5Chola"
+		Then the HTTP status code should be "400"
+
+	Scenario: Renaming a folder to a backslash encoded should return an error using new endpoint
+		Given using new dav path
+		And user "user0" exists
+		And user "user0" created a folder "/testshare"
+		When User "user0" moves folder "/testshare" to "/%5C"
+		Then the HTTP status code should be "400"
+
+	Scenario: Renaming a folder beginning with a backslash encoded should return an error using new endpoint
+		Given using new dav path
+		And user "user0" exists
+		And user "user0" created a folder "/testshare"
+		When User "user0" moves folder "/testshare" to "/%5Ctestshare"
+		Then the HTTP status code should be "400"
+
+	Scenario: Renaming a folder including a backslash encoded should return an error using new endpoint
+		Given using new dav path
+		And user "user0" exists
+		And user "user0" created a folder "/testshare"
+		When User "user0" moves folder "/testshare" to "/hola%5Chola"
+		Then the HTTP status code should be "400"
+
+	Scenario: Upload file via new chunking endpoint with wrong size header
+		Given using new dav path
+		And user "user0" exists
+		And user "user0" creates a new chunking upload with id "chunking-42"
+		And user "user0" uploads new chunk file "1" with "AAAAA" to id "chunking-42"
+		And user "user0" uploads new chunk file "2" with "BBBBB" to id "chunking-42"
+		And user "user0" uploads new chunk file "3" with "CCCCC" to id "chunking-42"
+		When user "user0" moves new chunk file with id "chunking-42" to "/myChunkedFile.txt" with size 5
+		Then the HTTP status code should be "400"
+
+	Scenario: Upload file via new chunking endpoint with correct size header
+		Given using new dav path
+		And user "user0" exists
+		And user "user0" creates a new chunking upload with id "chunking-42"
+		And user "user0" uploads new chunk file "1" with "AAAAA" to id "chunking-42"
+		And user "user0" uploads new chunk file "2" with "BBBBB" to id "chunking-42"
+		And user "user0" uploads new chunk file "3" with "CCCCC" to id "chunking-42"
+		When user "user0" moves new chunk file with id "chunking-42" to "/myChunkedFile.txt" with size 15
+		Then the HTTP status code should be "201"

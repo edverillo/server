@@ -2,6 +2,15 @@
 /**
  * @copyright Copyright (c) 2016 Robin Appelman <robin@icewind.nl>
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Florent <florent@coppint.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author S. Cat <33800996+sparrowjack63@users.noreply.github.com>
+ * @author Stephen Cuppett <steve@cuppett.com>
+ *
  * @license GNU AGPL version 3 or any later version
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,14 +24,21 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 namespace OC\Files\ObjectStore;
 
+use Aws\ClientResolver;
+use Aws\Credentials\CredentialProvider;
+use Aws\Credentials\Credentials;
+use Aws\Exception\CredentialsException;
 use Aws\S3\Exception\S3Exception;
 use Aws\S3\S3Client;
+use GuzzleHttp\Promise;
+use GuzzleHttp\Promise\RejectedPromise;
+use OCP\ILogger;
 
 trait S3ConnectionTrait {
 	/** @var array */
@@ -40,26 +56,34 @@ trait S3ConnectionTrait {
 	/** @var int */
 	protected $timeout;
 
+	/** @var int */
+	protected $uploadPartSize;
+
 	protected $test;
 
 	protected function parseParams($params) {
-		if (empty($params['key']) || empty($params['secret']) || empty($params['bucket'])) {
-			throw new \Exception("Access Key, Secret and Bucket have to be configured.");
+		if (empty($params['bucket'])) {
+			throw new \Exception("Bucket has to be configured.");
 		}
 
 		$this->id = 'amazon::' . $params['bucket'];
 
 		$this->test = isset($params['test']);
 		$this->bucket = $params['bucket'];
-		$this->timeout = (!isset($params['timeout'])) ? 15 : $params['timeout'];
+		$this->timeout = !isset($params['timeout']) ? 15 : $params['timeout'];
+		$this->uploadPartSize = !isset($params['uploadPartSize']) ? 524288000 : $params['uploadPartSize'];
 		$params['region'] = empty($params['region']) ? 'eu-west-1' : $params['region'];
-		$params['hostname'] = empty($params['hostname']) ? 's3.amazonaws.com' : $params['hostname'];
+		$params['hostname'] = empty($params['hostname']) ? 's3.' . $params['region'] . '.amazonaws.com' : $params['hostname'];
 		if (!isset($params['port']) || $params['port'] === '') {
 			$params['port'] = (isset($params['use_ssl']) && $params['use_ssl'] === false) ? 80 : 443;
 		}
+		$params['verify_bucket_exists'] = empty($params['verify_bucket_exists']) ? true : $params['verify_bucket_exists'];
 		$this->params = $params;
 	}
 
+	public function getBucket() {
+		return $this->bucket;
+	}
 
 	/**
 	 * Returns the connection
@@ -67,7 +91,7 @@ trait S3ConnectionTrait {
 	 * @return S3Client connected client
 	 * @throws \Exception if connection could not be made
 	 */
-	protected function getConnection() {
+	public function getConnection() {
 		if (!is_null($this->connection)) {
 			return $this->connection;
 		}
@@ -75,39 +99,61 @@ trait S3ConnectionTrait {
 		$scheme = (isset($this->params['use_ssl']) && $this->params['use_ssl'] === false) ? 'http' : 'https';
 		$base_url = $scheme . '://' . $this->params['hostname'] . ':' . $this->params['port'] . '/';
 
+		// Adding explicit credential provider to the beginning chain.
+		// Including environment variables and IAM instance profiles.
+		$provider = CredentialProvider::memoize(
+			CredentialProvider::chain(
+				$this->paramCredentialProvider(),
+				CredentialProvider::env(),
+				CredentialProvider::instanceProfile()
+			)
+		);
+
 		$options = [
-			'key' => $this->params['key'],
-			'secret' => $this->params['secret'],
-			'base_url' => $base_url,
+			'version' => isset($this->params['version']) ? $this->params['version'] : 'latest',
+			'credentials' => $provider,
+			'endpoint' => $base_url,
 			'region' => $this->params['region'],
-			S3Client::COMMAND_PARAMS => [
-				'PathStyle' => isset($this->params['use_path_style']) ? $this->params['use_path_style'] : false,
-			]
+			'use_path_style_endpoint' => isset($this->params['use_path_style']) ? $this->params['use_path_style'] : false,
+			'signature_provider' => \Aws\or_chain([self::class, 'legacySignatureProvider'], ClientResolver::_default_signature_provider()),
+			'csm' => false,
 		];
 		if (isset($this->params['proxy'])) {
-			$options[S3Client::REQUEST_OPTIONS] = ['proxy' => $this->params['proxy']];
+			$options['request.options'] = ['proxy' => $this->params['proxy']];
 		}
-		$this->connection = S3Client::factory($options);
+		if (isset($this->params['legacy_auth']) && $this->params['legacy_auth']) {
+			$options['signature_version'] = 'v2';
+		}
+		$this->connection = new S3Client($options);
 
-		if (!$this->connection->isValidBucketName($this->bucket)) {
-			throw new \Exception("The configured bucket name is invalid.");
+		if (!$this->connection::isBucketDnsCompatible($this->bucket)) {
+			$logger = \OC::$server->getLogger();
+			$logger->debug('Bucket "' . $this->bucket . '" This bucket name is not dns compatible, it may contain invalid characters.',
+					 ['app' => 'objectstore']);
 		}
 
-		if (!$this->connection->doesBucketExist($this->bucket)) {
+		if ($this->params['verify_bucket_exists'] && !$this->connection->doesBucketExist($this->bucket)) {
+			$logger = \OC::$server->getLogger();
 			try {
-				$this->connection->createBucket(array(
-					'Bucket' => $this->bucket
-				));
-				$this->connection->waitUntilBucketExists(array(
-					'Bucket' => $this->bucket,
-					'waiter.interval' => 1,
-					'waiter.max_attempts' => 15
-				));
+				$logger->info('Bucket "' . $this->bucket . '" does not exist - creating it.', ['app' => 'objectstore']);
+				if (!$this->connection::isBucketDnsCompatible($this->bucket)) {
+					throw new \Exception("The bucket will not be created because the name is not dns compatible, please correct it: " . $this->bucket);
+				}
+				$this->connection->createBucket(['Bucket' => $this->bucket]);
 				$this->testTimeout();
 			} catch (S3Exception $e) {
-				\OCP\Util::logException('files_external', $e);
-				throw new \Exception('Creation of bucket failed. ' . $e->getMessage());
+				$logger->logException($e, [
+					'message' => 'Invalid remote storage.',
+					'level' => ILogger::DEBUG,
+					'app' => 'objectstore',
+				]);
+				throw new \Exception('Creation of bucket "' . $this->bucket . '" failed. ' . $e->getMessage());
 			}
+		}
+
+		// google cloud's s3 compatibility doesn't like the EncodingType parameter
+		if (strpos($base_url, 'storage.googleapis.com')) {
+			$this->connection->getHandlerList()->remove('s3.auto_encode');
 		}
 
 		return $this->connection;
@@ -120,5 +166,34 @@ trait S3ConnectionTrait {
 		if ($this->test) {
 			sleep($this->timeout);
 		}
+	}
+
+	public static function legacySignatureProvider($version, $service, $region) {
+		switch ($version) {
+			case 'v2':
+			case 's3':
+				return new S3Signature();
+			default:
+				return null;
+		}
+	}
+
+	/**
+	 * This function creates a credential provider based on user parameter file
+	 */
+	protected function paramCredentialProvider() : callable {
+		return function () {
+			$key = empty($this->params['key']) ? null : $this->params['key'];
+			$secret = empty($this->params['secret']) ? null : $this->params['secret'];
+
+			if ($key && $secret) {
+				return Promise\promise_for(
+					new Credentials($key, $secret)
+				);
+			}
+
+			$msg = 'Could not find parameters set for credentials in config file.';
+			return new RejectedPromise(new CredentialsException($msg));
+		};
 	}
 }

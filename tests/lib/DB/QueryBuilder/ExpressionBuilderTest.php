@@ -40,17 +40,23 @@ class ExpressionBuilderTest extends TestCase {
 	/** @var DoctrineExpressionBuilder */
 	protected $doctrineExpressionBuilder;
 
-	/** @var \Doctrine\DBAL\Connection|\OCP\IDBConnection */
+	/** @var \OCP\IDBConnection */
 	protected $connection;
 
-	protected function setUp() {
+	/** @var \Doctrine\DBAL\Connection */
+	protected $internalConnection;
+
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->connection = \OC::$server->getDatabaseConnection();
+		$this->internalConnection = \OC::$server->get(\OC\DB\Connection::class);
 
-		$this->expressionBuilder = new ExpressionBuilder($this->connection);
+		$queryBuilder = $this->createMock(IQueryBuilder::class);
 
-		$this->doctrineExpressionBuilder = new DoctrineExpressionBuilder($this->connection);
+		$this->expressionBuilder = new ExpressionBuilder($this->connection, $queryBuilder);
+
+		$this->doctrineExpressionBuilder = new DoctrineExpressionBuilder($this->internalConnection);
 	}
 
 	public function dataComparison() {
@@ -398,7 +404,7 @@ class ExpressionBuilderTest extends TestCase {
 		$this->createConfig($appId, 11, 'underscore');
 
 		$query = $this->connection->getQueryBuilder();
-		$query->select($query->createFunction('COUNT(*) AS `count`'))
+		$query->select($query->func()->count('*', 'count'))
 			->from('appconfig')
 			->where($query->expr()->eq('appid', $query->createNamedParameter($appId)))
 			->andWhere(call_user_func([$query->expr(), $function], 'configvalue', $query->createNamedParameter($value, $type), IQueryBuilder::PARAM_STR));

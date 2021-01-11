@@ -17,7 +17,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -119,4 +119,13 @@ interface IMountPoint {
 	 * @since 9.1.0
 	 */
 	public function getMountId();
+
+	/**
+	 * Get the type of mount point, used to distinguish things like shares and external storages
+	 * in the web interface
+	 *
+	 * @return string
+	 * @since 12.0.0
+	 */
+	public function getMountType();
 }

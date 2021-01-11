@@ -10,17 +10,6 @@
 
 (function() {
 
-	var TEMPLATE_FILE_ACTION_TRIGGER =
-		'<a class="action action-{{nameLowerCase}}" href="#" data-action="{{name}}">' +
-		'{{#if icon}}' +
-			'<img class="svg" alt="{{altText}}" src="{{icon}}" />' +
-		'{{else}}' +
-			'{{#if iconClass}}<span class="icon {{iconClass}}" />{{/if}}' +
-			'{{#unless hasDisplayName}}<span class="hidden-visually">{{altText}}</span>{{/unless}}' +
-		'{{/if}}' +
-		'{{#if displayName}}<span> {{displayName}}</span>{{/if}}' +
-		'</a>';
-
 	/**
 	 * Construct a new FileActions instance
 	 * @constructs FileActions
@@ -46,14 +35,6 @@
 		 * Dummy jquery element, for events
 		 */
 		$el: null,
-
-		/**
-		 * List of handlers to be notified whenever a register() or
-		 * setDefault() was called.
-		 *
-		 * @member {Function[]}
-		 */
-		_updateListeners: {},
 
 		_fileActionTriggerTemplate: null,
 
@@ -83,7 +64,7 @@
 		 * Removes an event handler
 		 *
 		 * @param {String} eventName event name
-		 * @param Function callback
+		 * @param {Function} callback
 		 */
 		off: function(eventName, callback) {
 			this.$el.off(eventName, callback);
@@ -142,7 +123,22 @@
 			var mime = action.mime;
 			var name = action.name;
 			var actionSpec = {
-				action: action.actionHandler,
+				action: function(fileName, context) {
+					// Actions registered in one FileAction may be executed on a
+					// different one (for example, due to the "merge" function),
+					// so the listeners have to be updated on the FileActions
+					// from the context instead of on the one in which it was
+					// originally registered.
+					if (context && context.fileActions) {
+						context.fileActions._notifyUpdateListeners('beforeTriggerAction', {action: actionSpec, fileName: fileName, context: context});
+					}
+
+					action.actionHandler(fileName, context);
+
+					if (context && context.fileActions) {
+						context.fileActions._notifyUpdateListeners('afterTriggerAction', {action: actionSpec, fileName: fileName, context: context});
+					}
+				},
 				name: name,
 				displayName: action.displayName,
 				mime: mime,
@@ -174,7 +170,6 @@
 			this.defaults = {};
 			this.icons = {};
 			this.currentFile = null;
-			this._updateListeners = [];
 		},
 		/**
 		 * Sets the default action for a given mime type.
@@ -235,7 +230,7 @@
 			}
 			var filteredActions = {};
 			$.each(actions, function (name, action) {
-				if (action.permissions & permissions) {
+				if ((action.permissions === OC.PERMISSION_NONE) || (action.permissions & permissions)) {
 					filteredActions[name] = action;
 				}
 			});
@@ -262,13 +257,26 @@
 		},
 
 		/**
+		 * Returns the default file action handler for the current file
+		 *
+		 * @return {OCA.Files.FileActions~actionSpec} action spec
+		 * @since 8.2
+		 */
+		getCurrentDefaultFileAction: function() {
+			var mime = this.getCurrentMimeType();
+			var type = this.getCurrentType();
+			var permissions = this.getCurrentPermissions();
+			return this.getDefaultFileAction(mime, type, permissions);
+		},
+
+		/**
 		 * Returns the default file action handler for the given conditions
 		 *
 		 * @param {string} mime mime type
 		 * @param {string} type "dir" or "file"
 		 * @param {int} permissions permissions
 		 *
-		 * @return {OCA.Files.FileActions~actionHandler} action handler
+		 * @return {OCA.Files.FileActions~actionSpec} action spec
 		 * @since 8.2
 		 */
 		getDefaultFileAction: function(mime, type, permissions) {
@@ -329,11 +337,7 @@
 		 * @param {Object} params action params
 		 */
 		_makeActionLink: function(params) {
-			if (!this._fileActionTriggerTemplate) {
-				this._fileActionTriggerTemplate = Handlebars.compile(TEMPLATE_FILE_ACTION_TRIGGER);
-			}
-
-			return $(this._fileActionTriggerTemplate(params));
+			return $(OCA.Files.Templates['file_action_trigger'](params));
 		},
 
 		/**
@@ -380,6 +384,7 @@
 			}, false, context);
 
 			$el.addClass('permanent');
+
 		},
 
 		/**
@@ -417,8 +422,6 @@
 					var fileName = $file.attr('data-file');
 
 					context.fileActions.currentFile = currentFile;
-					// also set on global object for legacy apps
-					window.FileActions.currentFile = currentFile;
 
 					var callContext = _.extend({}, context);
 
@@ -488,8 +491,6 @@
 
 			var fileName = fileInfoModel.get('name');
 			this.currentFile = fileName;
-			// also set on global object for legacy apps
-			window.FileActions.currentFile = fileName;
 
 			if (fileList) {
 				// compatibility with action handlers that expect these
@@ -552,7 +553,27 @@
 				}
 			});
 
-			this._renderMenuTrigger($tr, context);
+			function objectValues(obj) {
+				var res = [];
+				for (var i in obj) {
+					if (obj.hasOwnProperty(i)) {
+						res.push(obj[i]);
+					}
+				}
+				return res;
+			}
+			// polyfill
+			if (!Object.values) {
+				Object.values = objectValues;
+			}
+
+			var menuActions = Object.values(this.actions.all).filter(function (action) {
+				return action.type !== OCA.Files.FileActions.TYPE_INLINE;
+			});
+			// do not render the menu if nothing is in it
+			if (menuActions.length > 0) {
+				this._renderMenuTrigger($tr, context);
+			}
 
 			if (triggerEvent){
 				fileList.$fileList.trigger(jQuery.Event("fileActionsReady", {fileList: fileList, $files: $tr}));
@@ -618,33 +639,69 @@
 			});
 
 			this.registerAction({
-				name: 'Move',
-				displayName: t('files', 'Move'),
+				name: 'MoveCopy',
+				displayName: function(context) {
+					var permissions = context.fileInfoModel.attributes.permissions;
+					if (permissions & OC.PERMISSION_UPDATE) {
+						return t('files', 'Move or copy');
+					}
+					return t('files', 'Copy');
+				},
 				mime: 'all',
 				order: -25,
-				permissions: OC.PERMISSION_UPDATE,
+				permissions: $('#isPublic').val() ? OC.PERMISSION_UPDATE : OC.PERMISSION_READ,
 				iconClass: 'icon-external',
 				actionHandler: function (filename, context) {
-					OC.dialogs.filepicker(t('files', 'Target folder'), function(targetPath) {
-						context.fileList.move(filename, targetPath);
-					}, false, "httpd/unix-directory", true);
+					var permissions = context.fileInfoModel.attributes.permissions;
+					var actions = OC.dialogs.FILEPICKER_TYPE_COPY;
+					if (permissions & OC.PERMISSION_UPDATE) {
+						actions = OC.dialogs.FILEPICKER_TYPE_COPY_MOVE;
+					}
+					var dialogDir = context.dir;
+					if (typeof context.fileList.dirInfo.dirLastCopiedTo !== 'undefined') {
+						dialogDir = context.fileList.dirInfo.dirLastCopiedTo;
+					}
+					OC.dialogs.filepicker(t('files', 'Choose target folder'), function(targetPath, type) {
+						if (type === OC.dialogs.FILEPICKER_TYPE_COPY) {
+							context.fileList.copy(filename, targetPath, false, context.dir);
+						}
+						if (type === OC.dialogs.FILEPICKER_TYPE_MOVE) {
+							context.fileList.move(filename, targetPath, false, context.dir);
+						}
+						context.fileList.dirInfo.dirLastCopiedTo = targetPath;
+					}, false, "httpd/unix-directory", true, actions, dialogDir);
 				}
 			});
 
-			this.register('dir', 'Open', OC.PERMISSION_READ, '', function (filename, context) {
-				var dir = context.$file.attr('data-path') || context.fileList.getCurrentDirectory();
-				context.fileList.changeDirectory(OC.joinPaths(dir, filename), true, false, parseInt(context.$file.attr('data-id'), 10));
+			this.registerAction({
+				name: 'Open',
+				mime: 'dir',
+				permissions: OC.PERMISSION_READ,
+				icon: '',
+				actionHandler: function (filename, context) {
+					var dir = context.$file.attr('data-path') || context.fileList.getCurrentDirectory();
+					if (OCA.Files.App && OCA.Files.App.getActiveView() !== 'files') {
+						OCA.Files.App.setActiveView('files', {silent: true});
+						OCA.Files.App.fileList.changeDirectory(OC.joinPaths(dir, filename), true, true);
+					} else {
+						context.fileList.changeDirectory(OC.joinPaths(dir, filename), true, false, parseInt(context.$file.attr('data-id'), 10));
+					}
+				},
+				displayName: t('files', 'Open')
 			});
 
 			this.registerAction({
 				name: 'Delete',
 				displayName: function(context) {
 					var mountType = context.$file.attr('data-mounttype');
-					var deleteTitle = t('files', 'Delete');
+					var type = context.$file.attr('data-type');
+					var deleteTitle = (type && type === 'file')
+						? t('files', 'Delete file')
+						: t('files', 'Delete folder')
 					if (mountType === 'external-root') {
 						deleteTitle = t('files', 'Disconnect storage');
 					} else if (mountType === 'shared-root') {
-						deleteTitle = t('files', 'Unshare');
+						deleteTitle = t('files', 'Leave this share');
 					}
 					return deleteTitle;
 				},
@@ -660,6 +717,12 @@
 					}
 					context.fileList.do_delete(fileName, context.dir);
 					$('.tipsy').remove();
+
+					// close sidebar on delete
+					const path = context.dir + '/' + fileName
+					if (OCA.Files.Sidebar && OCA.Files.Sidebar.file === path) {
+						OCA.Files.Sidebar.close()
+					}
 				}
 			});
 
@@ -670,21 +733,21 @@
 	OCA.Files.FileActions = FileActions;
 
 	/**
-	 * Replaces the download icon with a loading spinner and vice versa
+	 * Replaces the button icon with a loading spinner and vice versa
 	 * - also adds the class disabled to the passed in element
 	 *
-	 * @param {jQuery} $downloadButtonElement download fileaction
+	 * @param {jQuery} $buttonElement The button element
 	 * @param {boolean} showIt whether to show the spinner(true) or to hide it(false)
 	 */
-	OCA.Files.FileActions.updateFileActionSpinner = function($downloadButtonElement, showIt) {
-		var $icon = $downloadButtonElement.find('.icon');
+	OCA.Files.FileActions.updateFileActionSpinner = function($buttonElement, showIt) {
+		var $icon = $buttonElement.find('.icon');
 		if (showIt) {
 			var $loadingIcon = $('<span class="icon icon-loading-small"></span>');
 			$icon.after($loadingIcon);
 			$icon.addClass('hidden');
 		} else {
-			$downloadButtonElement.find('.icon-loading-small').remove();
-			$downloadButtonElement.find('.icon').removeClass('hidden');
+			$buttonElement.find('.icon-loading-small').remove();
+			$buttonElement.find('.icon').removeClass('hidden');
 		}
 	};
 
@@ -701,7 +764,7 @@
 	 * @property {String} mime mime type
 	 * @property {int} permissions permissions
 	 * @property {(Function|String)} icon icon path to the icon or function that returns it (deprecated, use iconClass instead)
-	 * @property {(Function|String)} iconClass class name of the icon (recommended for theming)
+	 * @property {(String|OCA.Files.FileActions~iconClassFunction)} iconClass class name of the icon (recommended for theming)
 	 * @property {OCA.Files.FileActions~renderActionFunction} [render] optional rendering function
 	 * @property {OCA.Files.FileActions~actionHandler} actionHandler action handler function
 	 */
@@ -741,6 +804,17 @@
 	 */
 
 	/**
+	 * Icon class function for actions.
+	 * The function returns the icon class of the action using
+	 * the given context information.
+	 *
+	 * @callback OCA.Files.FileActions~iconClassFunction
+	 * @param {String} fileName name of the file on which the action must be performed
+	 * @param {OCA.Files.FileActionContext} context action context
+	 * @return {String} icon class
+	 */
+
+	/**
 	 * Action handler function for file actions
 	 *
 	 * @callback OCA.Files.FileActions~actionHandler
@@ -755,25 +829,4 @@
 
 	// global file actions to be used by all lists
 	OCA.Files.fileActions = new OCA.Files.FileActions();
-	OCA.Files.legacyFileActions = new OCA.Files.FileActions();
-
-	// for backward compatibility
-	//
-	// legacy apps are expecting a stateful global FileActions object to register
-	// their actions on. Since legacy apps are very likely to break with other
-	// FileList views than the main one ("All files"), actions registered
-	// through window.FileActions will be limited to the main file list.
-	// @deprecated use OCA.Files.FileActions instead
-	window.FileActions = OCA.Files.legacyFileActions;
-	window.FileActions.register = function (mime, name, permissions, icon, action, displayName) {
-		console.warn('FileActions.register() is deprecated, please use OCA.Files.fileActions.register() instead', arguments);
-		OCA.Files.FileActions.prototype.register.call(
-				window.FileActions, mime, name, permissions, icon, action, displayName
-		);
-	};
-	window.FileActions.display = function (parent, triggerEvent, fileList) {
-		fileList = fileList || OCA.Files.App.fileList;
-		console.warn('FileActions.display() is deprecated, please use OCA.Files.fileActions.register() which automatically redisplays actions', mime, name);
-		OCA.Files.FileActions.prototype.display.call(window.FileActions, parent, triggerEvent, fileList);
-	};
 })();

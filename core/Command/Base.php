@@ -2,7 +2,10 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Daniel Kesselberg <mail@danielkesselberg.de>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -17,12 +20,13 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\Core\Command;
 
+use OC\Core\Command\User\ListCommand;
 use Stecman\Component\Symfony\Console\BashCompletion\Completion\CompletionAwareInterface;
 use Stecman\Component\Symfony\Console\BashCompletion\CompletionContext;
 use Symfony\Component\Console\Command\Command;
@@ -31,9 +35,9 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 class Base extends Command implements CompletionAwareInterface {
-	const OUTPUT_FORMAT_PLAIN = 'plain';
-	const OUTPUT_FORMAT_JSON = 'json';
-	const OUTPUT_FORMAT_JSON_PRETTY = 'json_pretty';
+	public const OUTPUT_FORMAT_PLAIN = 'plain';
+	public const OUTPUT_FORMAT_JSON = 'json';
+	public const OUTPUT_FORMAT_JSON_PRETTY = 'json_pretty';
 
 	protected $defaultOutputFormat = self::OUTPUT_FORMAT_PLAIN;
 
@@ -76,7 +80,7 @@ class Base extends Command implements CompletionAwareInterface {
 						$this->writeArrayInOutputFormat($input, $output, $item, '  ' . $prefix);
 						continue;
 					}
-					if (!is_int($key)) {
+					if (!is_int($key) || ListCommand::class === get_class($this)) {
 						$value = $this->valueToString($item);
 						if (!is_null($value)) {
 							$output->writeln($prefix . $key . ': ' . $value);
@@ -118,25 +122,29 @@ class Base extends Command implements CompletionAwareInterface {
 	protected function valueToString($value, $returnNull = true) {
 		if ($value === false) {
 			return 'false';
-		} else if ($value === true) {
+		} elseif ($value === true) {
 			return 'true';
-		} else if ($value === null) {
-			return ($returnNull) ? null : 'null';
+		} elseif ($value === null) {
+			return $returnNull ? null : 'null';
 		} else {
 			return $value;
 		}
 	}
 
 	/**
-	 * @return bool
+	 * Throw InterruptedException when interrupted by user
+	 *
+	 * @throws InterruptedException
 	 */
-	protected function hasBeenInterrupted() {
-		// return always false if pcntl_signal functions are not accessible
-		if ($this->php_pcntl_signal) {
-			pcntl_signal_dispatch();
-			return $this->interrupted;
-		} else {
-			return false;
+	protected function abortIfInterrupted() {
+		if ($this->php_pcntl_signal === false) {
+			return;
+		}
+
+		pcntl_signal_dispatch();
+
+		if ($this->interrupted === true) {
+			throw new InterruptedException('Command interrupted by user');
 		}
 	}
 

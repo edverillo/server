@@ -2,7 +2,9 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -17,7 +19,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -28,32 +30,31 @@
 
 // use OCP namespace for all classes that are considered public.
 // This means that they should be used by apps instead of the internal ownCloud classes
+
 namespace OCP\Authentication;
 
 /**
  * Interface IApacheBackend
  *
- * @package OCP\Authentication
  * @since 6.0.0
  */
 interface IApacheBackend {
 
 	/**
-	 * In case the user has been authenticated by Apache true is returned.
+	 * In case the user has been authenticated by a module true is returned.
 	 *
-	 * @return boolean whether Apache reports a user as currently logged in.
+	 * @return boolean whether the module reports a user as currently logged in.
 	 * @since 6.0.0
 	 */
 	public function isSessionActive();
 
 	/**
-	 * Creates an attribute which is added to the logout hyperlink. It can
-	 * supply any attribute(s) which are valid for <a>.
+	 * Gets the current logout URL
 	 *
-	 * @return string with one or more HTML attributes.
-	 * @since 6.0.0
+	 * @return string
+	 * @since 12.0.3
 	 */
-	public function getLogoutAttribute();
+	public function getLogoutUrl();
 
 	/**
 	 * Return the id of the current user
@@ -61,5 +62,4 @@ interface IApacheBackend {
 	 * @since 6.0.0
 	 */
 	public function getCurrentUserId();
-
 }

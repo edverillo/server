@@ -3,14 +3,14 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Björn Schießle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Jörn Friedrich Dreyer <jfd@butonic.de>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Stefan Weil <sw@weilnetz.de>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -24,13 +24,16 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\Files_Sharing\Tests;
 
+use OC\Files\Storage\Temporary;
+use OC\Files\Storage\Wrapper\Jail;
 use OCA\Files_Sharing\SharedStorage;
+use OCP\Share\IShare;
 
 /**
  * Class CacheTest
@@ -59,13 +62,15 @@ class CacheTest extends TestCase {
 	/** @var \OCP\Share\IManager */
 	protected $shareManager;
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->shareManager = \OC::$server->getShareManager();
 
-		\OC_User::setDisplayName(self::TEST_FILES_SHARING_API_USER1, 'User One');
-		\OC_User::setDisplayName(self::TEST_FILES_SHARING_API_USER2, 'User Two');
+
+		$userManager = \OC::$server->getUserManager();
+		$userManager->get(self::TEST_FILES_SHARING_API_USER1)->setDisplayName('User One');
+		$userManager->get(self::TEST_FILES_SHARING_API_USER2)->setDisplayName('User Two');
 
 		self::loginHelper(self::TEST_FILES_SHARING_API_USER1);
 
@@ -95,20 +100,24 @@ class CacheTest extends TestCase {
 		$node = $rootFolder->get('container/shareddir');
 		$share = $this->shareManager->newShare();
 		$share->setNode($node)
-			->setShareType(\OCP\Share::SHARE_TYPE_USER)
+			->setShareType(IShare::TYPE_USER)
 			->setSharedWith(self::TEST_FILES_SHARING_API_USER2)
 			->setSharedBy(self::TEST_FILES_SHARING_API_USER1)
 			->setPermissions(\OCP\Constants::PERMISSION_ALL);
-		$this->shareManager->createShare($share);
+		$share = $this->shareManager->createShare($share);
+		$share->setStatus(IShare::STATUS_ACCEPTED);
+		$this->shareManager->updateShare($share);
 
 		$node = $rootFolder->get('container/shared single file.txt');
 		$share = $this->shareManager->newShare();
 		$share->setNode($node)
-			->setShareType(\OCP\Share::SHARE_TYPE_USER)
+			->setShareType(IShare::TYPE_USER)
 			->setSharedWith(self::TEST_FILES_SHARING_API_USER2)
 			->setSharedBy(self::TEST_FILES_SHARING_API_USER1)
 			->setPermissions(\OCP\Constants::PERMISSION_ALL & ~(\OCP\Constants::PERMISSION_CREATE | \OCP\Constants::PERMISSION_DELETE));
-		$this->shareManager->createShare($share);
+		$share = $this->shareManager->createShare($share);
+		$share->setStatus(IShare::STATUS_ACCEPTED);
+		$this->shareManager->updateShare($share);
 
 		// login as user2
 		self::loginHelper(self::TEST_FILES_SHARING_API_USER2);
@@ -119,14 +128,14 @@ class CacheTest extends TestCase {
 		$this->sharedCache = $this->sharedStorage->getCache();
 	}
 
-	protected function tearDown() {
-		if($this->sharedCache) {
+	protected function tearDown(): void {
+		if ($this->sharedCache) {
 			$this->sharedCache->clear();
 		}
 
 		self::loginHelper(self::TEST_FILES_SHARING_API_USER1);
 
-		$shares = $this->shareManager->getSharesBy(self::TEST_FILES_SHARING_API_USER1, \OCP\Share::SHARE_TYPE_USER);
+		$shares = $this->shareManager->getSharesBy(self::TEST_FILES_SHARING_API_USER1, IShare::TYPE_USER);
 		foreach ($shares as $share) {
 			$this->shareManager->deleteShare($share);
 		}
@@ -138,71 +147,71 @@ class CacheTest extends TestCase {
 		parent::tearDown();
 	}
 
-	function searchDataProvider() {
-		return array(
-			array('%another%',
-				array(
-					array('name' => 'another too.txt', 'path' => 'subdir/another too.txt'),
-					array('name' => 'another.txt', 'path' => 'subdir/another.txt'),
-				)
-			),
-			array('%Another%',
-				array(
-					array('name' => 'another too.txt', 'path' => 'subdir/another too.txt'),
-					array('name' => 'another.txt', 'path' => 'subdir/another.txt'),
-				)
-			),
-			array('%dir%',
-				array(
-					array('name' => 'emptydir', 'path' => 'emptydir'),
-					array('name' => 'subdir', 'path' => 'subdir'),
-					array('name' => 'shareddir', 'path' => ''),
-				)
-			),
-			array('%Dir%',
-				array(
-					array('name' => 'emptydir', 'path' => 'emptydir'),
-					array('name' => 'subdir', 'path' => 'subdir'),
-					array('name' => 'shareddir', 'path' => ''),
-				)
-			),
-			array('%txt%',
-				array(
-					array('name' => 'bar.txt', 'path' => 'bar.txt'),
-					array('name' => 'another too.txt', 'path' => 'subdir/another too.txt'),
-					array('name' => 'another.txt', 'path' => 'subdir/another.txt'),
-				)
-			),
-			array('%Txt%',
-				array(
-					array('name' => 'bar.txt', 'path' => 'bar.txt'),
-					array('name' => 'another too.txt', 'path' => 'subdir/another too.txt'),
-					array('name' => 'another.txt', 'path' => 'subdir/another.txt'),
-				)
-			),
-			array('%',
-				array(
-					array('name' => 'bar.txt', 'path' => 'bar.txt'),
-					array('name' => 'emptydir', 'path' => 'emptydir'),
-					array('name' => 'subdir', 'path' => 'subdir'),
-					array('name' => 'another too.txt', 'path' => 'subdir/another too.txt'),
-					array('name' => 'another.txt', 'path' => 'subdir/another.txt'),
-					array('name' => 'not a text file.xml', 'path' => 'subdir/not a text file.xml'),
-					array('name' => 'shareddir', 'path' => ''),
-				)
-			),
-			array('%nonexistent%',
-				array(
-				)
-			),
-		);
+	public function searchDataProvider() {
+		return [
+			['%another%',
+				[
+					['name' => 'another too.txt', 'path' => 'subdir/another too.txt'],
+					['name' => 'another.txt', 'path' => 'subdir/another.txt'],
+				]
+			],
+			['%Another%',
+				[
+					['name' => 'another too.txt', 'path' => 'subdir/another too.txt'],
+					['name' => 'another.txt', 'path' => 'subdir/another.txt'],
+				]
+			],
+			['%dir%',
+				[
+					['name' => 'emptydir', 'path' => 'emptydir'],
+					['name' => 'subdir', 'path' => 'subdir'],
+					['name' => 'shareddir', 'path' => ''],
+				]
+			],
+			['%Dir%',
+				[
+					['name' => 'emptydir', 'path' => 'emptydir'],
+					['name' => 'subdir', 'path' => 'subdir'],
+					['name' => 'shareddir', 'path' => ''],
+				]
+			],
+			['%txt%',
+				[
+					['name' => 'bar.txt', 'path' => 'bar.txt'],
+					['name' => 'another too.txt', 'path' => 'subdir/another too.txt'],
+					['name' => 'another.txt', 'path' => 'subdir/another.txt'],
+				]
+			],
+			['%Txt%',
+				[
+					['name' => 'bar.txt', 'path' => 'bar.txt'],
+					['name' => 'another too.txt', 'path' => 'subdir/another too.txt'],
+					['name' => 'another.txt', 'path' => 'subdir/another.txt'],
+				]
+			],
+			['%',
+				[
+					['name' => 'bar.txt', 'path' => 'bar.txt'],
+					['name' => 'emptydir', 'path' => 'emptydir'],
+					['name' => 'subdir', 'path' => 'subdir'],
+					['name' => 'another too.txt', 'path' => 'subdir/another too.txt'],
+					['name' => 'another.txt', 'path' => 'subdir/another.txt'],
+					['name' => 'not a text file.xml', 'path' => 'subdir/not a text file.xml'],
+					['name' => 'shareddir', 'path' => ''],
+				]
+			],
+			['%nonexistent%',
+				[
+				]
+			],
+		];
 	}
 
 	/**
 	 * we cannot use a dataProvider because that would cause the stray hook detection to remove the hooks
 	 * that were added in setUpBeforeClass.
 	 */
-	function testSearch() {
+	public function testSearch() {
 		foreach ($this->searchDataProvider() as $data) {
 			list($pattern, $expectedFiles) = $data;
 
@@ -210,195 +219,106 @@ class CacheTest extends TestCase {
 
 			$this->verifyFiles($expectedFiles, $results);
 		}
-
 	}
 	/**
 	 * Test searching by mime type
 	 */
-	function testSearchByMime() {
+	public function testSearchByMime() {
 		$results = $this->sharedStorage->getCache()->searchByMime('text');
-		$check = array(
-				array(
-					'name' => 'bar.txt',
-					'path' => 'bar.txt'
-				),
-				array(
-					'name' => 'another too.txt',
-					'path' => 'subdir/another too.txt'
-				),
-				array(
-					'name' => 'another.txt',
-					'path' => 'subdir/another.txt'
-				),
-			);
+		$check = [
+			[
+				'name' => 'bar.txt',
+				'path' => 'bar.txt'
+			],
+			[
+				'name' => 'another too.txt',
+				'path' => 'subdir/another too.txt'
+			],
+			[
+				'name' => 'another.txt',
+				'path' => 'subdir/another.txt'
+			],
+		];
 		$this->verifyFiles($check, $results);
 	}
 
-	/**
-	 * Test searching by tag
-	 */
-	function testSearchByTag() {
-		$userId = \OC::$server->getUserSession()->getUser()->getUId();
-		$id1 = $this->sharedCache->get('bar.txt')['fileid'];
-		$id2 = $this->sharedCache->get('subdir/another too.txt')['fileid'];
-		$id3 = $this->sharedCache->get('subdir/not a text file.xml')['fileid'];
-		$id4 = $this->sharedCache->get('subdir/another.txt')['fileid'];
-		$tagManager = \OC::$server->getTagManager()->load('files', null, null, $userId);
-		$tagManager->tagAs($id1, 'tag1');
-		$tagManager->tagAs($id1, 'tag2');
-		$tagManager->tagAs($id2, 'tag1');
-		$tagManager->tagAs($id3, 'tag1');
-		$tagManager->tagAs($id4, 'tag2');
-		$results = $this->sharedStorage->getCache()->searchByTag('tag1', $userId);
-		$check = array(
-				array(
-					'name' => 'bar.txt',
-					'path' => 'bar.txt'
-				),
-				array(
-					'name' => 'another too.txt',
-					'path' => 'subdir/another too.txt'
-				),
-				array(
-					'name' => 'not a text file.xml',
-					'path' => 'subdir/not a text file.xml'
-				),
-			);
-		$this->verifyFiles($check, $results);
-		$tagManager->delete(array('tag1', 'tag2'));
-	}
-
-	/**
-	 * Test searching by tag for multiple sections of the tree
-	 */
-	function testSearchByTagTree() {
-		$userId = \OC::$server->getUserSession()->getUser()->getUId();
-		$this->sharedStorage->mkdir('subdir/emptydir');
-		$this->sharedStorage->mkdir('subdir/emptydir2');
-		$this->ownerStorage->getScanner()->scan('');
-		$allIds = array(
-			$this->sharedCache->get('')['fileid'],
-			$this->sharedCache->get('bar.txt')['fileid'],
-			$this->sharedCache->get('subdir/another too.txt')['fileid'],
-			$this->sharedCache->get('subdir/not a text file.xml')['fileid'],
-			$this->sharedCache->get('subdir/another.txt')['fileid'],
-			$this->sharedCache->get('subdir/emptydir')['fileid'],
-			$this->sharedCache->get('subdir/emptydir2')['fileid'],
-		);
-		$tagManager = \OC::$server->getTagManager()->load('files', null, null, $userId);
-		foreach ($allIds as $id) {
-			$tagManager->tagAs($id, 'tag1');
-		}
-		$results = $this->sharedStorage->getCache()->searchByTag('tag1', $userId);
-		$check = array(
-				array(
-					'name' => 'shareddir',
-					'path' => ''
-				),
-				array(
-					'name' => 'bar.txt',
-					'path' => 'bar.txt'
-				),
-				array(
-					'name' => 'another.txt',
-					'path' => 'subdir/another.txt'
-				),
-				array(
-					'name' => 'another too.txt',
-					'path' => 'subdir/another too.txt'
-				),
-				array(
-					'name' => 'emptydir',
-					'path' => 'subdir/emptydir'
-				),
-				array(
-					'name' => 'emptydir2',
-					'path' => 'subdir/emptydir2'
-				),
-				array(
-					'name' => 'not a text file.xml',
-					'path' => 'subdir/not a text file.xml'
-				),
-			);
-		$this->verifyFiles($check, $results);
-		$tagManager->delete(array('tag1'));
-	}
-
-	function testGetFolderContentsInRoot() {
+	public function testGetFolderContentsInRoot() {
 		$results = $this->user2View->getDirectoryContent('/');
 
 		// we should get the shared items "shareddir" and "shared single file.txt"
 		// additional root will always contain the example file "welcome.txt",
 		//  so this will be part of the result
 		$this->verifyFiles(
-			array(
-				array(
+			[
+				[
 					'name' => 'welcome.txt',
 					'path' => 'files/welcome.txt',
 					'mimetype' => 'text/plain',
-				),
-				array(
+				],
+				[
 					'name' => 'shareddir',
 					'path' => 'files/shareddir',
 					'mimetype' => 'httpd/unix-directory',
 					'uid_owner' => self::TEST_FILES_SHARING_API_USER1,
 					'displayname_owner' => 'User One',
-				),
-				array(
+				],
+				[
 					'name' => 'shared single file.txt',
 					'path' => 'files/shared single file.txt',
 					'mimetype' => 'text/plain',
 					'uid_owner' => self::TEST_FILES_SHARING_API_USER1,
 					'displayname_owner' => 'User One',
-				),
-			),
+				],
+			],
 			$results
 		);
 	}
 
-	function testGetFolderContentsInSubdir() {
+	public function testGetFolderContentsInSubdir() {
 		$results = $this->user2View->getDirectoryContent('/shareddir');
 
 		$this->verifyFiles(
-			array(
-				array(
+			[
+				[
 					'name' => 'bar.txt',
 					'path' => 'bar.txt',
 					'mimetype' => 'text/plain',
 					'uid_owner' => self::TEST_FILES_SHARING_API_USER1,
 					'displayname_owner' => 'User One',
-				),
-				array(
+				],
+				[
 					'name' => 'emptydir',
 					'path' => 'emptydir',
 					'mimetype' => 'httpd/unix-directory',
 					'uid_owner' => self::TEST_FILES_SHARING_API_USER1,
 					'displayname_owner' => 'User One',
-				),
-				array(
+				],
+				[
 					'name' => 'subdir',
 					'path' => 'subdir',
 					'mimetype' => 'httpd/unix-directory',
 					'uid_owner' => self::TEST_FILES_SHARING_API_USER1,
 					'displayname_owner' => 'User One',
-				),
-			),
+				],
+			],
 			$results
 		);
 	}
 
-	function testGetFolderContentsWhenSubSubdirShared() {
+	public function testGetFolderContentsWhenSubSubdirShared() {
 		self::loginHelper(self::TEST_FILES_SHARING_API_USER1);
 
 		$rootFolder = \OC::$server->getUserFolder(self::TEST_FILES_SHARING_API_USER1);
 		$node = $rootFolder->get('container/shareddir/subdir');
 		$share = $this->shareManager->newShare();
 		$share->setNode($node)
-			->setShareType(\OCP\Share::SHARE_TYPE_USER)
+			->setShareType(IShare::TYPE_USER)
 			->setSharedWith(self::TEST_FILES_SHARING_API_USER3)
 			->setSharedBy(self::TEST_FILES_SHARING_API_USER1)
 			->setPermissions(\OCP\Constants::PERMISSION_ALL);
 		$share = $this->shareManager->createShare($share);
+		$share->setStatus(IShare::STATUS_ACCEPTED);
+		$this->shareManager->updateShare($share);
 
 		self::loginHelper(self::TEST_FILES_SHARING_API_USER3);
 
@@ -406,29 +326,29 @@ class CacheTest extends TestCase {
 		$results = $thirdView->getDirectoryContent('/subdir');
 
 		$this->verifyFiles(
-			array(
-				array(
+			[
+				[
 					'name' => 'another too.txt',
 					'path' => 'another too.txt',
 					'mimetype' => 'text/plain',
 					'uid_owner' => self::TEST_FILES_SHARING_API_USER1,
 					'displayname_owner' => 'User One',
-				),
-				array(
+				],
+				[
 					'name' => 'another.txt',
 					'path' => 'another.txt',
 					'mimetype' => 'text/plain',
 					'uid_owner' => self::TEST_FILES_SHARING_API_USER1,
 					'displayname_owner' => 'User One',
-				),
-				array(
+				],
+				[
 					'name' => 'not a text file.xml',
 					'path' => 'not a text file.xml',
 					'mimetype' => 'application/xml',
 					'uid_owner' => self::TEST_FILES_SHARING_API_USER1,
 					'displayname_owner' => 'User One',
-				),
-			),
+				],
+			],
 			$results
 		);
 
@@ -455,7 +375,7 @@ class CacheTest extends TestCase {
 				}
 			}
 		}
-		$this->assertEquals(array(), $results);
+		$this->assertEquals([], $results);
 	}
 
 	/**
@@ -478,11 +398,13 @@ class CacheTest extends TestCase {
 		$node = $rootFolder->get('test.txt');
 		$share = $this->shareManager->newShare();
 		$share->setNode($node)
-			->setShareType(\OCP\Share::SHARE_TYPE_USER)
+			->setShareType(IShare::TYPE_USER)
 			->setSharedWith(self::TEST_FILES_SHARING_API_USER2)
 			->setSharedBy(self::TEST_FILES_SHARING_API_USER1)
 			->setPermissions(\OCP\Constants::PERMISSION_READ | \OCP\Constants::PERMISSION_UPDATE | \OCP\Constants::PERMISSION_SHARE);
-		$this->shareManager->createShare($share);
+		$share = $this->shareManager->createShare($share);
+		$share->setStatus(IShare::STATUS_ACCEPTED);
+		$this->shareManager->updateShare($share);
 
 		\OC_Util::tearDownFS();
 
@@ -509,11 +431,13 @@ class CacheTest extends TestCase {
 		$node = $rootFolder->get('foo');
 		$share = $this->shareManager->newShare();
 		$share->setNode($node)
-			->setShareType(\OCP\Share::SHARE_TYPE_USER)
+			->setShareType(IShare::TYPE_USER)
 			->setSharedWith(self::TEST_FILES_SHARING_API_USER2)
 			->setSharedBy(self::TEST_FILES_SHARING_API_USER1)
 			->setPermissions(\OCP\Constants::PERMISSION_ALL);
-		$this->shareManager->createShare($share);
+		$share = $this->shareManager->createShare($share);
+		$share->setStatus(IShare::STATUS_ACCEPTED);
+		$this->shareManager->updateShare($share);
 		\OC_Util::tearDownFS();
 
 		self::loginHelper(self::TEST_FILES_SHARING_API_USER2);
@@ -536,11 +460,13 @@ class CacheTest extends TestCase {
 		$node = $rootFolder->get('foo');
 		$share = $this->shareManager->newShare();
 		$share->setNode($node)
-			->setShareType(\OCP\Share::SHARE_TYPE_USER)
+			->setShareType(IShare::TYPE_USER)
 			->setSharedWith(self::TEST_FILES_SHARING_API_USER2)
 			->setSharedBy(self::TEST_FILES_SHARING_API_USER1)
 			->setPermissions(\OCP\Constants::PERMISSION_ALL);
-		$this->shareManager->createShare($share);
+		$share = $this->shareManager->createShare($share);
+		$share->setStatus(IShare::STATUS_ACCEPTED);
+		$this->shareManager->updateShare($share);
 		\OC_Util::tearDownFS();
 
 		list($sourceStorage) = \OC\Files\Filesystem::resolvePath('/' . self::TEST_FILES_SHARING_API_USER1 . '/files/foo');
@@ -551,5 +477,44 @@ class CacheTest extends TestCase {
 		list($sharedStorage) = \OC\Files\Filesystem::resolvePath('/' . self::TEST_FILES_SHARING_API_USER2 . '/files/foo');
 
 		$this->assertEquals($sourceStorage->getCache()->getNumericStorageId(), $sharedStorage->getCache()->getNumericStorageId());
+	}
+
+	public function testShareJailedStorage() {
+		$sourceStorage = new Temporary();
+		$sourceStorage->mkdir('jail');
+		$sourceStorage->mkdir('jail/sub');
+		$sourceStorage->file_put_contents('jail/sub/foo.txt', 'foo');
+		$jailedSource = new Jail([
+			'storage' => $sourceStorage,
+			'root' => 'jail'
+		]);
+		$sourceStorage->getScanner()->scan('');
+		$this->registerMount(self::TEST_FILES_SHARING_API_USER1, $jailedSource, '/' . self::TEST_FILES_SHARING_API_USER1 . '/files/foo');
+
+		self::loginHelper(self::TEST_FILES_SHARING_API_USER1);
+
+		$rootFolder = \OC::$server->getUserFolder(self::TEST_FILES_SHARING_API_USER1);
+		$node = $rootFolder->get('foo/sub');
+		$share = $this->shareManager->newShare();
+		$share->setNode($node)
+			->setShareType(IShare::TYPE_USER)
+			->setSharedWith(self::TEST_FILES_SHARING_API_USER2)
+			->setSharedBy(self::TEST_FILES_SHARING_API_USER1)
+			->setPermissions(\OCP\Constants::PERMISSION_ALL);
+		$share = $this->shareManager->createShare($share);
+		$share->setStatus(IShare::STATUS_ACCEPTED);
+		$this->shareManager->updateShare($share);
+		\OC_Util::tearDownFS();
+
+		self::loginHelper(self::TEST_FILES_SHARING_API_USER2);
+		$this->assertEquals('foo', \OC\Files\Filesystem::file_get_contents('/sub/foo.txt'));
+
+		\OC\Files\Filesystem::file_put_contents('/sub/bar.txt', 'bar');
+		/** @var SharedStorage $sharedStorage */
+		list($sharedStorage) = \OC\Files\Filesystem::resolvePath('/' . self::TEST_FILES_SHARING_API_USER2 . '/files/sub');
+
+		$this->assertTrue($sharedStorage->getCache()->inCache('bar.txt'));
+
+		$this->assertTrue($sourceStorage->getCache()->inCache('jail/sub/bar.txt'));
 	}
 }

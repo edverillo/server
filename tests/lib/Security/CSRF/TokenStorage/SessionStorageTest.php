@@ -29,9 +29,9 @@ class SessionStorageTest extends \Test\TestCase {
 	/** @var \OC\Security\CSRF\TokenStorage\SessionStorage */
 	private $sessionStorage;
 
-	public function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
-		$this->session = $this->getMockBuilder('\OCP\ISession')
+		$this->session = $this->getMockBuilder(ISession::class)
 			->disableOriginalConstructor()->getMock();
 		$this->sessionStorage = new \OC\Security\CSRF\TokenStorage\SessionStorage($this->session);
 	}
@@ -54,10 +54,11 @@ class SessionStorageTest extends \Test\TestCase {
 	 * @param string $token
 	 * @dataProvider getTokenDataProvider
 	 *
-	 * @expectedException \Exception
-	 * @expectedExceptionMessage Session does not contain a requesttoken
 	 */
 	public function testGetTokenWithEmptyToken($token) {
+		$this->expectException(\Exception::class);
+		$this->expectExceptionMessage('Session does not contain a requesttoken');
+
 		$this->session
 			->expects($this->once())
 			->method('get')

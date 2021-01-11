@@ -2,7 +2,10 @@
 /**
  * @copyright Copyright (c) 2016 Lukas Reschke <lukas@statuscode.ch>
  *
+ * @author Julius Härtl <jus@bitgrid.net>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -17,7 +20,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
@@ -26,11 +29,11 @@ namespace OCA\Encryption\Tests\Settings;
 use OCA\Encryption\Settings\Admin;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IConfig;
+use OCP\IL10N;
+use OCP\ILogger;
 use OCP\ISession;
 use OCP\IUserManager;
 use OCP\IUserSession;
-use OCP\IL10N;
-use OCP\ILogger;
 use Test\TestCase;
 
 class AdminTest extends TestCase {
@@ -49,15 +52,15 @@ class AdminTest extends TestCase {
 	/** @var ISession */
 	private $session;
 
-	public function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
-		$this->l = $this->getMockBuilder('\OCP\IL10N')->getMock();
-		$this->logger = $this->getMockBuilder('\OCP\ILogger')->getMock();
-		$this->userSession = $this->getMockBuilder('\OCP\IUserSession')->getMock();
-		$this->config = $this->getMockBuilder('\OCP\IConfig')->getMock();
-		$this->userManager = $this->getMockBuilder('\OCP\IUserManager')->getMock();
-		$this->session = $this->getMockBuilder('\OCP\ISession')->getMock();
+		$this->l = $this->getMockBuilder(IL10N::class)->getMock();
+		$this->logger = $this->getMockBuilder(ILogger::class)->getMock();
+		$this->userSession = $this->getMockBuilder(IUserSession::class)->getMock();
+		$this->config = $this->getMockBuilder(IConfig::class)->getMock();
+		$this->userManager = $this->getMockBuilder(IUserManager::class)->getMock();
+		$this->session = $this->getMockBuilder(ISession::class)->getMock();
 
 		$this->admin = new Admin(
 			$this->l,
@@ -71,30 +74,31 @@ class AdminTest extends TestCase {
 
 	public function testGetForm() {
 		$this->config
-			->expects($this->at(0))
 			->method('getAppValue')
-			->with('encryption', 'recoveryAdminEnabled', '0')
-			->willReturn(1);
-		$this->config
-			->expects($this->at(1))
-			->method('getAppValue')
-			->with('encryption', 'encryptHomeStorage', '1')
-			->willReturn(1);
+			->will($this->returnCallback(function ($app, $key, $default) {
+				if ($app === 'encryption' && $key === 'recoveryAdminEnabled' && $default === '0') {
+					return '1';
+				}
+				if ($app === 'encryption' && $key === 'encryptHomeStorage' && $default === '1') {
+					return '1';
+				}
+				return $default;
+			}));
 		$params = [
-			'recoveryEnabled' => 1,
+			'recoveryEnabled' => '1',
 			'initStatus' => '0',
-			'encryptHomeStorage' => false,
-			'masterKeyEnabled' => false
+			'encryptHomeStorage' => true,
+			'masterKeyEnabled' => true
 		];
 		$expected = new TemplateResponse('encryption', 'settings-admin', $params, '');
 		$this->assertEquals($expected, $this->admin->getForm());
 	}
 
 	public function testGetSection() {
-		$this->assertSame('encryption', $this->admin->getSection());
+		$this->assertSame('security', $this->admin->getSection());
 	}
 
 	public function testGetPriority() {
-		$this->assertSame(5, $this->admin->getPriority());
+		$this->assertSame(11, $this->admin->getPriority());
 	}
 }

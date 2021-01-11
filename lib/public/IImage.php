@@ -5,6 +5,8 @@
  * @author Joas Schilling <coding@schilljs.com>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Olivier Paroz <github@oparoz.com>
+ * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -18,7 +20,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -103,6 +105,12 @@ interface IImage {
 	public function resource();
 
 	/**
+	 * @return string Returns the raw data mimetype
+	 * @since 13.0.0
+	 */
+	public function dataMimeType();
+
+	/**
 	 * @return string Returns the raw image data.
 	 * @since 8.1.0
 	 */
@@ -141,7 +149,7 @@ interface IImage {
 	 * @return bool
 	 * @since 8.1.0
 	 */
-	public function preciseResize($width, $height);
+	public function preciseResize(int $width, int $height): bool;
 
 	/**
 	 * Crops the image to the middle square. If the image is already square it just returns.
@@ -162,7 +170,7 @@ interface IImage {
 	 * @return bool for success or failure
 	 * @since 8.1.0
 	 */
-	public function crop($x, $y, $w, $h);
+	public function crop(int $x, int $y, int $w, int $h): bool;
 
 	/**
 	 * Resizes the image to fit within a boundary while preserving ratio.
@@ -183,4 +191,43 @@ interface IImage {
 	 * @since 8.1.0
 	 */
 	public function scaleDownToFit($maxWidth, $maxHeight);
+
+	/**
+	 * create a copy of this image
+	 *
+	 * @return IImage
+	 * @since 19.0.0
+	 */
+	public function copy(): IImage;
+
+	/**
+	 * create a new cropped copy of this image
+	 *
+	 * @param int $x Horizontal position
+	 * @param int $y Vertical position
+	 * @param int $w Width
+	 * @param int $h Height
+	 * @return IImage
+	 * @since 19.0.0
+	 */
+	public function cropCopy(int $x, int $y, int $w, int $h): IImage;
+
+	/**
+	 * create a new resized copy of this image
+	 *
+	 * @param int $width
+	 * @param int $height
+	 * @return IImage
+	 * @since 19.0.0
+	 */
+	public function preciseResizeCopy(int $width, int $height): IImage;
+
+	/**
+	 * create a new resized copy of this image
+	 *
+	 * @param integer $maxSize The maximum size of either the width or height.
+	 * @return IImage
+	 * @since 19.0.0
+	 */
+	public function resizeCopy(int $maxSize): IImage;
 }

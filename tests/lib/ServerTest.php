@@ -23,6 +23,7 @@
  */
 
 namespace Test;
+
 use OC\App\AppStore\Fetcher\AppFetcher;
 use OC\App\AppStore\Fetcher\CategoryFetcher;
 
@@ -38,7 +39,7 @@ class ServerTest extends \Test\TestCase {
 	protected $server;
 
 
-	public function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 		$config = new \OC\Config(\OC::$configDir);
 		$this->server = new \OC\Server('', $config);
@@ -53,13 +54,11 @@ class ServerTest extends \Test\TestCase {
 			['AppConfig', '\OC\AppConfig'],
 			['AppConfig', '\OCP\IAppConfig'],
 			['AppFetcher', AppFetcher::class],
-			['AppHelper', '\OC\AppHelper'],
-			['AppHelper', '\OCP\IHelper'],
 			['AppManager', '\OC\App\AppManager'],
 			['AppManager', '\OCP\App\IAppManager'],
 			['AsyncCommandBus', '\OC\Command\AsyncBus'],
 			['AsyncCommandBus', '\OCP\Command\IBus'],
-			['AvatarManager', '\OC\AvatarManager'],
+			['AvatarManager', '\OC\Avatar\AvatarManager'],
 			['AvatarManager', '\OCP\IAvatarManager'],
 
 			['CategoryFetcher', CategoryFetcher::class],
@@ -73,7 +72,7 @@ class ServerTest extends \Test\TestCase {
 			['CryptoWrapper', '\OC\Session\CryptoWrapper'],
 			['CsrfTokenManager', '\OC\Security\CSRF\CsrfTokenManager'],
 
-			['DatabaseConnection', '\OC\DB\Connection'],
+			['DatabaseConnection', '\OC\DB\ConnectionAdapter'],
 			['DatabaseConnection', '\OCP\IDBConnection'],
 			['DateTimeFormatter', '\OC\DateTimeFormatter'],
 			['DateTimeFormatter', '\OCP\IDateTimeFormatter'],
@@ -93,7 +92,6 @@ class ServerTest extends \Test\TestCase {
 
 			['Hasher', '\OC\Security\Hasher'],
 			['Hasher', '\OCP\Security\IHasher'],
-			['HTTPHelper', '\OC\HTTPHelper'],
 			['HttpClientService', '\OC\Http\Client\ClientService'],
 			['HttpClientService', '\OCP\Http\Client\IClientService'],
 
@@ -177,8 +175,8 @@ class ServerTest extends \Test\TestCase {
 	}
 
 	public function testGetCertificateManager() {
-		$this->assertInstanceOf('\OC\Security\CertificateManager', $this->server->getCertificateManager('test'), 'service returned by "getCertificateManager" did not return the right class');
-		$this->assertInstanceOf('\OCP\ICertificateManager', $this->server->getCertificateManager('test'), 'service returned by "getCertificateManager" did not return the right class');
+		$this->assertInstanceOf('\OC\Security\CertificateManager', $this->server->getCertificateManager(), 'service returned by "getCertificateManager" did not return the right class');
+		$this->assertInstanceOf('\OCP\ICertificateManager', $this->server->getCertificateManager(), 'service returned by "getCertificateManager" did not return the right class');
 	}
 
 	public function testCreateEventSource() {

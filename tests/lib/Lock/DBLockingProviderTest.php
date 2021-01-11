@@ -40,23 +40,23 @@ class DBLockingProviderTest extends LockingProvider {
 	/**
 	 * @var \OCP\IDBConnection
 	 */
-	private $connection;
+	protected $connection;
 
 	/**
 	 * @var \OCP\AppFramework\Utility\ITimeFactory
 	 */
-	private $timeFactory;
+	protected $timeFactory;
 
-	private $currentTime;
+	protected $currentTime;
 
-	public function setUp() {
+	protected function setUp(): void {
 		$this->currentTime = time();
 		$this->timeFactory = $this->createMock(ITimeFactory::class);
 		$this->timeFactory->expects($this->any())
 			->method('getTime')
-			->will($this->returnCallback(function () {
+			->willReturnCallback(function () {
 				return $this->currentTime;
-			}));
+			});
 		parent::setUp();
 	}
 
@@ -68,7 +68,7 @@ class DBLockingProviderTest extends LockingProvider {
 		return new \OC\Lock\DBLockingProvider($this->connection, \OC::$server->getLogger(), $this->timeFactory, 3600);
 	}
 
-	public function tearDown() {
+	protected function tearDown(): void {
 		$this->connection->executeQuery('DELETE FROM `*PREFIX*file_locks`');
 		parent::tearDown();
 	}
@@ -94,6 +94,38 @@ class DBLockingProviderTest extends LockingProvider {
 	private function getLockEntryCount() {
 		$query = $this->connection->prepare('SELECT count(*) FROM `*PREFIX*file_locks`');
 		$query->execute();
-		return $query->fetchColumn();
+		return $query->fetchOne();
+	}
+
+	protected function getLockValue($key) {
+		$query = $this->connection->getQueryBuilder();
+		$query->select('lock')
+			->from('file_locks')
+			->where($query->expr()->eq('key', $query->createNamedParameter($key)));
+
+		$result = $query->execute();
+		$rows = $result->fetchOne();
+		$result->closeCursor();
+
+		return $rows;
+	}
+
+	public function testDoubleShared() {
+		$this->instance->acquireLock('foo', ILockingProvider::LOCK_SHARED);
+		$this->instance->acquireLock('foo', ILockingProvider::LOCK_SHARED);
+
+		$this->assertEquals(1, $this->getLockValue('foo'));
+
+		$this->instance->releaseLock('foo', ILockingProvider::LOCK_SHARED);
+
+		$this->assertEquals(1, $this->getLockValue('foo'));
+
+		$this->instance->releaseLock('foo', ILockingProvider::LOCK_SHARED);
+
+		$this->assertEquals(1, $this->getLockValue('foo'));
+
+		$this->instance->releaseAll();
+
+		$this->assertEquals(0, $this->getLockValue('foo'));
 	}
 }

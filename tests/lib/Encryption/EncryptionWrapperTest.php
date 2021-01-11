@@ -19,13 +19,12 @@
  *
  */
 
-
 namespace Test\Encryption;
-
 
 use OC\Encryption\EncryptionWrapper;
 use OC\Encryption\Manager;
 use OC\Memcache\ArrayCache;
+use OCP\Files\Storage;
 use OCP\ILogger;
 use Test\TestCase;
 
@@ -34,16 +33,16 @@ class EncryptionWrapperTest extends TestCase {
 	/** @var  EncryptionWrapper */
 	private $instance;
 
-	/** @var  \PHPUnit_Framework_MockObject_MockObject | \OCP\ILogger */
+	/** @var  \PHPUnit\Framework\MockObject\MockObject | \OCP\ILogger */
 	private $logger;
 
-	/** @var  \PHPUnit_Framework_MockObject_MockObject | \OC\Encryption\Manager */
+	/** @var  \PHPUnit\Framework\MockObject\MockObject | \OC\Encryption\Manager */
 	private $manager;
 
-	/** @var  \PHPUnit_Framework_MockObject_MockObject | \OC\Memcache\ArrayCache */
+	/** @var  \PHPUnit\Framework\MockObject\MockObject | \OC\Memcache\ArrayCache */
 	private $arrayCache;
 
-	public function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->arrayCache = $this->createMock(ArrayCache::class);
@@ -59,7 +58,7 @@ class EncryptionWrapperTest extends TestCase {
 	 * @dataProvider provideWrapStorage
 	 */
 	public function testWrapStorage($expectedWrapped, $wrappedStorages) {
-		$storage = $this->getMockBuilder('OC\Files\Storage\Storage')
+		$storage = $this->getMockBuilder(Storage::class)
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -91,14 +90,7 @@ class EncryptionWrapperTest extends TestCase {
 			[true, ['OCA\Files_Trashbin\Storage']],
 
 			// Do not wrap shared storages
-			[false, ['OCA\Files_Sharing\SharedStorage']],
-			[false, ['OCA\Files_Sharing\External\Storage']],
-			[false, ['OC\Files\Storage\OwnCloud']],
-			[false, ['OCA\Files_Sharing\SharedStorage', 'OCA\Files_Sharing\External\Storage']],
-			[false, ['OCA\Files_Sharing\SharedStorage', 'OC\Files\Storage\OwnCloud']],
-			[false, ['OCA\Files_Sharing\External\Storage', 'OC\Files\Storage\OwnCloud']],
-			[false, ['OCA\Files_Sharing\SharedStorage', 'OCA\Files_Sharing\External\Storage', 'OC\Files\Storage\OwnCloud']],
+			[false, [Storage\IDisableEncryptionStorage::class]],
 		];
 	}
-
 }

@@ -1,7 +1,12 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
  * @author Lukas Reschke <lukas@statuscode.ch>
  *
  * @license AGPL-3.0
@@ -16,13 +21,12 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\UpdateNotification;
 
-use OC\AppFramework\Utility\TimeFactory;
 use OC\BackgroundJob\TimedJob;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IConfig;
@@ -40,28 +44,15 @@ class ResetTokenBackgroundJob extends TimedJob {
 	private $timeFactory;
 
 	/**
-	 * @param IConfig|null $config
-	 * @param ITimeFactory|null $timeFactory
+	 * @param IConfig $config
+	 * @param ITimeFactory $timeFactory
 	 */
-	public function __construct(IConfig $config = null,
-								ITimeFactory $timeFactory = null) {
+	public function __construct(IConfig $config,
+								ITimeFactory $timeFactory) {
 		// Run all 10 minutes
 		$this->setInterval(60 * 10);
-
-		if ($config instanceof IConfig && $timeFactory instanceof ITimeFactory) {
-			$this->config = $config;
-			$this->timeFactory = $timeFactory;
-		} else {
-			$this->fixDIForJobs();
-		}
-	}
-
-	/**
-	 * DI for jobs
-	 */
-	private function fixDIForJobs() {
-		$this->config = \OC::$server->getConfig();
-		$this->timeFactory = new TimeFactory();
+		$this->config = $config;
+		$this->timeFactory = $timeFactory;
 	}
 
 	/**
@@ -69,9 +60,8 @@ class ResetTokenBackgroundJob extends TimedJob {
 	 */
 	protected function run($argument) {
 		// Delete old tokens after 2 days
-		if($this->timeFactory->getTime() - $this->config->getAppValue('core', 'updater.secret.created', $this->timeFactory->getTime()) >= 172800) {
+		if ($this->timeFactory->getTime() - $this->config->getAppValue('core', 'updater.secret.created', $this->timeFactory->getTime()) >= 172800) {
 			$this->config->deleteSystemValue('updater.secret');
 		}
 	}
-
 }

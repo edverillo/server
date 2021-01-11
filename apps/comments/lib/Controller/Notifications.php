@@ -1,22 +1,25 @@
 <?php
-
 /**
+ *
+ *
  * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
  *
  * @license GNU AGPL version 3 or any later version
  *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU AFFERO GENERAL PUBLIC LICENSE
- * License as published by the Free Software Foundation; either
- * version 3 of the License, or any later version.
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
  *
- * This library is distributed in the hope that it will be useful,
+ * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU AFFERO GENERAL PUBLIC LICENSE for more details.
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU Affero General Public
- * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
@@ -28,9 +31,10 @@ use OCP\AppFramework\Http\RedirectResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\Comments\IComment;
 use OCP\Comments\ICommentsManager;
-use OCP\Files\Folder;
+use OCP\Files\IRootFolder;
 use OCP\IRequest;
 use OCP\IURLGenerator;
+use OCP\IUser;
 use OCP\IUserSession;
 use OCP\Notification\IManager;
 
@@ -40,8 +44,8 @@ use OCP\Notification\IManager;
  * @package OCA\Comments\Controller
  */
 class Notifications extends Controller {
-	/** @var Folder  */
-	protected $folder;
+	/** @var IRootFolder  */
+	protected $rootFolder;
 
 	/** @var ICommentsManager  */
 	protected $commentsManager;
@@ -61,7 +65,7 @@ class Notifications extends Controller {
 	 * @param string $appName
 	 * @param IRequest $request
 	 * @param ICommentsManager $commentsManager
-	 * @param Folder $folder
+	 * @param IRootFolder $rootFolder
 	 * @param IURLGenerator $urlGenerator
 	 * @param IManager $notificationManager
 	 * @param IUserSession $userSession
@@ -70,35 +74,50 @@ class Notifications extends Controller {
 		$appName,
 		IRequest $request,
 		ICommentsManager $commentsManager,
-		Folder $folder,
+		IRootFolder $rootFolder,
 		IURLGenerator $urlGenerator,
 		IManager $notificationManager,
 		IUserSession $userSession
 	) {
 		parent::__construct($appName, $request);
 		$this->commentsManager = $commentsManager;
-		$this->folder = $folder;
+		$this->rootFolder = $rootFolder;
 		$this->urlGenerator = $urlGenerator;
 		$this->notificationManager = $notificationManager;
 		$this->userSession = $userSession;
 	}
 
 	/**
-	 * @NoAdminRequired
+	 * @PublicPage
 	 * @NoCSRFRequired
 	 *
 	 * @param string $id		the comment ID
 	 * @return Response
 	 */
 	public function view($id) {
+		$currentUser = $this->userSession->getUser();
+		if (!$currentUser instanceof IUser) {
+			return new RedirectResponse(
+				$this->urlGenerator->linkToRoute('core.login.showLoginForm', [
+					'redirect_url' => $this->urlGenerator->linkToRoute(
+						'comments.Notifications.view',
+						['id' => $id]
+					),
+				])
+			);
+		}
+
 		try {
 			$comment = $this->commentsManager->get($id);
-			if($comment->getObjectType() !== 'files') {
+			if ($comment->getObjectType() !== 'files') {
 				return new NotFoundResponse();
 			}
-			$files = $this->folder->getById($comment->getObjectId());
-			if(count($files) === 0) {
-				$this->markProcessed($comment);
+			$userFolder = $this->rootFolder->getUserFolder($currentUser->getUID());
+			$files = $userFolder->getById((int)$comment->getObjectId());
+
+			$this->markProcessed($comment, $currentUser);
+
+			if (empty($files)) {
 				return new NotFoundResponse();
 			}
 
@@ -106,8 +125,6 @@ class Notifications extends Controller {
 				'files.viewcontroller.showFile',
 				[ 'fileid' => $comment->getObjectId() ]
 			);
-
-			$this->markProcessed($comment);
 
 			return new RedirectResponse($url);
 		} catch (\Exception $e) {
@@ -118,17 +135,14 @@ class Notifications extends Controller {
 	/**
 	 * Marks the notification about a comment as processed
 	 * @param IComment $comment
+	 * @param IUser $currentUser
 	 */
-	protected function markProcessed(IComment $comment) {
-		$user = $this->userSession->getUser();
-		if(is_null($user)) {
-			return;
-		}
+	protected function markProcessed(IComment $comment, IUser $currentUser) {
 		$notification = $this->notificationManager->createNotification();
 		$notification->setApp('comments')
 			->setObject('comment', $comment->getId())
 			->setSubject('mention')
-			->setUser($user->getUID());
+			->setUser($currentUser->getUID());
 		$this->notificationManager->markProcessed($notification);
 	}
 }

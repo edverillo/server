@@ -10,7 +10,7 @@
 (function() {
 
 	/**
-	 * @class OCA.External.FileList
+	 * @class OCA.Files_External.FileList
 	 * @augments OCA.Files.FileList
 	 *
 	 * @classdesc External storage file list.
@@ -27,8 +27,10 @@
 	};
 
 	FileList.prototype = _.extend({}, OCA.Files.FileList.prototype,
-		/** @lends OCA.External.FileList.prototype */ {
-		appName: 'External storage',
+		/** @lends OCA.Files_External.FileList.prototype */ {
+		appName: 'External storages',
+
+		_allowSelection: false,
 
 		/**
 		 * @private
@@ -41,7 +43,7 @@
 		},
 
 		/**
-		 * @param {OCA.External.MountPointInfo} fileData
+		 * @param {OCA.Files_External.MountPointInfo} fileData
 		 */
 		_createRow: function(fileData) {
 			// TODO: hook earlier and render the whole row here
@@ -56,7 +58,6 @@
 			$scopeColumn.find('span').text(scopeText);
 			$backendColumn.text(fileData.backend);
 			$tr.find('td.filename').after($scopeColumn).after($backendColumn);
-			$tr.find('td.filename input:checkbox').remove();
 			return $tr;
 		},
 
@@ -137,12 +138,12 @@
 	/**
 	 * Mount point info attributes.
 	 *
-	 * @typedef {Object} OCA.External.MountPointInfo
+	 * @typedef {Object} OCA.Files_External.MountPointInfo
 	 *
 	 * @property {String} name mount point name
 	 * @property {String} scope mount point scope "personal" or "system"
 	 * @property {String} backend external storage backend name
 	 */
 
-	OCA.External.FileList = FileList;
+	OCA.Files_External.FileList = FileList;
 })();

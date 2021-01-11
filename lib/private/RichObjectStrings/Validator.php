@@ -2,6 +2,10 @@
 /**
  * @copyright Copyright (c) 2016 Joas Schilling <coding@schilljs.com>
  *
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ *
  * @license GNU AGPL version 3 or any later version
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,12 +19,11 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 namespace OC\RichObjectStrings;
-
 
 use OCP\RichObjectStrings\Definitions;
 use OCP\RichObjectStrings\InvalidObjectExeption;
@@ -67,10 +70,16 @@ class Validator implements IValidator {
 			foreach ($matches[1] as $parameter) {
 				if (!isset($parameters[$parameter])) {
 					throw new InvalidObjectExeption('Parameter is undefined');
-				} else {
-					$this->validateParameter($parameters[$parameter]);
 				}
 			}
+		}
+
+		foreach ($parameters as $parameter) {
+			if (!\is_array($parameter)) {
+				throw new InvalidObjectExeption('Parameter is malformed');
+			}
+
+			$this->validateParameter($parameter);
 		}
 	}
 

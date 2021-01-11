@@ -1,9 +1,18 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  * @copyright Copyright (c) 2016, Christoph Wurst <christoph@winzerhof-wurst.at>
  *
- * @author Christoph Wurst <christoph@owncloud.com>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Flávio Gomes da Silva Lisboa <flavio.lisboa@serpro.gov.br>
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Martin <github@diemattels.at>
+ * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -17,21 +26,21 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\Authentication\Token;
 
 use Exception;
+use OC\Authentication\Exceptions\ExpiredTokenException;
 use OC\Authentication\Exceptions\InvalidTokenException;
 use OC\Authentication\Exceptions\PasswordlessTokenException;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IConfig;
-use OCP\ILogger;
-use OCP\IUser;
 use OCP\Security\ICrypto;
+use Psr\Log\LoggerInterface;
 
 class DefaultTokenProvider implements IProvider {
 
@@ -44,23 +53,16 @@ class DefaultTokenProvider implements IProvider {
 	/** @var IConfig */
 	private $config;
 
-	/** @var ILogger $logger */
+	/** @var LoggerInterface */
 	private $logger;
 
-	/** @var ITimeFactory $time */
+	/** @var ITimeFactory */
 	private $time;
 
-	/**
-	 * @param DefaultTokenMapper $mapper
-	 * @param ICrypto $crypto
-	 * @param IConfig $config
-	 * @param ILogger $logger
-	 * @param ITimeFactory $time
-	 */
 	public function __construct(DefaultTokenMapper $mapper,
 								ICrypto $crypto,
 								IConfig $config,
-								ILogger $logger,
+								LoggerInterface $logger,
 								ITimeFactory $time) {
 		$this->mapper = $mapper;
 		$this->crypto = $crypto;
@@ -81,7 +83,13 @@ class DefaultTokenProvider implements IProvider {
 	 * @param int $remember whether the session token should be used for remember-me
 	 * @return IToken
 	 */
-	public function generateToken($token, $uid, $loginName, $password, $name, $type = IToken::TEMPORARY_TOKEN, $remember = IToken::DO_NOT_REMEMBER) {
+	public function generateToken(string $token,
+								  string $uid,
+								  string $loginName,
+								  $password,
+								  string $name,
+								  int $type = IToken::TEMPORARY_TOKEN,
+								  int $remember = IToken::DO_NOT_REMEMBER): IToken {
 		$dbToken = new DefaultToken();
 		$dbToken->setUid($uid);
 		$dbToken->setLoginName($loginName);
@@ -93,6 +101,8 @@ class DefaultTokenProvider implements IProvider {
 		$dbToken->setType($type);
 		$dbToken->setRemember($remember);
 		$dbToken->setLastActivity($this->time->getTime());
+		$dbToken->setLastCheck($this->time->getTime());
+		$dbToken->setVersion(DefaultToken::VERSION);
 
 		$this->mapper->insert($dbToken);
 
@@ -107,7 +117,7 @@ class DefaultTokenProvider implements IProvider {
 	 */
 	public function updateToken(IToken $token) {
 		if (!($token instanceof DefaultToken)) {
-			throw new InvalidTokenException();
+			throw new InvalidTokenException("Invalid token type");
 		}
 		$this->mapper->update($token);
 	}
@@ -120,7 +130,7 @@ class DefaultTokenProvider implements IProvider {
 	 */
 	public function updateTokenActivity(IToken $token) {
 		if (!($token instanceof DefaultToken)) {
-			throw new InvalidTokenException();
+			throw new InvalidTokenException("Invalid token type");
 		}
 		/** @var DefaultToken $token */
 		$now = $this->time->getTime();
@@ -131,17 +141,8 @@ class DefaultTokenProvider implements IProvider {
 		}
 	}
 
-	/**
-	 * Get all token of a user
-	 *
-	 * The provider may limit the number of result rows in case of an abuse
-	 * where a high number of (session) tokens is generated
-	 *
-	 * @param IUser $user
-	 * @return IToken[]
-	 */
-	public function getTokenByUser(IUser $user) {
-		return $this->mapper->getTokenByUser($user);
+	public function getTokenByUser(string $uid): array {
+		return $this->mapper->getTokenByUser($uid);
 	}
 
 	/**
@@ -149,37 +150,52 @@ class DefaultTokenProvider implements IProvider {
 	 *
 	 * @param string $tokenId
 	 * @throws InvalidTokenException
-	 * @return DefaultToken
+	 * @throws ExpiredTokenException
+	 * @return IToken
 	 */
-	public function getToken($tokenId) {
+	public function getToken(string $tokenId): IToken {
 		try {
-			return $this->mapper->getToken($this->hashToken($tokenId));
+			$token = $this->mapper->getToken($this->hashToken($tokenId));
 		} catch (DoesNotExistException $ex) {
-			throw new InvalidTokenException();
+			throw new InvalidTokenException("Token does not exist", 0, $ex);
 		}
+
+		if ((int)$token->getExpires() !== 0 && $token->getExpires() < $this->time->getTime()) {
+			throw new ExpiredTokenException($token);
+		}
+
+		return $token;
 	}
 
 	/**
 	 * Get a token by token id
 	 *
-	 * @param string $tokenId
+	 * @param int $tokenId
 	 * @throws InvalidTokenException
-	 * @return DefaultToken
+	 * @throws ExpiredTokenException
+	 * @return IToken
 	 */
-	public function getTokenById($tokenId) {
+	public function getTokenById(int $tokenId): IToken {
 		try {
-			return $this->mapper->getTokenById($tokenId);
+			$token = $this->mapper->getTokenById($tokenId);
 		} catch (DoesNotExistException $ex) {
-			throw new InvalidTokenException();
+			throw new InvalidTokenException("Token with ID $tokenId does not exist", 0, $ex);
 		}
+
+		if ((int)$token->getExpires() !== 0 && $token->getExpires() < $this->time->getTime()) {
+			throw new ExpiredTokenException($token);
+		}
+
+		return $token;
 	}
 
 	/**
 	 * @param string $oldSessionId
 	 * @param string $sessionId
 	 * @throws InvalidTokenException
+	 * @return IToken
 	 */
-	public function renewSessionToken($oldSessionId, $sessionId) {
+	public function renewSessionToken(string $oldSessionId, string $sessionId): IToken {
 		$token = $this->getToken($oldSessionId);
 
 		$newToken = new DefaultToken();
@@ -195,6 +211,9 @@ class DefaultTokenProvider implements IProvider {
 		$newToken->setRemember($token->getRemember());
 		$newToken->setLastActivity($this->time->getTime());
 		$this->mapper->insert($newToken);
+		$this->mapper->delete($token);
+
+		return $newToken;
 	}
 
 	/**
@@ -204,7 +223,7 @@ class DefaultTokenProvider implements IProvider {
 	 * @throws PasswordlessTokenException
 	 * @return string
 	 */
-	public function getPassword(IToken $savedToken, $tokenId) {
+	public function getPassword(IToken $savedToken, string $tokenId): string {
 		$password = $savedToken->getPassword();
 		if (is_null($password)) {
 			throw new PasswordlessTokenException();
@@ -220,9 +239,9 @@ class DefaultTokenProvider implements IProvider {
 	 * @param string $password
 	 * @throws InvalidTokenException
 	 */
-	public function setPassword(IToken $token, $tokenId, $password) {
+	public function setPassword(IToken $token, string $tokenId, string $password) {
 		if (!($token instanceof DefaultToken)) {
-			throw new InvalidTokenException();
+			throw new InvalidTokenException("Invalid token type");
 		}
 		/** @var DefaultToken $token */
 		$token->setPassword($this->encryptPassword($password, $tokenId));
@@ -234,18 +253,12 @@ class DefaultTokenProvider implements IProvider {
 	 *
 	 * @param string $token
 	 */
-	public function invalidateToken($token) {
+	public function invalidateToken(string $token) {
 		$this->mapper->invalidate($this->hashToken($token));
 	}
 
-	/**
-	 * Invalidate (delete) the given token
-	 *
-	 * @param IUser $user
-	 * @param int $id
-	 */
-	public function invalidateTokenById(IUser $user, $id) {
-		$this->mapper->deleteById($user, $id);
+	public function invalidateTokenById(string $uid, int $id) {
+		$this->mapper->deleteById($uid, $id);
 	}
 
 	/**
@@ -261,10 +274,31 @@ class DefaultTokenProvider implements IProvider {
 	}
 
 	/**
+	 * Rotate the token. Usefull for for example oauth tokens
+	 *
+	 * @param IToken $token
+	 * @param string $oldTokenId
+	 * @param string $newTokenId
+	 * @return IToken
+	 */
+	public function rotate(IToken $token, string $oldTokenId, string $newTokenId): IToken {
+		try {
+			$password = $this->getPassword($token, $oldTokenId);
+			$token->setPassword($this->encryptPassword($password, $newTokenId));
+		} catch (PasswordlessTokenException $e) {
+		}
+
+		$token->setToken($this->hashToken($newTokenId));
+		$this->updateToken($token);
+
+		return $token;
+	}
+
+	/**
 	 * @param string $token
 	 * @return string
 	 */
-	private function hashToken($token) {
+	private function hashToken(string $token): string {
 		$secret = $this->config->getSystemValue('secret');
 		return hash('sha512', $token . $secret);
 	}
@@ -278,7 +312,7 @@ class DefaultTokenProvider implements IProvider {
 	 * @param string $token
 	 * @return string encrypted password
 	 */
-	private function encryptPassword($password, $token) {
+	private function encryptPassword(string $password, string $token): string {
 		$secret = $this->config->getSystemValue('secret');
 		return $this->crypto->encrypt($password, $token . $secret);
 	}
@@ -293,15 +327,27 @@ class DefaultTokenProvider implements IProvider {
 	 * @throws InvalidTokenException
 	 * @return string the decrypted key
 	 */
-	private function decryptPassword($password, $token) {
+	private function decryptPassword(string $password, string $token): string {
 		$secret = $this->config->getSystemValue('secret');
 		try {
 			return $this->crypto->decrypt($password, $token . $secret);
 		} catch (Exception $ex) {
 			// Delete the invalid token
 			$this->invalidateToken($token);
-			throw new InvalidTokenException();
+			throw new InvalidTokenException("Can not decrypt token password: " . $ex->getMessage(), 0, $ex);
 		}
 	}
 
+	public function markPasswordInvalid(IToken $token, string $tokenId) {
+		if (!($token instanceof DefaultToken)) {
+			throw new InvalidTokenException("Invalid token type");
+		}
+
+		//No need to mark as invalid. We just invalide default tokens
+		$this->invalidateToken($tokenId);
+	}
+
+	public function updatePasswords(string $uid, string $password) {
+		// Nothing to do here
+	}
 }

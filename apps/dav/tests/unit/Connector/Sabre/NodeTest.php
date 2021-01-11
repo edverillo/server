@@ -3,7 +3,9 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Björn Schießle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
@@ -20,11 +22,18 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\DAV\Tests\unit\Connector\Sabre;
+
+use OC\Files\FileInfo;
+use OC\Files\View;
+use OCP\Files\Mount\IMountPoint;
+use OCP\Files\Storage;
+use OCP\Share\IManager;
+use OCP\Share\IShare;
 
 /**
  * Class NodeTest
@@ -34,40 +43,42 @@ namespace OCA\DAV\Tests\unit\Connector\Sabre;
  */
 class NodeTest extends \Test\TestCase {
 	public function davPermissionsProvider() {
-		return array(
-			array(\OCP\Constants::PERMISSION_ALL, 'file', false, false, 'RDNVW'),
-			array(\OCP\Constants::PERMISSION_ALL, 'dir', false, false, 'RDNVCK'),
-			array(\OCP\Constants::PERMISSION_ALL, 'file', true, false, 'SRDNVW'),
-			array(\OCP\Constants::PERMISSION_ALL, 'file', true, true, 'SRMDNVW'),
-			array(\OCP\Constants::PERMISSION_ALL - \OCP\Constants::PERMISSION_SHARE, 'file', true, false, 'SDNVW'),
-			array(\OCP\Constants::PERMISSION_ALL - \OCP\Constants::PERMISSION_UPDATE, 'file', false, false, 'RD'),
-			array(\OCP\Constants::PERMISSION_ALL - \OCP\Constants::PERMISSION_DELETE, 'file', false, false, 'RNVW'),
-			array(\OCP\Constants::PERMISSION_ALL - \OCP\Constants::PERMISSION_CREATE, 'file', false, false, 'RDNVW'),
-			array(\OCP\Constants::PERMISSION_ALL - \OCP\Constants::PERMISSION_CREATE, 'dir', false, false, 'RDNV'),
-		);
+		return [
+			[\OCP\Constants::PERMISSION_ALL, 'file', false, false, 'RGDNVW'],
+			[\OCP\Constants::PERMISSION_ALL, 'dir', false, false, 'RGDNVCK'],
+			[\OCP\Constants::PERMISSION_ALL, 'file', true, false, 'SRGDNVW'],
+			[\OCP\Constants::PERMISSION_ALL, 'file', true, true, 'SRMGDNVW'],
+			[\OCP\Constants::PERMISSION_ALL - \OCP\Constants::PERMISSION_SHARE, 'file', true, false, 'SGDNVW'],
+			[\OCP\Constants::PERMISSION_ALL - \OCP\Constants::PERMISSION_UPDATE, 'file', false, false, 'RGD'],
+			[\OCP\Constants::PERMISSION_ALL - \OCP\Constants::PERMISSION_DELETE, 'file', false, false, 'RGNVW'],
+			[\OCP\Constants::PERMISSION_ALL - \OCP\Constants::PERMISSION_CREATE, 'file', false, false, 'RGDNVW'],
+			[\OCP\Constants::PERMISSION_ALL - \OCP\Constants::PERMISSION_READ, 'file', false, false, 'RDNVW'],
+			[\OCP\Constants::PERMISSION_ALL - \OCP\Constants::PERMISSION_CREATE, 'dir', false, false, 'RGDNV'],
+			[\OCP\Constants::PERMISSION_ALL - \OCP\Constants::PERMISSION_READ, 'dir', false, false, 'RDNVCK'],
+		];
 	}
 
 	/**
 	 * @dataProvider davPermissionsProvider
 	 */
 	public function testDavPermissions($permissions, $type, $shared, $mounted, $expected) {
-		$info = $this->getMockBuilder('\OC\Files\FileInfo')
+		$info = $this->getMockBuilder(FileInfo::class)
 			->disableOriginalConstructor()
-			->setMethods(array('getPermissions', 'isShared', 'isMounted', 'getType'))
+			->setMethods(['getPermissions', 'isShared', 'isMounted', 'getType'])
 			->getMock();
 		$info->expects($this->any())
 			->method('getPermissions')
-			->will($this->returnValue($permissions));
+			->willReturn($permissions);
 		$info->expects($this->any())
 			->method('isShared')
-			->will($this->returnValue($shared));
+			->willReturn($shared);
 		$info->expects($this->any())
 			->method('isMounted')
-			->will($this->returnValue($mounted));
+			->willReturn($mounted);
 		$info->expects($this->any())
 			->method('getType')
-			->will($this->returnValue($type));
-		$view = $this->getMockBuilder('\OC\Files\View')
+			->willReturn($type);
+		$view = $this->getMockBuilder(View::class)
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -119,17 +130,17 @@ class NodeTest extends \Test\TestCase {
 	 * @dataProvider sharePermissionsProvider
 	 */
 	public function testSharePermissions($type, $user, $permissions, $expected) {
-		$storage = $this->getMockBuilder('\OCP\Files\Storage')
+		$storage = $this->getMockBuilder(Storage::class)
 			->disableOriginalConstructor()
 			->getMock();
 		$storage->method('getPermissions')->willReturn($permissions);
 
-		$mountpoint = $this->getMockBuilder('\OCP\Files\Mount\IMountPoint')
+		$mountpoint = $this->getMockBuilder(IMountPoint::class)
 			->disableOriginalConstructor()
 			->getMock();
 		$mountpoint->method('getMountPoint')->willReturn('myPath');
-		$shareManager = $this->getMockBuilder('OCP\Share\IManager')->disableOriginalConstructor()->getMock();
-		$share = $this->getMockBuilder('OCP\Share\IShare')->disableOriginalConstructor()->getMock();
+		$shareManager = $this->getMockBuilder(IManager::class)->disableOriginalConstructor()->getMock();
+		$share = $this->getMockBuilder(IShare::class)->disableOriginalConstructor()->getMock();
 
 		if ($user === null) {
 			$shareManager->expects($this->never())->method('getShareByToken');
@@ -140,16 +151,17 @@ class NodeTest extends \Test\TestCase {
 			$share->expects($this->once())->method('getPermissions')->willReturn($permissions);
 		}
 
-		$info = $this->getMockBuilder('\OC\Files\FileInfo')
+		$info = $this->getMockBuilder(FileInfo::class)
 			->disableOriginalConstructor()
-			->setMethods(['getStorage', 'getType', 'getMountPoint'])
+			->setMethods(['getStorage', 'getType', 'getMountPoint', 'getPermissions'])
 			->getMock();
 
 		$info->method('getStorage')->willReturn($storage);
 		$info->method('getType')->willReturn($type);
 		$info->method('getMountPoint')->willReturn($mountpoint);
+		$info->method('getPermissions')->willReturn($permissions);
 
-		$view = $this->getMockBuilder('\OC\Files\View')
+		$view = $this->getMockBuilder(View::class)
 			->disableOriginalConstructor()
 			->getMock();
 

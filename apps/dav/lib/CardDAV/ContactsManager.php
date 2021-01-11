@@ -2,9 +2,11 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
- * @author Georg Ehrke <georg@owncloud.com>
+ * @author Georg Ehrke <oc.list@georgehrke.com>
+ * @author Joas Schilling <coding@schilljs.com>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
+ * @author Tobia De Koninck <tobia@ledfan.be>
  *
  * @license AGPL-3.0
  *
@@ -18,7 +20,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -54,6 +56,14 @@ class ContactsManager {
 	public function setupContactsProvider(IManager $cm, $userId, IURLGenerator $urlGenerator) {
 		$addressBooks = $this->backend->getAddressBooksForUser("principals/users/$userId");
 		$this->register($cm, $addressBooks, $urlGenerator);
+		$this->setupSystemContactsProvider($cm, $urlGenerator);
+	}
+
+	/**
+	 * @param IManager $cm
+	 * @param IURLGenerator $urlGenerator
+	 */
+	public function setupSystemContactsProvider(IManager $cm, IURLGenerator $urlGenerator) {
 		$addressBooks = $this->backend->getAddressBooksForUser("principals/system/system");
 		$this->register($cm, $addressBooks, $urlGenerator);
 	}
@@ -76,5 +86,4 @@ class ContactsManager {
 			);
 		}
 	}
-
 }

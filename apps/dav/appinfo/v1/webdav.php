@@ -2,10 +2,16 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
- * @author Christoph Wurst <christoph@owncloud.com>
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Julius Härtl <jus@bitgrid.net>
+ * @author Ko- <k.stoffelen@cs.ru.nl>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Robin Appelman <robin@icewind.nl>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -19,7 +25,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -40,7 +46,9 @@ $serverFactory = new \OCA\DAV\Connector\Sabre\ServerFactory(
 	\OC::$server->getMountManager(),
 	\OC::$server->getTagManager(),
 	\OC::$server->getRequest(),
-	\OC::$server->getPreviewManager()
+	\OC::$server->getPreviewManager(),
+	\OC::$server->getEventDispatcher(),
+	\OC::$server->getL10N('dav')
 );
 
 // Backends
@@ -52,12 +60,25 @@ $authBackend = new \OCA\DAV\Connector\Sabre\Auth(
 	\OC::$server->getBruteForceThrottler(),
 	'principals/'
 );
+$authPlugin = new \Sabre\DAV\Auth\Plugin($authBackend);
+$bearerAuthPlugin = new \OCA\DAV\Connector\Sabre\BearerAuth(
+	\OC::$server->getUserSession(),
+	\OC::$server->getSession(),
+	\OC::$server->getRequest()
+);
+$authPlugin->addBackend($bearerAuthPlugin);
+
 $requestUri = \OC::$server->getRequest()->getRequestUri();
 
-$server = $serverFactory->createServer($baseuri, $requestUri, $authBackend, function() {
+$server = $serverFactory->createServer($baseuri, $requestUri, $authPlugin, function () {
 	// use the view for the logged in user
 	return \OC\Files\Filesystem::getView();
 });
+
+$dispatcher = \OC::$server->getEventDispatcher();
+// allow setup of additional plugins
+$event = new \OCP\SabrePluginEvent($server);
+$dispatcher->dispatch('OCA\DAV\Connector\Sabre::addPlugin', $event);
 
 // And off we go!
 $server->exec();

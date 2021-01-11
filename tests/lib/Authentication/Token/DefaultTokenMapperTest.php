@@ -46,7 +46,7 @@ class DefaultTokenMapperTest extends TestCase {
 	private $dbConnection;
 	private $time;
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->dbConnection = OC::$server->getDatabaseConnection();
@@ -77,7 +77,7 @@ class DefaultTokenMapperTest extends TestCase {
 			'token' => $qb->createNamedParameter('1504445f1524fc801035448a95681a9378ba2e83930c814546c56e5d6ebde221198792fd900c88ed5ead0555780dad1ebce3370d7e154941cd5de87eb419899b'),
 			'type' => $qb->createNamedParameter(IToken::TEMPORARY_TOKEN),
 			'last_activity' => $qb->createNamedParameter($this->time - 60 * 60 * 24 * 3, IQueryBuilder::PARAM_INT), // Three days ago
-			'last_check' => $this->time -  10, // 10secs ago
+			'last_check' => $this->time - 10, // 10secs ago
 		])->execute();
 		$qb->insert('authtoken')->values([
 			'uid' => $qb->createNamedParameter('user1'),
@@ -93,7 +93,7 @@ class DefaultTokenMapperTest extends TestCase {
 
 	private function getNumberOfTokens() {
 		$qb = $this->dbConnection->getQueryBuilder();
-		$result = $qb->select($qb->createFunction('count(*) as `count`'))
+		$result = $qb->select($qb->func()->count('*', 'count'))
 			->from('authtoken')
 			->execute()
 			->fetch();
@@ -135,6 +135,7 @@ class DefaultTokenMapperTest extends TestCase {
 		$token->setRemember(IToken::DO_NOT_REMEMBER);
 		$token->setLastActivity($this->time - 60 * 60 * 24 * 3);
 		$token->setLastCheck($this->time - 10);
+		$token->setVersion(DefaultToken::VERSION);
 
 		$dbToken = $this->mapper->getToken($token->getToken());
 
@@ -144,10 +145,10 @@ class DefaultTokenMapperTest extends TestCase {
 		$this->assertEquals($token, $dbToken);
 	}
 
-	/**
-	 * @expectedException \OCP\AppFramework\Db\DoesNotExistException
-	 */
+
 	public function testGetInvalidToken() {
+		$this->expectException(\OCP\AppFramework\Db\DoesNotExistException::class);
+
 		$token = 'thisisaninvalidtokenthatisnotinthedatabase';
 
 		$this->mapper->getToken($token);
@@ -164,6 +165,7 @@ class DefaultTokenMapperTest extends TestCase {
 		$token->setRemember(IToken::DO_NOT_REMEMBER);
 		$token->setLastActivity($this->time - 60 * 60 * 24 * 3);
 		$token->setLastCheck($this->time - 10);
+		$token->setVersion(DefaultToken::VERSION);
 
 		$dbToken = $this->mapper->getToken($token->getToken());
 		$token->setId($dbToken->getId()); // We don't know the ID
@@ -173,41 +175,32 @@ class DefaultTokenMapperTest extends TestCase {
 		$this->assertEquals($token, $dbToken);
 	}
 
-	/**
-	 * @expectedException \OCP\AppFramework\Db\DoesNotExistException
-	 */
+
 	public function testGetTokenByIdNotFound() {
+		$this->expectException(\OCP\AppFramework\Db\DoesNotExistException::class);
+
 		$this->mapper->getTokenById(-1);
 	}
 
-	/**
-	 * @expectedException \OCP\AppFramework\Db\DoesNotExistException
-	 */
+
 	public function testGetInvalidTokenById() {
+		$this->expectException(\OCP\AppFramework\Db\DoesNotExistException::class);
+
 		$id = 42;
 
 		$this->mapper->getToken($id);
 	}
 
 	public function testGetTokenByUser() {
-		$user = $this->createMock(IUser::class);
-		$user->expects($this->once())
-			->method('getUID')
-			->will($this->returnValue('user1'));
-
-		$this->assertCount(2, $this->mapper->getTokenByUser($user));
+		$this->assertCount(2, $this->mapper->getTokenByUser('user1'));
 	}
 
 	public function testGetTokenByUserNotFound() {
-		$user = $this->createMock(IUser::class);
-		$user->expects($this->once())
-			->method('getUID')
-			->will($this->returnValue('user1000'));
-
-		$this->assertCount(0, $this->mapper->getTokenByUser($user));
+		$this->assertCount(0, $this->mapper->getTokenByUser('user1000'));
 	}
 
 	public function testDeleteById() {
+		/** @var IUser|\PHPUnit\Framework\MockObject\MockObject $user */
 		$user = $this->createMock(IUser::class);
 		$qb = $this->dbConnection->getQueryBuilder();
 		$qb->select('id')
@@ -215,23 +208,26 @@ class DefaultTokenMapperTest extends TestCase {
 			->where($qb->expr()->eq('token', $qb->createNamedParameter('9c5a2e661482b65597408a6bb6c4a3d1af36337381872ac56e445a06cdb7fea2b1039db707545c11027a4966919918b19d875a8b774840b18c6cbb7ae56fe206')));
 		$result = $qb->execute();
 		$id = $result->fetch()['id'];
-		$user->expects($this->once())
-			->method('getUID')
-			->will($this->returnValue('user1'));
 
-		$this->mapper->deleteById($user, $id);
+		$this->mapper->deleteById('user1', $id);
 		$this->assertEquals(2, $this->getNumberOfTokens());
 	}
 
 	public function testDeleteByIdWrongUser() {
-		$user = $this->createMock(IUser::class);
 		$id = 33;
-		$user->expects($this->once())
-			->method('getUID')
-			->will($this->returnValue('user10000'));
 
-		$this->mapper->deleteById($user, $id);
+		$this->mapper->deleteById('user1000', $id);
 		$this->assertEquals(3, $this->getNumberOfTokens());
 	}
 
+	public function testDeleteByName() {
+		$qb = $this->dbConnection->getQueryBuilder();
+		$qb->select('name')
+			->from('authtoken')
+			->where($qb->expr()->eq('token', $qb->createNamedParameter('9c5a2e661482b65597408a6bb6c4a3d1af36337381872ac56e445a06cdb7fea2b1039db707545c11027a4966919918b19d875a8b774840b18c6cbb7ae56fe206')));
+		$result = $qb->execute();
+		$name = $result->fetch()['name'];
+		$this->mapper->deleteByName($name);
+		$this->assertEquals(2, $this->getNumberOfTokens());
+	}
 }

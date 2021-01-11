@@ -2,6 +2,8 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Ardinis <Ardinis@users.noreply.github.com>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Robin Appelman <robin@icewind.nl>
  *
@@ -17,7 +19,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -37,7 +39,7 @@ class Config extends Base {
 	 */
 	protected $globalService;
 
-	function __construct(GlobalStoragesService $globalService) {
+	public function __construct(GlobalStoragesService $globalService) {
 		parent::__construct();
 		$this->globalService = $globalService;
 	}
@@ -62,7 +64,7 @@ class Config extends Base {
 		parent::configure();
 	}
 
-	protected function execute(InputInterface $input, OutputInterface $output) {
+	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$mountId = $input->getArgument('mount_id');
 		$key = $input->getArgument('key');
 		try {
@@ -73,11 +75,12 @@ class Config extends Base {
 		}
 
 		$value = $input->getArgument('value');
-		if ($value) {
+		if ($value !== null) {
 			$this->setOption($mount, $key, $value, $output);
 		} else {
 			$this->getOption($mount, $key, $output);
 		}
+		return 0;
 	}
 
 	/**
@@ -91,7 +94,7 @@ class Config extends Base {
 		} else {
 			$value = $mount->getBackendOption($key);
 		}
-		if (!is_string($value)) { // show bools and objects correctly
+		if (!is_string($value) && json_decode(json_encode($value)) === $value) { // show bools and objects correctly
 			$value = json_encode($value);
 		}
 		$output->writeln($value);
@@ -105,7 +108,7 @@ class Config extends Base {
 	 */
 	protected function setOption(StorageConfig $mount, $key, $value, OutputInterface $output) {
 		$decoded = json_decode($value, true);
-		if (!is_null($decoded)) {
+		if (!is_null($decoded) && json_encode($decoded) === $value) {
 			$value = $decoded;
 		}
 		if ($key === 'mountpoint' || $key === 'mount_point') {

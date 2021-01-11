@@ -9,6 +9,7 @@
  * later.
  * See the COPYING-README file.
  */
+
 namespace Test\Files\ObjectStore;
 
 class NoopScannerTest extends \Test\TestCase {
@@ -18,14 +19,14 @@ class NoopScannerTest extends \Test\TestCase {
 	/** @var \OC\Files\ObjectStore\NoopScanner $scanner */
 	private $scanner;
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
-		$this->storage = new \OC\Files\Storage\Temporary(array());
+		$this->storage = new \OC\Files\Storage\Temporary([]);
 		$this->scanner = new \OC\Files\ObjectStore\NoopScanner($this->storage);
 	}
 
-	function testFile() {
+	public function testFile() {
 		$data = "dummy file data\n";
 		$this->storage->file_put_contents('foo.txt', $data);
 
@@ -38,14 +39,14 @@ class NoopScannerTest extends \Test\TestCase {
 
 	private function fillTestFolders() {
 		$textData = "dummy file data\n";
-		$imgData = file_get_contents(\OC::$SERVERROOT . '/core/img/logo.png');
+		$imgData = file_get_contents(\OC::$SERVERROOT . '/core/img/logo/logo.png');
 		$this->storage->mkdir('folder');
 		$this->storage->file_put_contents('foo.txt', $textData);
 		$this->storage->file_put_contents('foo.png', $imgData);
 		$this->storage->file_put_contents('folder/bar.txt', $textData);
 	}
 
-	function testFolder() {
+	public function testFolder() {
 		$this->fillTestFolders();
 
 		$this->assertEquals(
@@ -55,7 +56,7 @@ class NoopScannerTest extends \Test\TestCase {
 		);
 	}
 
-	function testBackgroundScan() {
+	public function testBackgroundScan() {
 		$this->fillTestFolders();
 		$this->storage->mkdir('folder2');
 		$this->storage->file_put_contents('folder2/bar.txt', 'foobar');

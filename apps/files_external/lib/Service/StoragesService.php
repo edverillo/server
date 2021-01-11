@@ -2,13 +2,17 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Jesús Macias <jmacias@solidgear.es>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Stefan Weil <sw@weilnetz.de>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -22,19 +26,23 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\Files_External\Service;
 
-use \OC\Files\Filesystem;
+use OC\Files\Filesystem;
+use OCA\Files_External\Lib\Auth\AuthMechanism;
+use OCA\Files_External\Lib\Auth\InvalidAuth;
+use OCA\Files_External\Lib\Backend\Backend;
+use OCA\Files_External\Lib\Backend\InvalidBackend;
+use OCA\Files_External\Lib\DefinitionParameter;
 use OCA\Files_External\Lib\StorageConfig;
 use OCA\Files_External\NotFoundException;
-use \OCA\Files_External\Lib\Backend\Backend;
-use \OCA\Files_External\Lib\Auth\AuthMechanism;
 use OCP\Files\Config\IUserMountCache;
-use \OCP\Files\StorageNotAvailableException;
+use OCP\Files\StorageNotAvailableException;
+use OCP\ILogger;
 
 /**
  * Service class to manage external storages
@@ -100,18 +108,18 @@ abstract class StoragesService {
 			return $config;
 		} catch (\UnexpectedValueException $e) {
 			// don't die if a storage backend doesn't exist
-			\OCP\Util::writeLog(
-				'files_external',
-				'Could not load storage: "' . $e->getMessage() . '"',
-				\OCP\Util::ERROR
-			);
+			\OC::$server->getLogger()->logException($e, [
+				'message' => 'Could not load storage.',
+				'level' => ILogger::ERROR,
+				'app' => 'files_external',
+			]);
 			return null;
 		} catch (\InvalidArgumentException $e) {
-			\OCP\Util::writeLog(
-				'files_external',
-				'Could not load storage: "' . $e->getMessage() . '"',
-				\OCP\Util::ERROR
-			);
+			\OC::$server->getLogger()->logException($e, [
+				'message' => 'Could not load storage.',
+				'level' => ILogger::ERROR,
+				'app' => 'files_external',
+			]);
 			return null;
 		}
 	}
@@ -147,14 +155,14 @@ abstract class StoragesService {
 		$mount = $this->dbConfig->getMountById($id);
 
 		if (!is_array($mount)) {
-			throw new NotFoundException('Storage with id "' . $id . '" not found');
+			throw new NotFoundException('Storage with ID "' . $id . '" not found');
 		}
 
 		$config = $this->getStorageConfigFromDBMount($mount);
 		if ($this->isApplicable($config)) {
 			return $config;
 		} else {
-			throw new NotFoundException('Storage with id "' . $id . '" not found');
+			throw new NotFoundException('Storage with ID "' . $id . '" not found');
 		}
 	}
 
@@ -295,11 +303,11 @@ abstract class StoragesService {
 	) {
 		$backend = $this->backendService->getBackend($backendIdentifier);
 		if (!$backend) {
-			throw new \InvalidArgumentException('Unable to get backend for ' . $backendIdentifier);
+			$backend = new InvalidBackend($backendIdentifier);
 		}
 		$authMechanism = $this->backendService->getAuthMechanism($authMechanismIdentifier);
 		if (!$authMechanism) {
-			throw new \InvalidArgumentException('Unable to get authentication mechanism for ' . $authMechanismIdentifier);
+			$authMechanism = new InvalidAuth($authMechanismIdentifier);
 		}
 		$newStorage = new StorageConfig();
 		$newStorage->setMountPoint($mountPoint);
@@ -377,10 +385,14 @@ abstract class StoragesService {
 		$existingMount = $this->dbConfig->getMountById($id);
 
 		if (!is_array($existingMount)) {
-			throw new NotFoundException('Storage with id "' . $id . '" not found while updating storage');
+			throw new NotFoundException('Storage with ID "' . $id . '" not found while updating storage');
 		}
 
 		$oldStorage = $this->getStorageConfigFromDBMount($existingMount);
+
+		if ($oldStorage->getBackend() instanceof InvalidBackend) {
+			throw new NotFoundException('Storage with id "' . $id . '" cannot be edited due to missing backend');
+		}
 
 		$removedUsers = array_diff($oldStorage->getApplicableUsers(), $updatedStorage->getApplicableUsers());
 		$removedGroups = array_diff($oldStorage->getApplicableGroups(), $updatedStorage->getApplicableGroups());
@@ -409,7 +421,7 @@ abstract class StoragesService {
 
 		if ($wasGlobal && !$isGlobal) {
 			$this->dbConfig->removeApplicable($id, DBConfigService::APPLICABLE_TYPE_GLOBAL, null);
-		} else if (!$wasGlobal && $isGlobal) {
+		} elseif (!$wasGlobal && $isGlobal) {
 			$this->dbConfig->addApplicable($id, DBConfigService::APPLICABLE_TYPE_GLOBAL, null);
 		}
 
@@ -417,7 +429,9 @@ abstract class StoragesService {
 		$changedOptions = array_diff_assoc($updatedStorage->getMountOptions(), $oldStorage->getMountOptions());
 
 		foreach ($changedConfig as $key => $value) {
-			$this->dbConfig->setConfig($id, $key, $value);
+			if ($value !== DefinitionParameter::UNMODIFIED_PLACEHOLDER) {
+				$this->dbConfig->setConfig($id, $key, $value);
+			}
 		}
 		foreach ($changedOptions as $key => $value) {
 			$this->dbConfig->setOption($id, $key, $value);
@@ -456,7 +470,7 @@ abstract class StoragesService {
 		$existingMount = $this->dbConfig->getMountById($id);
 
 		if (!is_array($existingMount)) {
-			throw new NotFoundException('Storage with id "' . $id . '" not found');
+			throw new NotFoundException('Storage with ID "' . $id . '" not found');
 		}
 
 		$this->dbConfig->removeMount($id);
@@ -472,11 +486,10 @@ abstract class StoragesService {
 			// can happen either for invalid configs where the storage could not
 			// be instantiated or whenever $user vars where used, in which case
 			// the storage id could not be computed
-			\OCP\Util::writeLog(
-				'files_external',
-				'Exception: "' . $e->getMessage() . '"',
-				\OCP\Util::ERROR
-			);
+			\OC::$server->getLogger()->logException($e, [
+				'level' => ILogger::ERROR,
+				'app' => 'files_external',
+			]);
 		}
 	}
 

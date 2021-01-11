@@ -8,6 +8,8 @@
  *
  */
 
+/* global sinon */
+
 describe('OCA.Sharing external tests', function() {
 	var plugin;
 	var urlQueryStub;
@@ -24,8 +26,8 @@ describe('OCA.Sharing external tests', function() {
 		plugin = OCA.Sharing.ExternalShareDialogPlugin;
 		urlQueryStub = sinon.stub(OC.Util.History, 'parseUrlQuery');
 
-		confirmDialogStub = sinon.stub(OC.dialogs, 'confirm', dummyShowDialog);
-		promptDialogStub = sinon.stub(OC.dialogs, 'prompt', dummyShowDialog);
+		confirmDialogStub = sinon.stub(OC.dialogs, 'confirm').callsFake(dummyShowDialog);
+		promptDialogStub = sinon.stub(OC.dialogs, 'prompt').callsFake(dummyShowDialog);
 
 		plugin.filesApp = {
 			fileList: {
@@ -136,7 +138,7 @@ describe('OCA.Sharing external tests', function() {
 			
 			var req = fakeServer.requests[0];
 			expect(req.method).toEqual('GET');
-			expect(req.url).toEqual(OC.webroot + '/index.php/apps/files_sharing/api/externalShares');
+			expect(req.url).toEqual(OC.getRootPath() + '/index.php/apps/files_sharing/api/externalShares');
 
 			req.respond(
 				200,
@@ -176,7 +178,7 @@ describe('OCA.Sharing external tests', function() {
 			expect(request.method).toEqual('POST');
 			expect(query).toEqual({id: '123'});
 			expect(request.url).toEqual(
-				OC.webroot + '/index.php/apps/files_sharing/api/externalShares'
+				OC.getRootPath() + '/index.php/apps/files_sharing/api/externalShares'
 			);
 
 			expect(plugin.filesApp.fileList.reload.notCalled).toEqual(true);
@@ -200,7 +202,7 @@ describe('OCA.Sharing external tests', function() {
 			var request = fakeServer.requests[1];
 			expect(request.method).toEqual('DELETE');
 			expect(request.url).toEqual(
-				OC.webroot + '/index.php/apps/files_sharing/api/externalShares/123'
+				OC.getRootPath() + '/index.php/apps/files_sharing/api/externalShares/123'
 			);
 
 			expect(plugin.filesApp.fileList.reload.notCalled).toEqual(true);

@@ -4,10 +4,10 @@
  *
  * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author John Molakvoæ (skjnldsv) <skjnldsv@protonmail.com>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
  *
@@ -21,11 +21,12 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCP;
+
 use OCP\Files\File;
 use OCP\Files\NotFoundException;
 
@@ -50,6 +51,14 @@ interface IAvatar {
 	 * @since 8.1.0
 	 */
 	public function exists();
+
+	/**
+	 * Check if the avatar of a user is a custom uploaded one
+	 *
+	 * @return bool
+	 * @since 14.0.0
+	 */
+	public function isCustomAvatar(): bool;
 
 	/**
 	 * sets the users avatar
@@ -77,4 +86,17 @@ interface IAvatar {
 	 * @since 9.0.0
 	 */
 	public function getFile($size);
+
+	/**
+	 * @param string $text
+	 * @return Color Object containting r g b int in the range [0, 255]
+	 * @since 14.0.0
+	 */
+	public function avatarBackgroundColor(string $text);
+
+	/**
+	 * Handle a changed user
+	 * @since 13.0.0
+	 */
+	public function userChanged($feature, $oldValue, $newValue);
 }

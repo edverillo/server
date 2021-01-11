@@ -2,9 +2,11 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -19,7 +21,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -31,11 +33,12 @@
 
 // use OCP namespace for all classes that are considered public.
 // This means that they should be used by apps instead of the internal ownCloud classes
+
 namespace OCP;
 
 use OCP\Files\File;
-use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\Files\NotFoundException;
+use OCP\Files\SimpleFS\ISimpleFile;
 
 /**
  * This class provides functions to render and show thumbnails and previews of files
@@ -46,10 +49,10 @@ interface IPreview {
 	/**
 	 * @since 9.2.0
 	 */
-	const EVENT = self::class . ':' . 'PreviewRequested';
+	public const EVENT = self::class . ':' . 'PreviewRequested';
 
-	const MODE_FILL = 'fill';
-	const MODE_COVER = 'cover';
+	public const MODE_FILL = 'fill';
+	public const MODE_COVER = 'cover';
 
 	/**
 	 * In order to improve lazy loading a closure can be registered which will be
@@ -79,18 +82,6 @@ interface IPreview {
 	public function hasProviders();
 
 	/**
-	 * Return a preview of a file
-	 * @param string $file The path to the file where you want a thumbnail from
-	 * @param int $maxX The maximum X size of the thumbnail. It can be smaller depending on the shape of the image
-	 * @param int $maxY The maximum Y size of the thumbnail. It can be smaller depending on the shape of the image
-	 * @param boolean $scaleUp Scale smaller images up to the thumbnail size or not. Might look ugly
-	 * @return \OCP\IImage
-	 * @since 6.0.0
-	 * @deprecated 11 Use getPreview
-	 */
-	public function createPreview($file, $maxX = 100, $maxY = 75, $scaleUp = false);
-
-	/**
 	 * Returns a preview of a file
 	 *
 	 * The cache is searched first and if nothing usable was found then a preview is
@@ -104,7 +95,8 @@ interface IPreview {
 	 * @param string $mimeType To force a given mimetype for the file (files_versions needs this)
 	 * @return ISimpleFile
 	 * @throws NotFoundException
-	 * @since 11.0.0
+	 * @throws \InvalidArgumentException if the preview would be invalid (in case the original image is invalid)
+	 * @since 11.0.0 - \InvalidArgumentException was added in 12.0.0
 	 */
 	public function getPreview(File $file, $width = -1, $height = -1, $crop = false, $mode = IPreview::MODE_FILL, $mimeType = null);
 
@@ -124,4 +116,17 @@ interface IPreview {
 	 * @since 8.0.0
 	 */
 	public function isAvailable(\OCP\Files\FileInfo $file);
+
+	/**
+	 * Generates previews of a file
+	 *
+	 * @param File $file
+	 * @param array $specifications
+	 * @param string $mimeType
+	 * @return ISimpleFile the last preview that was generated
+	 * @throws NotFoundException
+	 * @throws \InvalidArgumentException if the preview would be invalid (in case the original image is invalid)
+	 * @since 19.0.0
+	 */
+	public function generatePreviews(File $file, array $specifications, $mimeType = null);
 }

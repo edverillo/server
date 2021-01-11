@@ -2,19 +2,22 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
- * @author Andreas Fischer <bantu@owncloud.com>
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
  * @author Bart Visscher <bartv@thisnet.nl>
- * @author Georg Ehrke <georg@owncloud.com>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author duritong <peter.meier+github@immerda.ch>
+ * @author Georg Ehrke <oc.list@georgehrke.com>
+ * @author J0WI <J0WI@users.noreply.github.com>
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Julius Härtl <jus@bitgrid.net>
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Michael Gapczynski <GapczynskiM@gmail.com>
  * @author Morris Jobke <hey@morrisjobke.de>
- * @author Phiber2000 <phiber2000@gmx.de>
  * @author Robin Appelman <robin@icewind.nl>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Roland Tapken <roland@bitarbeiter.net>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  * @author Thomas Pulzer <t.pulzer@kniel.de>
- * @author Vincent Petry <pvince81@owncloud.com>
- * @author Roger Szabo <roger.szabo@web.de>
  *
  * @license AGPL-3.0
  *
@@ -28,11 +31,16 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\Log;
+
+use OC\SystemConfig;
+use OCP\ILogger;
+use OCP\Log\IFileBased;
+use OCP\Log\IWriter;
 
 /**
  * logging utilities
@@ -40,87 +48,43 @@ namespace OC\Log;
  * Log is saved at data/nextcloud.log (on default)
  */
 
-class File {
-	static protected $logFile;
+class File extends LogDetails implements IWriter, IFileBased {
+	/** @var string */
+	protected $logFile;
+	/** @var int */
+	protected $logFileMode;
+	/** @var SystemConfig */
+	private $config;
 
-	/**
-	 * Init class data
-	 */
-	public static function init() {
-		$systemConfig = \OC::$server->getSystemConfig();
-		$defaultLogFile = $systemConfig->getValue("datadirectory", \OC::$SERVERROOT.'/data').'/nextcloud.log';
-		self::$logFile = $systemConfig->getValue("logfile", $defaultLogFile);
-
-		/**
-		 * Fall back to default log file if specified logfile does not exist
-		 * and can not be created.
-		 */
-		if (!file_exists(self::$logFile)) {
-			if(!is_writable(dirname(self::$logFile))) {
-				self::$logFile = $defaultLogFile;
-			} else {
-				if(!touch(self::$logFile)) {
-					self::$logFile = $defaultLogFile;
-				}
+	public function __construct(string $path, string $fallbackPath, SystemConfig $config) {
+		parent::__construct($config);
+		$this->logFile = $path;
+		if (!file_exists($this->logFile)) {
+			if (
+				(
+					!is_writable(dirname($this->logFile))
+					|| !touch($this->logFile)
+				)
+				&& $fallbackPath !== ''
+			) {
+				$this->logFile = $fallbackPath;
 			}
 		}
+		$this->config = $config;
+		$this->logFileMode = $config->getValue('logfilemode', 0640);
 	}
 
 	/**
 	 * write a message in the log
 	 * @param string $app
-	 * @param string $message
+	 * @param string|array $message
 	 * @param int $level
 	 */
-	public static function write($app, $message, $level) {
-		$config = \OC::$server->getSystemConfig();
-
-		// default to ISO8601
-		$format = $config->getValue('logdateformat', \DateTime::ATOM);
-		$logTimeZone = $config->getValue('logtimezone', 'UTC');
-		try {
-			$timezone = new \DateTimeZone($logTimeZone);
-		} catch (\Exception $e) {
-			$timezone = new \DateTimeZone('UTC');
-		}
-		$time = \DateTime::createFromFormat("U.u", number_format(microtime(true), 4, ".", ""));
-		if ($time === false) {
-			$time = new \DateTime(null, $timezone);
-		} else {
-			// apply timezone if $time is created from UNIX timestamp
-			$time->setTimezone($timezone);
-		}
-		$request = \OC::$server->getRequest();
-		$reqId = $request->getId();
-		$remoteAddr = $request->getRemoteAddress();
-		// remove username/passwords from URLs before writing the to the log file
-		$time = $time->format($format);
-		$url = ($request->getRequestUri() !== '') ? $request->getRequestUri() : '--';
-		$method = is_string($request->getMethod()) ? $request->getMethod() : '--';
-		if($config->getValue('installed', false)) {
-			$user = (\OC_User::getUser()) ? \OC_User::getUser() : '--';
-		} else {
-			$user = '--';
-		}
-		$userAgent = $request->getHeader('User-Agent') ?: '--';
-		$version = $config->getValue('version', '');
-		$entry = compact(
-			'reqId',
-			'remoteAddr',
-			'app',
-			'message',
-			'level',
-			'time',
-			'method',
-			'url',
-			'user',
-			'userAgent',
-			'version'
-		);
-		$entry = json_encode($entry);
-		$handle = @fopen(self::$logFile, 'a');
-		if ((fileperms(self::$logFile) & 0777) != 0640) {
-			@chmod(self::$logFile, 0640);
+	public function write(string $app, $message, int $level) {
+		$entry = $this->logDetailsAsJSON($app, $message, $level);
+		$handle = @fopen($this->logFile, 'a');
+		if ($this->logFileMode > 0 && is_file($this->logFile) && (fileperms($this->logFile) & 0777) != $this->logFileMode) {
+			@chmod($this->logFile, $this->logFileMode);
 		}
 		if ($handle) {
 			fwrite($handle, $entry."\n");
@@ -130,6 +94,9 @@ class File {
 			error_log($entry);
 		}
 		if (php_sapi_name() === 'cli-server') {
+			if (!\is_string($message)) {
+				$message = json_encode($message);
+			}
 			error_log($message, 4);
 		}
 	}
@@ -140,11 +107,10 @@ class File {
 	 * @param int $offset
 	 * @return array
 	 */
-	public static function getEntries($limit=50, $offset=0) {
-		self::init();
-		$minLevel = \OC::$server->getSystemConfig()->getValue("loglevel", \OCP\Util::WARN);
-		$entries = array();
-		$handle = @fopen(self::$logFile, 'rb');
+	public function getEntries(int $limit = 50, int $offset = 0):array {
+		$minLevel = $this->config->getValue("loglevel", ILogger::WARN);
+		$entries = [];
+		$handle = @fopen($this->logFile, 'rb');
 		if ($handle) {
 			fseek($handle, 0, SEEK_END);
 			$pos = ftell($handle);
@@ -152,7 +118,7 @@ class File {
 			$entriesCount = 0;
 			$lines = 0;
 			// Loop through each character of the file looking for new lines
-			while ($pos >= 0 && ($limit === null ||$entriesCount < $limit)) {
+			while ($pos >= 0 && ($limit === null || $entriesCount < $limit)) {
 				fseek($handle, $pos);
 				$ch = fgetc($handle);
 				if ($ch == "\n" || $pos == 0) {
@@ -186,7 +152,7 @@ class File {
 	/**
 	 * @return string
 	 */
-	public static function getLogFilePath() {
-		return self::$logFile;
+	public function getLogFilePath():string {
+		return $this->logFile;
 	}
 }

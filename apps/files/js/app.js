@@ -40,6 +40,8 @@
 		 */
 		fileList: null,
 
+		currentFileList: null,
+
 		/**
 		 * Backbone model for storing files preferences
 		 */
@@ -53,6 +55,8 @@
 			this.$showHiddenFiles = $('input#showhiddenfilesToggle');
 			var showHidden = $('#showHiddenFiles').val() === "1";
 			this.$showHiddenFiles.prop('checked', showHidden);
+
+
 			if ($('#fileNotFound').val() === "1") {
 				OC.Notification.show(t('files', 'File could not be found'), {type: 'error'});
 			}
@@ -65,37 +69,52 @@
 			var fileActions = new OCA.Files.FileActions();
 			// default actions
 			fileActions.registerDefaultActions();
-			// legacy actions
-			fileActions.merge(window.FileActions);
 			// regular actions
 			fileActions.merge(OCA.Files.fileActions);
 
 			this._onActionsUpdated = _.bind(this._onActionsUpdated, this);
 			OCA.Files.fileActions.on('setDefault.app-files', this._onActionsUpdated);
 			OCA.Files.fileActions.on('registerAction.app-files', this._onActionsUpdated);
-			window.FileActions.on('setDefault.app-files', this._onActionsUpdated);
-			window.FileActions.on('registerAction.app-files', this._onActionsUpdated);
 
 			this.files = OCA.Files.Files;
 
 			// TODO: ideally these should be in a separate class / app (the embedded "all files" app)
 			this.fileList = new OCA.Files.FileList(
 				$('#app-content-files'), {
-					scrollContainer: $('#app-content'),
 					dragOptions: dragOptions,
 					folderDropOptions: folderDropOptions,
 					fileActions: fileActions,
 					allowLegacyActions: true,
 					scrollTo: urlParams.scrollto,
 					filesClient: OC.Files.getClient(),
+					multiSelectMenu: [
+						{
+							name: 'copyMove',
+							displayName:  t('files', 'Move or copy'),
+							iconClass: 'icon-external',
+						},
+						{
+							name: 'download',
+							displayName:  t('files', 'Download'),
+							iconClass: 'icon-download',
+						},
+						OCA.Files.FileList.MultiSelectMenuActions.ToggleSelectionModeAction,
+						{
+							name: 'delete',
+							displayName: t('files', 'Delete'),
+							iconClass: 'icon-delete',
+						},
+					],
 					sorting: {
 						mode: $('#defaultFileSorting').val(),
 						direction: $('#defaultFileSortingDirection').val()
 					},
 					config: this._filesConfig,
-					enableUpload: true
+					enableUpload: true,
+					maxChunkSize: OC.appConfig.files && OC.appConfig.files.max_chunk_size
 				}
 			);
+			this.updateCurrentFileList(this.fileList)
 			this.files.initialize();
 
 			// for backward compatibility, the global FileList will
@@ -108,7 +127,16 @@
 			// trigger URL change event handlers
 			this._onPopState(urlParams);
 
+			$('#quota.has-tooltip').tooltip({
+				placement: 'top'
+			});
+
 			this._debouncedPersistShowHiddenFilesState = _.debounce(this._persistShowHiddenFilesState, 1200);
+
+			if (sessionStorage.getItem('WhatsNewServerCheck') < (Date.now() - 3600*1000)) {
+				OCP.WhatsNew.query(); // for Nextcloud server
+				sessionStorage.setItem('WhatsNewServerCheck', Date.now());
+			}
 		},
 
 		/**
@@ -121,11 +149,9 @@
 			this.files = null;
 			OCA.Files.fileActions.off('setDefault.app-files', this._onActionsUpdated);
 			OCA.Files.fileActions.off('registerAction.app-files', this._onActionsUpdated);
-			window.FileActions.off('setDefault.app-files', this._onActionsUpdated);
-			window.FileActions.off('registerAction.app-files', this._onActionsUpdated);
 		},
 
-		_onActionsUpdated: function(ev, newAction) {
+		_onActionsUpdated: function(ev) {
 			// forward new action to the file list
 			if (ev.action) {
 				this.fileList.fileActions.registerAction(ev.action);
@@ -135,6 +161,28 @@
 					ev.defaultAction.name
 				);
 			}
+		},
+
+		/**
+		 * Set the currently active file list
+		 *
+		 * Due to the file list implementations being registered after clicking the
+		 * navigation item for the first time, OCA.Files.App is not aware of those until
+		 * they have initialized themselves. Therefore the files list needs to call this
+		 * method manually
+		 *
+		 * @param {OCA.Files.FileList} newFileList
+		 */
+		updateCurrentFileList: function(newFileList) {
+			this.currentFileList = newFileList;
+		},
+
+		/**
+		 * Return the currently active file list
+		 * @return {?OCA.Files.FileList}
+		 */
+		getCurrentFileList: function () {
+			return this.currentFileList;
 		},
 
 		/**
@@ -197,7 +245,7 @@
 		},
 
 		/**
-		 * Persist show hidden preference on ther server
+		 * Persist show hidden preference on the server
 		 *
 		 * @returns {undefined}
 		 */
@@ -215,8 +263,8 @@
 			var params;
 			if (e && e.itemId) {
 				params = {
-					view: e.itemId,
-					dir: '/'
+					view: typeof e.view === 'string' && e.view !== '' ? e.view : e.itemId,
+					dir: e.dir ? e.dir : '/'
 				};
 				this._changeUrl(params.view, params.dir);
 				OC.Apps.hideAppSidebar($('.detailsView'));
@@ -308,7 +356,7 @@
 	};
 })();
 
-$(document).ready(function() {
+window.addEventListener('DOMContentLoaded', function() {
 	// wait for other apps/extensions to register their event handlers and file actions
 	// in the "ready" clause
 	_.defer(function() {

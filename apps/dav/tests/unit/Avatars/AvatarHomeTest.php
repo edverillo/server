@@ -1,8 +1,12 @@
 <?php
 /**
+ * @copyright Copyright (c) 2017, ownCloud GmbH
+ *
+ * @author Georg Ehrke <oc.list@georgehrke.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
- * @copyright Copyright (c) 2017, ownCloud GmbH
  * @license AGPL-3.0
  *
  * This code is free software: you can redistribute it and/or modify
@@ -15,13 +19,11 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
-
 namespace OCA\DAV\Tests\Unit\Avatars;
-
 
 use OCA\DAV\Avatars\AvatarHome;
 use OCA\DAV\Avatars\AvatarNode;
@@ -36,19 +38,21 @@ class AvatarHomeTest extends TestCase {
 	/** @var AvatarHome */
 	private $home;
 
-	/** @var IAvatarManager | \PHPUnit_Framework_MockObject_MockObject */
+	/** @var IAvatarManager | \PHPUnit\Framework\MockObject\MockObject */
 	private $avatarManager;
 
-	public function setUp() {
+	protected function setUp(): void {
+		parent::setUp();
 		$this->avatarManager = $this->createMock(IAvatarManager::class);
 		$this->home = new AvatarHome(['uri' => 'principals/users/admin'], $this->avatarManager);
 	}
 
 	/**
-	 * @expectedException \Sabre\DAV\Exception\Forbidden
 	 * @dataProvider providesForbiddenMethods
 	 */
 	public function testForbiddenMethods($method) {
+		$this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+
 		$this->home->$method('');
 	}
 
@@ -83,11 +87,10 @@ class AvatarHomeTest extends TestCase {
 		if ($expectedException !== null) {
 			$this->expectException($expectedException);
 		}
-		$avatar = null;
-		if ($hasAvatar) {
-			$avatar = $this->createMock(IAvatar::class);
-			$avatar->expects($this->once())->method('exists')->willReturn(true);
-		}
+
+		$avatar = $this->createMock(IAvatar::class);
+		$avatar->method('exists')->willReturn($hasAvatar);
+
 		$this->avatarManager->expects($this->any())->method('getAvatar')->with('admin')->willReturn($avatar);
 		$avatarNode = $this->home->getChild($path);
 		$this->assertInstanceOf(AvatarNode::class, $avatarNode);
@@ -108,11 +111,9 @@ class AvatarHomeTest extends TestCase {
 	 * @dataProvider providesTestGetChild
 	 */
 	public function testChildExists($expectedException, $hasAvatar, $path) {
-		$avatar = null;
-		if ($hasAvatar) {
-			$avatar = $this->createMock(IAvatar::class);
-			$avatar->expects($this->once())->method('exists')->willReturn(true);
-		}
+		$avatar = $this->createMock(IAvatar::class);
+		$avatar->method('exists')->willReturn($hasAvatar);
+
 		$this->avatarManager->expects($this->any())->method('getAvatar')->with('admin')->willReturn($avatar);
 		$childExists = $this->home->childExists($path);
 		$this->assertEquals($hasAvatar, $childExists);
@@ -121,5 +122,4 @@ class AvatarHomeTest extends TestCase {
 	public function testGetLastModified() {
 		self::assertNull($this->home->getLastModified());
 	}
-
 }

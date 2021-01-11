@@ -4,6 +4,7 @@
  *
  * @author Robin Appelman <robin@icewind.nl>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -17,14 +18,11 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\Files_External\Lib;
-
-use \OCA\Files_External\Lib\DefinitionParameter;
-use \OCA\Files_External\Lib\StorageConfig;
 
 /**
  * Trait for objects that have a frontend representation
@@ -49,7 +47,7 @@ trait FrontendDefinitionTrait {
 
 	/**
 	 * @param string $text
-	 * @return self
+	 * @return $this
 	 */
 	public function setText($text) {
 		$this->text = $text;
@@ -109,16 +107,6 @@ trait FrontendDefinitionTrait {
 	}
 
 	/**
-	 * @param string $custom
-	 * @return self
-	 * @deprecated 9.1.0, use addCustomJs() instead
-	 */
-	public function setCustomJs($custom) {
-		$this->customJs = [$custom];
-		return $this;
-	}
-
-	/**
 	 * Serialize into JSON for client-side JS
 	 *
 	 * @return array
@@ -155,5 +143,4 @@ trait FrontendDefinitionTrait {
 		}
 		return true;
 	}
-
 }

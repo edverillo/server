@@ -99,6 +99,10 @@ OCA = OCA || {};
 					$element: $('#ldap_turn_on_pwd_change'),
 					setMethod: 'setPasswordChangeEnabled'
 				},
+				ldap_default_ppolicy_dn: {
+					$element: $('#ldap_default_ppolicy_dn'),
+					setMethod: 'setDefaultPPolicyDN'
+				},
 
 				//Special Attributes
 				ldap_quota_attr: {
@@ -116,7 +120,11 @@ OCA = OCA || {};
 				home_folder_naming_rule: {
 					$element: $('#home_folder_naming_rule'),
 					setMethod: 'setHomeFolderAttribute'
-				}
+				},
+				ldap_ext_storage_home_attribute: {
+					$element: $('#ldap_ext_storage_home_attribute'),
+					setMethod: 'setExternalStorageHomeAttribute'
+				},
 			};
 			this.setManagedItems(items);
 		},
@@ -292,7 +300,7 @@ OCA = OCA || {};
 		setPagingSize: function(size) {
 			this.setElementValue(this.managedItems.ldap_paging_size.$element, size);
 		},
-		
+
 		/**
 		 * sets whether the password changes per user should be enabled
 		 *
@@ -305,12 +313,30 @@ OCA = OCA || {};
 		},
 
 		/**
+		  * sets the default ppolicy attribute
+		  *
+		  * @param {string} attribute
+		  */
+		setDefaultPPolicyDN: function(attribute) {
+			this.setElementValue(this.managedItems.ldap_default_ppolicy_dn.$element, attribute);
+		},
+
+		/**
 		 * sets the email attribute
 		 *
 		 * @param {string} attribute
 		 */
 		setEmailAttribute: function(attribute) {
 			this.setElementValue(this.managedItems.ldap_email_attr.$element, attribute);
+		},
+
+		/**
+		 * sets the external storage home attribute
+		 *
+		 * @param {string} attribute
+		 */
+		setExternalStorageHomeAttribute: function(attribute) {
+			this.setElementValue(this.managedItems.ldap_ext_storage_home_attribute.$element, attribute);
 		},
 
 		/**
@@ -332,7 +358,7 @@ OCA = OCA || {};
 		},
 
 		/**
-		 * sets the attribute for the ownCloud user specific home folder location
+		 * sets the attribute for the Nextcloud user specific home folder location
 		 *
 		 * @param {string} attribute
 		 */

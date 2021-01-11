@@ -3,7 +3,10 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Björn Schießle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Liam Dennehy <liam@wiemax.net>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -17,7 +20,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -28,8 +31,10 @@ use OCP\IDBConnection;
 use OCP\IUserBackend;
 use OCP\IUserManager;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Exception\InvalidOptionException;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 class CleanUp extends Command {
@@ -48,7 +53,7 @@ class CleanUp extends Command {
 	 * @param IUserManager $userManager
 	 * @param IDBConnection $dbConnection
 	 */
-	function __construct(IRootFolder $rootFolder, IUserManager $userManager, IDBConnection $dbConnection) {
+	public function __construct(IRootFolder $rootFolder, IUserManager $userManager, IDBConnection $dbConnection) {
 		parent::__construct();
 		$this->userManager = $userManager;
 		$this->rootFolder = $rootFolder;
@@ -62,23 +67,32 @@ class CleanUp extends Command {
 			->addArgument(
 				'user_id',
 				InputArgument::OPTIONAL | InputArgument::IS_ARRAY,
-				'remove deleted files of the given user(s), if no user is given all deleted files will be removed'
+				'remove deleted files of the given user(s)'
+			)
+			->addOption(
+				'all-users',
+				null,
+				InputOption::VALUE_NONE,
+				'run action on all users'
 			);
 	}
 
-	protected function execute(InputInterface $input, OutputInterface $output) {
+	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$users = $input->getArgument('user_id');
-		if (!empty($users)) {
+		if ((!empty($users)) and ($input->getOption('all-users'))) {
+			throw new InvalidOptionException('Either specify a user_id or --all-users');
+		} elseif (!empty($users)) {
 			foreach ($users as $user) {
 				if ($this->userManager->userExists($user)) {
 					$output->writeln("Remove deleted files of   <info>$user</info>");
 					$this->removeDeletedFiles($user);
 				} else {
 					$output->writeln("<error>Unknown user $user</error>");
+					return 1;
 				}
 			}
-		} else {
-			$output->writeln('Remove all deleted files');
+		} elseif ($input->getOption('all-users')) {
+			$output->writeln('Remove deleted files for all users');
 			foreach ($this->userManager->getBackends() as $backend) {
 				$name = get_class($backend);
 				if ($backend instanceof IUserBackend) {
@@ -96,7 +110,10 @@ class CleanUp extends Command {
 					$offset += $limit;
 				} while (count($users) >= $limit);
 			}
+		} else {
+			throw new InvalidOptionException('Either specify a user_id or --all-users');
 		}
+		return 0;
 	}
 
 	/**
@@ -116,5 +133,4 @@ class CleanUp extends Command {
 			$query->execute();
 		}
 	}
-
 }

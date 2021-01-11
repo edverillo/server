@@ -20,19 +20,22 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
+
 namespace Test\File\SimpleFS;
 
 use OC\Files\SimpleFS\SimpleFile;
 use OCP\Files\File;
+use OCP\Files\Folder;
+use OCP\Files\NotFoundException;
 
-class SimpleFileTest extends \Test\TestCase  {
-	/** @var File|\PHPUnit_Framework_MockObject_MockObject */
+class SimpleFileTest extends \Test\TestCase {
+	/** @var File|\PHPUnit\Framework\MockObject\MockObject */
 	private $file;
 
 	/** @var SimpleFile */
 	private $simpleFile;
 
-	public function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->file = $this->createMock(File::class);
@@ -100,5 +103,40 @@ class SimpleFileTest extends \Test\TestCase  {
 			->willReturn('app/awesome');
 
 		$this->assertEquals('app/awesome', $this->simpleFile->getMimeType());
+	}
+
+	public function testGetContentInvalidAppData() {
+		$this->file->method('getContent')
+			->willReturn(false);
+		$this->file->method('stat')->willReturn(false);
+
+		$parent = $this->createMock(Folder::class);
+		$parent->method('stat')->willReturn(false);
+
+		$root = $this->createMock(Folder::class);
+		$root->method('stat')->willReturn([]);
+
+		$this->file->method('getParent')->willReturn($parent);
+		$parent->method('getParent')->willReturn($root);
+
+		$this->expectException(NotFoundException::class);
+
+		$this->simpleFile->getContent();
+	}
+
+	public function testRead() {
+		$this->file->expects($this->once())
+			->method('fopen')
+			->with('r');
+
+		$this->simpleFile->read();
+	}
+
+	public function testWrite() {
+		$this->file->expects($this->once())
+			->method('fopen')
+			->with('w');
+
+		$this->simpleFile->write();
 	}
 }

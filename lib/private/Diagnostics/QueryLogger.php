@@ -2,7 +2,9 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Piotr Mrówczyński <mrow4a@yahoo.com>
  * @author Robin Appelman <robin@icewind.nl>
  *
  * @license AGPL-3.0
@@ -17,7 +19,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -33,7 +35,7 @@ class QueryLogger implements IQueryLogger {
 	protected $activeQuery;
 
 	/**
-	 * @var \OC\Diagnostics\Query[]
+	 * @var CappedMemoryCache
 	 */
 	protected $queries;
 
@@ -46,12 +48,17 @@ class QueryLogger implements IQueryLogger {
 
 
 	/**
-	 * @param string $sql
-	 * @param array $params
-	 * @param array $types
+	 * @var bool - Module needs to be activated by some app
+	 */
+	private $activated = false;
+
+	/**
+	 * @inheritdoc
 	 */
 	public function startQuery($sql, array $params = null, array $types = null) {
-		$this->activeQuery = new Query($sql, $params, microtime(true), $this->getStack());
+		if ($this->activated) {
+			$this->activeQuery = new Query($sql, $params, microtime(true), $this->getStack());
+		}
 	}
 
 	private function getStack() {
@@ -62,8 +69,11 @@ class QueryLogger implements IQueryLogger {
 		return $stack;
 	}
 
+	/**
+	 * @inheritdoc
+	 */
 	public function stopQuery() {
-		if ($this->activeQuery) {
+		if ($this->activated && $this->activeQuery) {
 			$this->activeQuery->end(microtime(true));
 			$this->queries[] = $this->activeQuery;
 			$this->activeQuery = null;
@@ -71,9 +81,16 @@ class QueryLogger implements IQueryLogger {
 	}
 
 	/**
-	 * @return Query[]
+	 * @inheritdoc
 	 */
 	public function getQueries() {
 		return $this->queries->getData();
+	}
+
+	/**
+	 * @inheritdoc
+	 */
+	public function activate() {
+		$this->activated = true;
 	}
 }

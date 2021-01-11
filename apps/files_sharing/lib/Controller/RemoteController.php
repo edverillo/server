@@ -2,8 +2,8 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
  * @author Joas Schilling <coding@schilljs.com>
- * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
@@ -18,7 +18,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -29,12 +29,16 @@ use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\OCS\OCSForbiddenException;
 use OCP\AppFramework\OCS\OCSNotFoundException;
 use OCP\AppFramework\OCSController;
+use OCP\ILogger;
 use OCP\IRequest;
 
 class RemoteController extends OCSController {
 
 	/** @var Manager */
 	private $externalManager;
+
+	/** @var ILogger */
+	private $logger;
 
 	/**
 	 * @NoAdminRequired
@@ -47,10 +51,12 @@ class RemoteController extends OCSController {
 	 */
 	public function __construct($appName,
 								IRequest $request,
-								Manager $externalManager) {
+								Manager $externalManager,
+								ILogger $logger) {
 		parent::__construct($appName, $request);
 
 		$this->externalManager = $externalManager;
+		$this->logger = $logger;
 	}
 
 	/**
@@ -78,8 +84,8 @@ class RemoteController extends OCSController {
 			return new DataResponse();
 		}
 
-		// Make sure the user has no notification for something that does not exist anymore.
-		$this->externalManager->processNotification($id);
+		$this->logger->error('Could not accept federated share with id: ' . $id,
+			['app' => 'files_sharing']);
 
 		throw new OCSNotFoundException('wrong share ID, share doesn\'t exist.');
 	}
@@ -111,6 +117,10 @@ class RemoteController extends OCSController {
 	private static function extendShareInfo($share) {
 		$view = new \OC\Files\View('/' . \OC_User::getUser() . '/files/');
 		$info = $view->getFileInfo($share['mountpoint']);
+
+		if ($info === false) {
+			return $share;
+		}
 
 		$share['mimetype'] = $info->getMimetype();
 		$share['mtime'] = $info->getMTime();

@@ -2,7 +2,9 @@
 /**
  * @copyright Copyright (c) 2016 Lukas Reschke <lukas@statuscode.ch>
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -17,9 +19,10 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
+
 namespace OCA\Files_External\Tests\Controller;
 
 use OCA\Files_External\Controller\AjaxController;
@@ -46,7 +49,7 @@ class AjaxControllerTest extends TestCase {
 	/** @var AjaxController */
 	private $ajaxController;
 
-	public function setUp() {
+	protected function setUp(): void {
 		$this->request = $this->createMock(IRequest::class);
 		$this->rsa = $this->getMockBuilder('\\OCA\\Files_External\\Lib\\Auth\\PublicKey\\RSA')
 			->disableOriginalConstructor()
@@ -78,7 +81,7 @@ class AjaxControllerTest extends TestCase {
 				'publickey' => 'MyPublicKey',
 			]);
 
-		$expected =  new JSONResponse(
+		$expected = new JSONResponse(
 			[
 				'data' => [
 					'private_key' => 'MyPrivateKey',

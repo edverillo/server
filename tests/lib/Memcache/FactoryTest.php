@@ -18,9 +18,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>
  *
  */
+
 namespace Test\Memcache;
 
-class Test_Factory_Available_Cache1 {
+use OC\Memcache\NullCache;
+use OCP\ILogger;
+
+class Test_Factory_Available_Cache1 extends NullCache {
 	public function __construct($prefix = '') {
 	}
 
@@ -29,7 +33,7 @@ class Test_Factory_Available_Cache1 {
 	}
 }
 
-class Test_Factory_Available_Cache2 {
+class Test_Factory_Available_Cache2 extends NullCache {
 	public function __construct($prefix = '') {
 	}
 
@@ -38,7 +42,7 @@ class Test_Factory_Available_Cache2 {
 	}
 }
 
-class Test_Factory_Unavailable_Cache1 {
+class Test_Factory_Unavailable_Cache1 extends NullCache {
 	public function __construct($prefix = '') {
 	}
 
@@ -47,7 +51,7 @@ class Test_Factory_Unavailable_Cache1 {
 	}
 }
 
-class Test_Factory_Unavailable_Cache2 {
+class Test_Factory_Unavailable_Cache2 extends NullCache {
 	public function __construct($prefix = '') {
 	}
 
@@ -57,10 +61,10 @@ class Test_Factory_Unavailable_Cache2 {
 }
 
 class FactoryTest extends \Test\TestCase {
-	const AVAILABLE1 = '\\Test\\Memcache\\Test_Factory_Available_Cache1';
-	const AVAILABLE2 = '\\Test\\Memcache\\Test_Factory_Available_Cache2';
-	const UNAVAILABLE1 = '\\Test\\Memcache\\Test_Factory_Unavailable_Cache1';
-	const UNAVAILABLE2 = '\\Test\\Memcache\\Test_Factory_Unavailable_Cache2';
+	public const AVAILABLE1 = '\\Test\\Memcache\\Test_Factory_Available_Cache1';
+	public const AVAILABLE2 = '\\Test\\Memcache\\Test_Factory_Available_Cache2';
+	public const UNAVAILABLE1 = '\\Test\\Memcache\\Test_Factory_Unavailable_Cache1';
+	public const UNAVAILABLE2 = '\\Test\\Memcache\\Test_Factory_Unavailable_Cache2';
 
 	public function cacheAvailabilityProvider() {
 		return [
@@ -114,7 +118,7 @@ class FactoryTest extends \Test\TestCase {
 	 */
 	public function testCacheAvailability($localCache, $distributedCache, $lockingCache,
 		$expectedLocalCache, $expectedDistributedCache, $expectedLockingCache) {
-		$logger = $this->getMockBuilder('\OCP\ILogger')->getMock();
+		$logger = $this->getMockBuilder(ILogger::class)->getMock();
 		$factory = new \OC\Memcache\Factory('abc', $logger, $localCache, $distributedCache, $lockingCache);
 		$this->assertTrue(is_a($factory->createLocal(), $expectedLocalCache));
 		$this->assertTrue(is_a($factory->createDistributed(), $expectedDistributedCache));
@@ -123,10 +127,11 @@ class FactoryTest extends \Test\TestCase {
 
 	/**
 	 * @dataProvider cacheUnavailableProvider
-	 * @expectedException \OC\HintException
 	 */
 	public function testCacheNotAvailableException($localCache, $distributedCache) {
-		$logger = $this->getMockBuilder('\OCP\ILogger')->getMock();
+		$this->expectException(\OC\HintException::class);
+
+		$logger = $this->getMockBuilder(ILogger::class)->getMock();
 		new \OC\Memcache\Factory('abc', $logger, $localCache, $distributedCache);
 	}
 }

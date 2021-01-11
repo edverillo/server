@@ -2,6 +2,9 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Daniel Kesselberg <mail@danielkesselberg.de>
+ * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
  *
@@ -17,11 +20,13 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\BackgroundJob;
+
+use OCP\BackgroundJob\IJobList;
 use OCP\ILogger;
 
 /**
@@ -46,8 +51,8 @@ abstract class TimedJob extends Job {
 	/**
 	 * run the job if
 	 *
-	 * @param JobList $jobList
-	 * @param ILogger $logger
+	 * @param IJobList $jobList
+	 * @param ILogger|null $logger
 	 */
 	public function execute($jobList, ILogger $logger = null) {
 		if ((time() - $this->lastRun) > $this->interval) {

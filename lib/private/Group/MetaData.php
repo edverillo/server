@@ -3,9 +3,13 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Daniel Kesselberg <mail@danielkesselberg.de>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author John Molakvoæ (skjnldsv) <skjnldsv@protonmail.com>
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Stephan Peijnik <speijnik@anexia-it.com>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
@@ -21,26 +25,28 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\Group;
 
+use OC\Group\Manager as GroupManager;
+use OCP\IGroupManager;
 use OCP\IUserSession;
 
 class MetaData {
-	const SORT_NONE = 0;
-	const SORT_USERCOUNT = 1; // May have performance issues on LDAP backends
-	const SORT_GROUPNAME = 2;
+	public const SORT_NONE = 0;
+	public const SORT_USERCOUNT = 1; // May have performance issues on LDAP backends
+	public const SORT_GROUPNAME = 2;
 
 	/** @var string */
 	protected $user;
 	/** @var bool */
 	protected $isAdmin;
 	/** @var array */
-	protected $metaData = array();
-	/** @var \OCP\IGroupManager */
+	protected $metaData = [];
+	/** @var GroupManager */
 	protected $groupManager;
 	/** @var bool */
 	protected $sorting = false;
@@ -50,13 +56,13 @@ class MetaData {
 	/**
 	 * @param string $user the uid of the current user
 	 * @param bool $isAdmin whether the current users is an admin
-	 * @param \OCP\IGroupManager $groupManager
+	 * @param IGroupManager $groupManager
 	 * @param IUserSession $userSession
 	 */
 	public function __construct(
 			$user,
 			$isAdmin,
-			\OCP\IGroupManager $groupManager,
+			IGroupManager $groupManager,
 			IUserSession $userSession
 			) {
 		$this->user = $user;
@@ -77,18 +83,18 @@ class MetaData {
 	 */
 	public function get($groupSearch = '', $userSearch = '') {
 		$key = $groupSearch . '::' . $userSearch;
-		if(isset($this->metaData[$key])) {
+		if (isset($this->metaData[$key])) {
 			return $this->metaData[$key];
 		}
 
-		$adminGroups = array();
-		$groups = array();
+		$adminGroups = [];
+		$groups = [];
 		$sortGroupsIndex = 0;
-		$sortGroupsKeys = array();
+		$sortGroupsKeys = [];
 		$sortAdminGroupsIndex = 0;
-		$sortAdminGroupsKeys = array();
+		$sortAdminGroupsKeys = [];
 
-		foreach($this->getGroups($groupSearch) as $group) {
+		foreach ($this->getGroups($groupSearch) as $group) {
 			$groupMetaData = $this->generateGroupMetaData($group, $userSearch);
 			if (strtolower($group->getGID()) !== 'admin') {
 				$this->addEntry(
@@ -112,7 +118,7 @@ class MetaData {
 		$this->sort($groups, $sortGroupsKeys);
 		$this->sort($adminGroups, $sortAdminGroupsKeys);
 
-		$this->metaData[$key] = array($adminGroups, $groups);
+		$this->metaData[$key] = [$adminGroups, $groups];
 		return $this->metaData[$key];
 	}
 
@@ -145,7 +151,7 @@ class MetaData {
 		if ($this->sorting === self::SORT_USERCOUNT) {
 			$sortKeys[$sortIndex] = $data['usercount'];
 			$sortIndex++;
-		} else if ($this->sorting === self::SORT_GROUPNAME) {
+		} elseif ($this->sorting === self::SORT_GROUPNAME) {
 			$sortKeys[$sortIndex] = $data['name'];
 			$sortIndex++;
 		}
@@ -155,14 +161,17 @@ class MetaData {
 	 * creates an array containing the group meta data
 	 * @param \OCP\IGroup $group
 	 * @param string $userSearch
-	 * @return array with the keys 'id', 'name' and 'usercount'
+	 * @return array with the keys 'id', 'name', 'usercount' and 'disabled'
 	 */
 	private function generateGroupMetaData(\OCP\IGroup $group, $userSearch) {
-		return array(
-				'id' => $group->getGID(),
-				'name' => $group->getGID(),
-				'usercount' => $this->sorting === self::SORT_USERCOUNT ? $group->count($userSearch) : 0,
-			);
+		return [
+			'id' => $group->getGID(),
+			'name' => $group->getDisplayName(),
+			'usercount' => $this->sorting === self::SORT_USERCOUNT ? $group->count($userSearch) : 0,
+			'disabled' => $group->countDisabled(),
+			'canAdd' => $group->canAddUser(),
+			'canRemove' => $group->canRemoveUser(),
+		];
 	}
 
 	/**
@@ -174,7 +183,7 @@ class MetaData {
 	private function sort(&$entries, $sortKeys) {
 		if ($this->sorting === self::SORT_USERCOUNT) {
 			array_multisort($sortKeys, SORT_DESC, $entries);
-		} else if ($this->sorting === self::SORT_GROUPNAME) {
+		} elseif ($this->sorting === self::SORT_GROUPNAME) {
 			array_multisort($sortKeys, SORT_ASC, $entries);
 		}
 	}
@@ -184,12 +193,12 @@ class MetaData {
 	 * @param string $search a search string
 	 * @return \OCP\IGroup[]
 	 */
-	protected function getGroups($search = '') {
-		if($this->isAdmin) {
+	public function getGroups($search = '') {
+		if ($this->isAdmin) {
 			return $this->groupManager->search($search);
 		} else {
 			$userObject = $this->userSession->getUser();
-			if($userObject !== null) {
+			if ($userObject !== null) {
 				$groups = $this->groupManager->getSubAdmin()->getSubAdminsGroups($userObject);
 			} else {
 				$groups = [];

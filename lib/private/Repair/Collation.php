@@ -2,8 +2,11 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
  * @author Morris Jobke <hey@morrisjobke.de>
  * @author Robin Appelman <robin@icewind.nl>
+ * @author Robin Müller <coder-hugo@users.noreply.github.com>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -18,14 +21,14 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\Repair;
 
 use Doctrine\DBAL\Exception\DriverException;
-use Doctrine\DBAL\Platforms\MySqlPlatform;
+use Doctrine\DBAL\Platforms\MySQLPlatform;
 use OCP\IConfig;
 use OCP\IDBConnection;
 use OCP\ILogger;
@@ -66,7 +69,7 @@ class Collation implements IRepairStep {
 	 * Fix mime types
 	 */
 	public function run(IOutput $output) {
-		if (!$this->connection->getDatabasePlatform() instanceof MySqlPlatform) {
+		if (!$this->connection->getDatabasePlatform() instanceof MySQLPlatform) {
 			$output->info('Not a mysql database -> nothing to do');
 			return;
 		}
@@ -123,8 +126,8 @@ class Collation implements IRepairStep {
 			"	FROM INFORMATION_SCHEMA . COLUMNS" .
 			"	WHERE TABLE_SCHEMA = ?" .
 			"	AND (COLLATION_NAME <> '" . $characterSet . "_bin' OR CHARACTER_SET_NAME <> '" . $characterSet . "')" .
-			"	AND TABLE_NAME LIKE \"*PREFIX*%\"",
-			array($dbName)
+			"	AND TABLE_NAME LIKE '*PREFIX*%'",
+			[$dbName]
 		);
 		$rows = $statement->fetchAll();
 		$result = [];
@@ -138,7 +141,7 @@ class Collation implements IRepairStep {
 			"	FROM INFORMATION_SCHEMA . TABLES" .
 			"	WHERE TABLE_SCHEMA = ?" .
 			"	AND TABLE_COLLATION <> '" . $characterSet . "_bin'" .
-			"	AND TABLE_NAME LIKE \"*PREFIX*%\"",
+			"	AND TABLE_NAME LIKE '*PREFIX*%'",
 			[$dbName]
 		);
 		$rows = $statement->fetchAll();
@@ -149,4 +152,3 @@ class Collation implements IRepairStep {
 		return array_keys($result);
 	}
 }
-

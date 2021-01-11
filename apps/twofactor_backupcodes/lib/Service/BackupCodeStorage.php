@@ -1,7 +1,10 @@
 <?php
-
 /**
+ *
+ *
  * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -16,23 +19,21 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 namespace OCA\TwoFactorBackupCodes\Service;
 
-use BadMethodCallException;
 use OCA\TwoFactorBackupCodes\Db\BackupCode;
 use OCA\TwoFactorBackupCodes\Db\BackupCodeMapper;
-use OCP\Activity\IManager;
-use OCP\ILogger;
+use OCA\TwoFactorBackupCodes\Event\CodesGenerated;
+use OCP\EventDispatcher\IEventDispatcher;
 use OCP\IUser;
 use OCP\Security\IHasher;
 use OCP\Security\ISecureRandom;
 
 class BackupCodeStorage {
-
 	private static $CODE_LENGTH = 16;
 
 	/** @var BackupCodeMapper */
@@ -44,26 +45,17 @@ class BackupCodeStorage {
 	/** @var ISecureRandom */
 	private $random;
 
-	/** @var IManager */
-	private $activityManager;
+	/** @var IEventDispatcher */
+	private $eventDispatcher;
 
-	/** @var ILogger */
-	private $logger;
-
-	/**
-	 * @param BackupCodeMapper $mapper
-	 * @param ISecureRandom $random
-	 * @param IHasher $hasher
-	 * @param IManager $activityManager
-	 * @param ILogger $logger
-	 */
-	public function __construct(BackupCodeMapper $mapper, ISecureRandom $random, IHasher $hasher,
-		IManager $activityManager, ILogger $logger) {
+	public function __construct(BackupCodeMapper $mapper,
+								ISecureRandom $random,
+								IHasher $hasher,
+								IEventDispatcher $eventDispatcher) {
 		$this->mapper = $mapper;
 		$this->hasher = $hasher;
 		$this->random = $random;
-		$this->activityManager = $activityManager;
-		$this->logger = $logger;
+		$this->eventDispatcher = $eventDispatcher;
 	}
 
 	/**
@@ -78,7 +70,7 @@ class BackupCodeStorage {
 
 		$uid = $user->getUID();
 		foreach (range(1, min([$number, 20])) as $i) {
-			$code = $this->random->generate(self::$CODE_LENGTH, ISecureRandom::CHAR_UPPER . ISecureRandom::CHAR_DIGITS);
+			$code = $this->random->generate(self::$CODE_LENGTH, ISecureRandom::CHAR_HUMAN_READABLE);
 
 			$dbCode = new BackupCode();
 			$dbCode->setUserId($uid);
@@ -86,33 +78,12 @@ class BackupCodeStorage {
 			$dbCode->setUsed(0);
 			$this->mapper->insert($dbCode);
 
-			array_push($result, $code);
+			$result[] = $code;
 		}
 
-		$this->publishEvent($user, 'codes_generated');
+		$this->eventDispatcher->dispatchTyped(new CodesGenerated($user));
 
 		return $result;
-	}
-
-	/**
-	 * Push an event the user's activity stream
-	 *
-	 * @param IUser $user
-	 * @param string $event
-	 */
-	private function publishEvent(IUser $user, $event) {
-		$activity = $this->activityManager->generateEvent();
-		$activity->setApp('twofactor_backupcodes')
-			->setType('twofactor')
-			->setAuthor($user->getUID())
-			->setAffectedUser($user->getUID())
-			->setSubject($event);
-		try {
-			$this->activityManager->publish($activity);
-		} catch (BadMethodCallException $e) {
-			$this->logger->warning('could not publish backup code creation activity', ['app' => 'twofactor_backupcodes']);
-			$this->logger->logException($e, ['app' => 'twofactor_backupcodes']);
-		}
 	}
 
 	/**
@@ -133,7 +104,7 @@ class BackupCodeStorage {
 		$total = count($codes);
 		$used = 0;
 		array_walk($codes, function (BackupCode $code) use (&$used) {
-			if (1 === (int) $code->getUsed()) {
+			if (1 === (int)$code->getUsed()) {
 				$used++;
 			}
 		});
@@ -153,7 +124,7 @@ class BackupCodeStorage {
 		$dbCodes = $this->mapper->getBackupCodes($user);
 
 		foreach ($dbCodes as $dbCode) {
-			if (0 === (int) $dbCode->getUsed() && $this->hasher->verify($code, $dbCode->getCode())) {
+			if (0 === (int)$dbCode->getUsed() && $this->hasher->verify($code, $dbCode->getCode())) {
 				$dbCode->setUsed(1);
 				$this->mapper->update($dbCode);
 				return true;
@@ -161,5 +132,4 @@ class BackupCodeStorage {
 		}
 		return false;
 	}
-
 }

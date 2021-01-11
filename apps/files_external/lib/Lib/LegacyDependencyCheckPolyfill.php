@@ -16,13 +16,11 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\Files_External\Lib;
-
-use \OCA\Files_External\Lib\MissingDependency;
 
 /**
  * Polyfill for checking dependencies using legacy Storage::checkDependencies()
@@ -66,6 +64,4 @@ trait LegacyDependencyCheckPolyfill {
 
 		return $ret;
 	}
-
 }
-

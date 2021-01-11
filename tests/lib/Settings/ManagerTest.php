@@ -21,190 +21,190 @@
  *
  */
 
-namespace Tests\Settings;
+namespace OCA\Settings\Tests\AppInfo;
 
-use OC\Settings\Admin\Sharing;
 use OC\Settings\Manager;
-use OC\Settings\Mapper;
-use OC\Settings\Section;
-use OCP\Encryption\IManager;
-use OCP\IConfig;
 use OCP\IDBConnection;
 use OCP\IL10N;
 use OCP\ILogger;
-use OCP\IRequest;
+use OCP\IServerContainer;
 use OCP\IURLGenerator;
-use OCP\IUserManager;
-use OCP\Lock\ILockingProvider;
+use OCP\L10N\IFactory;
+use OCP\Settings\ISettings;
+use OCP\Settings\ISubAdminSettings;
 use Test\TestCase;
 
 class ManagerTest extends TestCase {
-	/** @var Manager|\PHPUnit_Framework_MockObject_MockObject */
-	private $manager;
-	/** @var ILogger|\PHPUnit_Framework_MockObject_MockObject */
-	private $logger;
-	/** @var IDBConnection|\PHPUnit_Framework_MockObject_MockObject */
-	private $dbConnection;
-	/** @var IL10N|\PHPUnit_Framework_MockObject_MockObject */
-	private $l10n;
-	/** @var IConfig|\PHPUnit_Framework_MockObject_MockObject */
-	private $config;
-	/** @var IManager|\PHPUnit_Framework_MockObject_MockObject */
-	private $encryptionManager;
-	/** @var IUserManager|\PHPUnit_Framework_MockObject_MockObject */
-	private $userManager;
-	/** @var ILockingProvider|\PHPUnit_Framework_MockObject_MockObject */
-	private $lockingProvider;
-	/** @var IRequest|\PHPUnit_Framework_MockObject_MockObject */
-	private $request;
-	/** @var Mapper|\PHPUnit_Framework_MockObject_MockObject */
-	private $mapper;
-	/** @var IURLGenerator|\PHPUnit_Framework_MockObject_MockObject */
-	private $url;
 
-	public function setUp() {
+	/** @var Manager|\PHPUnit\Framework\MockObject\MockObject */
+	private $manager;
+	/** @var ILogger|\PHPUnit\Framework\MockObject\MockObject */
+	private $logger;
+	/** @var IDBConnection|\PHPUnit\Framework\MockObject\MockObject */
+	private $l10n;
+	/** @var IFactory|\PHPUnit\Framework\MockObject\MockObject */
+	private $l10nFactory;
+	/** @var IURLGenerator|\PHPUnit\Framework\MockObject\MockObject */
+	private $url;
+	/** @var IServerContainer|\PHPUnit\Framework\MockObject\MockObject */
+	private $container;
+
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->logger = $this->createMock(ILogger::class);
-		$this->dbConnection = $this->createMock(IDBConnection::class);
 		$this->l10n = $this->createMock(IL10N::class);
-		$this->config = $this->createMock(IConfig::class);
-		$this->encryptionManager = $this->createMock(IManager::class);
-		$this->userManager = $this->createMock(IUserManager::class);
-		$this->lockingProvider = $this->createMock(ILockingProvider::class);
-		$this->request = $this->createMock(IRequest::class);
-		$this->mapper = $this->createMock(Mapper::class);
+		$this->l10nFactory = $this->createMock(IFactory::class);
 		$this->url = $this->createMock(IURLGenerator::class);
+		$this->container = $this->createMock(IServerContainer::class);
 
 		$this->manager = new Manager(
 			$this->logger,
-			$this->dbConnection,
-			$this->l10n,
-			$this->config,
-			$this->encryptionManager,
-			$this->userManager,
-			$this->lockingProvider,
-			$this->request,
-			$this->mapper,
-			$this->url
+			$this->l10nFactory,
+			$this->url,
+			$this->container
 		);
 	}
 
-	public function testSetupSettingsUpdate() {
-		$this->mapper->expects($this->any())
-			->method('has')
-			->with('admin_settings', 'OCA\Files\Settings\Admin')
-			->will($this->returnValue(true));
-
-		$this->mapper->expects($this->once())
-			->method('update')
-			->with('admin_settings',
-				'class',
-				'OCA\Files\Settings\Admin', [
-					'section' => 'additional',
-					'priority' => 5
-				]);
-		$this->mapper->expects($this->never())
-			->method('add');
-
-		$this->manager->setupSettings([
-			'admin' => 'OCA\Files\Settings\Admin',
-		]);
-	}
-
-	public function testSetupSettingsAdd() {
-		$this->mapper->expects($this->any())
-			->method('has')
-			->with('admin_settings', 'OCA\Files\Settings\Admin')
-			->will($this->returnValue(false));
-
-		$this->mapper->expects($this->once())
-			->method('add')
-			->with('admin_settings', [
-				'class' => 'OCA\Files\Settings\Admin',
-				'section' => 'additional',
-				'priority' => 5
-			]);
-
-		$this->mapper->expects($this->never())
-			->method('update');
-
-		$this->manager->setupSettings([
-			'admin' => 'OCA\Files\Settings\Admin',
-		]);
-	}
-
 	public function testGetAdminSections() {
-		$this->l10n
-			->expects($this->any())
-			->method('t')
-			->will($this->returnArgument(0));
-
-		$this->mapper->expects($this->once())
-			->method('getAdminSectionsFromDB')
-			->will($this->returnValue([
-				['class' => \OCA\WorkflowEngine\Settings\Section::class, 'priority' => 90]
-			]));
-
-		$this->url->expects($this->exactly(6))
-			->method('imagePath')
-			->willReturnMap([
-				['settings', 'admin.svg', '1'],
-				['core', 'actions/share.svg', '2'],
-				['core', 'actions/password.svg', '3'],
-				['core', 'actions/settings-dark.svg', '4'],
-				['settings', 'help.svg', '5'],
-			]);
+		$this->manager->registerSection('admin', \OCA\WorkflowEngine\Settings\Section::class);
 
 		$this->assertEquals([
-			0 => [new Section('server', 'Server settings', 0, '1')],
-			5 => [new Section('sharing', 'Sharing', 0, '2')],
-			10 => [new Section('security', 'Security', 0, '3')],
-			45 => [new Section('encryption', 'Encryption', 0, '3')],
-			90 => [\OC::$server->query(\OCA\WorkflowEngine\Settings\Section::class)],
-			98 => [new Section('additional', 'Additional settings', 0, '4')],
-			99 => [new Section('tips-tricks', 'Tips & tricks', 0, '5')],
+			55 => [\OC::$server->query(\OCA\WorkflowEngine\Settings\Section::class)],
 		], $this->manager->getAdminSections());
+	}
+
+	public function testGetPersonalSections() {
+		$this->manager->registerSection('personal', \OCA\WorkflowEngine\Settings\Section::class);
+
+		$this->assertEquals([
+			55 => [\OC::$server->query(\OCA\WorkflowEngine\Settings\Section::class)],
+		], $this->manager->getPersonalSections());
 	}
 
 	public function testGetAdminSectionsEmptySection() {
+		$this->assertEquals([], $this->manager->getAdminSections());
+	}
+
+	public function testGetPersonalSectionsEmptySection() {
+		$this->l10nFactory
+			->expects($this->once())
+			->method('get')
+			->with('lib')
+			->willReturn($this->l10n);
 		$this->l10n
 			->expects($this->any())
 			->method('t')
-			->will($this->returnArgument(0));
+			->willReturnArgument(0);
 
-		$this->mapper->expects($this->once())
-			->method('getAdminSectionsFromDB')
-			->will($this->returnValue([
-			]));
-
-		$this->url->expects($this->exactly(6))
-			->method('imagePath')
-			->willReturnMap([
-				['settings', 'admin.svg', '1'],
-				['core', 'actions/share.svg', '2'],
-				['core', 'actions/password.svg', '3'],
-				['core', 'actions/settings-dark.svg', '4'],
-				['settings', 'help.svg', '5'],
-			]);
-
-		$this->assertEquals([
-			0 => [new Section('server', 'Server settings', 0, '1')],
-			5 => [new Section('sharing', 'Sharing', 0, '2')],
-			10 => [new Section('security', 'Security', 0, '3')],
-			45 => [new Section('encryption', 'Encryption', 0, '3')],
-			98 => [new Section('additional', 'Additional settings', 0, '4')],
-			99 => [new Section('tips-tricks', 'Tips & tricks', 0, '5')],
-		], $this->manager->getAdminSections());
+		$this->assertEquals([], $this->manager->getPersonalSections());
 	}
 
 	public function testGetAdminSettings() {
-		$this->mapper->expects($this->any())
-			->method('getAdminSettingsFromDB')
-			->will($this->returnValue([]));
+		$section = $this->createMock(ISettings::class);
+		$section->method('getPriority')
+			->willReturn(13);
+		$section->method('getSection')
+			->willReturn('sharing');
+		$this->container->method('query')
+			->with('myAdminClass')
+			->willReturn($section);
+
+		$this->manager->registerSetting('admin', 'myAdminClass');
+		$settings = $this->manager->getAdminSettings('sharing');
 
 		$this->assertEquals([
-			0 => [new Sharing($this->config)],
-		], $this->manager->getAdminSettings('sharing'));
+			13 => [$section]
+		], $settings);
+	}
+
+	public function testGetAdminSettingsAsSubAdmin() {
+		$section = $this->createMock(ISettings::class);
+		$section->method('getPriority')
+			->willReturn(13);
+		$section->method('getSection')
+			->willReturn('sharing');
+		$this->container->method('query')
+			->with('myAdminClass')
+			->willReturn($section);
+
+		$this->manager->registerSetting('admin', 'myAdminClass');
+		$settings = $this->manager->getAdminSettings('sharing', true);
+
+		$this->assertEquals([], $settings);
+	}
+
+	public function testGetSubAdminSettingsAsSubAdmin() {
+		$section = $this->createMock(ISubAdminSettings::class);
+		$section->method('getPriority')
+			->willReturn(13);
+		$section->method('getSection')
+			->willReturn('sharing');
+		$this->container->expects($this->once())
+			->method('query')
+			->with('mySubAdminClass')
+			->willReturn($section);
+
+		$this->manager->registerSetting('admin', 'mySubAdminClass');
+		$settings = $this->manager->getAdminSettings('sharing', true);
+
+		$this->assertEquals([
+			13 => [$section]
+		], $settings);
+	}
+
+	public function testGetPersonalSettings() {
+		$section = $this->createMock(ISettings::class);
+		$section->method('getPriority')
+			->willReturn(16);
+		$section->method('getSection')
+			->willReturn('security');
+		$section2 = $this->createMock(ISettings::class);
+		$section2->method('getPriority')
+			->willReturn(100);
+		$section2->method('getSection')
+			->willReturn('security');
+
+		$this->manager->registerSetting('personal', 'section1');
+		$this->manager->registerSetting('personal', 'section2');
+
+		$this->container->expects($this->at(0))
+			->method('query')
+			->with('section1')
+			->willReturn($section);
+		$this->container->expects($this->at(1))
+			->method('query')
+			->with('section2')
+			->willReturn($section2);
+
+		$settings = $this->manager->getPersonalSettings('security');
+
+		$this->assertEquals([
+			16 => [$section],
+			100 => [$section2],
+		], $settings);
+	}
+
+	public function testSameSectionAsPersonalAndAdmin() {
+		$this->l10nFactory
+			->expects($this->once())
+			->method('get')
+			->with('lib')
+			->willReturn($this->l10n);
+		$this->l10n
+			->expects($this->any())
+			->method('t')
+			->willReturnArgument(0);
+
+		$this->manager->registerSection('personal', \OCA\WorkflowEngine\Settings\Section::class);
+		$this->manager->registerSection('admin', \OCA\WorkflowEngine\Settings\Section::class);
+
+		$this->assertEquals([
+			55 => [\OC::$server->query(\OCA\WorkflowEngine\Settings\Section::class)],
+		], $this->manager->getPersonalSections());
+
+		$this->assertEquals([
+			55 => [\OC::$server->query(\OCA\WorkflowEngine\Settings\Section::class)],
+		], $this->manager->getAdminSections());
 	}
 }

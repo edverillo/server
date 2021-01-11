@@ -2,6 +2,8 @@
 /**
  * @copyright Copyright (c) 2016, Roeland Jago Douma <roeland@famdouma.nl>
  *
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Robin Appelman <robin@icewind.nl>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license GNU AGPL version 3 or any later version
@@ -17,12 +19,14 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
+
 namespace OCA\Files_Versions\Tests\Controller;
 
 use OCA\Files_Versions\Controller\PreviewController;
+use OCA\Files_Versions\Versions\IVersionManager;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\FileDisplayResponse;
@@ -34,39 +38,57 @@ use OCP\Files\NotFoundException;
 use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\IPreview;
 use OCP\IRequest;
+use OCP\IUser;
+use OCP\IUserSession;
 use Test\TestCase;
 
 class PreviewControllerTest extends TestCase {
 
-	/** @var IRootFolder|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var IRootFolder|\PHPUnit\Framework\MockObject\MockObject */
 	private $rootFolder;
 
 	/** @var string */
 	private $userId;
 
-	/** @var IMimeTypeDetector|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var IMimeTypeDetector|\PHPUnit\Framework\MockObject\MockObject */
 	private $mimeTypeDetector;
 
-	/** @var IPreview|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var IPreview|\PHPUnit\Framework\MockObject\MockObject */
 	private $previewManager;
 
-	/** @var PreviewController */
+	/** @var PreviewController|\PHPUnit\Framework\MockObject\MockObject */
 	private $controller;
 
-	public function setUp() {
+	/** @var IUserSession|\PHPUnit\Framework\MockObject\MockObject */
+	private $userSession;
+
+	/** @var IVersionManager|\PHPUnit\Framework\MockObject\MockObject */
+	private $versionManager;
+
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->rootFolder = $this->createMock(IRootFolder::class);
 		$this->userId = 'user';
+		$user = $this->createMock(IUser::class);
+		$user->expects($this->any())
+			->method('getUID')
+			->willReturn($this->userId);
 		$this->mimeTypeDetector = $this->createMock(IMimeTypeDetector::class);
 		$this->previewManager = $this->createMock(IPreview::class);
+		$this->userSession = $this->createMock(IUserSession::class);
+		$this->userSession->expects($this->any())
+			->method('getUser')
+			->willReturn($user);
+		$this->versionManager = $this->createMock(IVersionManager::class);
 
 		$this->controller = new PreviewController(
 			'files_versions',
 			$this->createMock(IRequest::class),
 			$this->rootFolder,
-			$this->userId,
+			$this->userSession,
 			$this->mimeTypeDetector,
+			$this->versionManager,
 			$this->previewManager
 		);
 	}
@@ -102,24 +124,23 @@ class PreviewControllerTest extends TestCase {
 	public function testValidPreview() {
 		$userFolder = $this->createMock(Folder::class);
 		$userRoot = $this->createMock(Folder::class);
-		$versions = $this->createMock(Folder::class);
 
 		$this->rootFolder->method('getUserFolder')
 			->with($this->userId)
 			->willReturn($userFolder);
 		$userFolder->method('getParent')
 			->willReturn($userRoot);
-		$userRoot->method('get')
-			->with('files_versions')
-			->willReturn($versions);
 
-		$this->mimeTypeDetector->method('detectPath')
-			->with($this->equalTo('file'))
-			->willReturn('myMime');
+		$sourceFile = $this->createMock(File::class);
+		$userFolder->method('get')
+			->with('file')
+			->willReturn($sourceFile);
 
 		$file = $this->createMock(File::class);
-		$versions->method('get')
-			->with($this->equalTo('file.v42'))
+		$file->method('getMimetype')
+			->willReturn('myMime');
+
+		$this->versionManager->method('getVersionFile')
 			->willReturn($file);
 
 		$preview = $this->createMock(ISimpleFile::class);
@@ -138,24 +159,23 @@ class PreviewControllerTest extends TestCase {
 	public function testVersionNotFound() {
 		$userFolder = $this->createMock(Folder::class);
 		$userRoot = $this->createMock(Folder::class);
-		$versions = $this->createMock(Folder::class);
 
 		$this->rootFolder->method('getUserFolder')
 			->with($this->userId)
 			->willReturn($userFolder);
 		$userFolder->method('getParent')
 			->willReturn($userRoot);
-		$userRoot->method('get')
-			->with('files_versions')
-			->willReturn($versions);
+
+		$sourceFile = $this->createMock(File::class);
+		$userFolder->method('get')
+			->with('file')
+			->willReturn($sourceFile);
 
 		$this->mimeTypeDetector->method('detectPath')
 			->with($this->equalTo('file'))
 			->willReturn('myMime');
 
-		$file = $this->createMock(File::class);
-		$versions->method('get')
-			->with($this->equalTo('file.v42'))
+		$this->versionManager->method('getVersionFile')
 			->willThrowException(new NotFoundException());
 
 		$res = $this->controller->getPreview('file', 10, 10, '42');
@@ -163,5 +183,4 @@ class PreviewControllerTest extends TestCase {
 
 		$this->assertEquals($expected, $res);
 	}
-
 }

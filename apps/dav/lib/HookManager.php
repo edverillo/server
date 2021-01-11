@@ -2,6 +2,14 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author John Molakvoæ (skjnldsv) <skjnldsv@protonmail.com>
+ * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Thomas Citharel <nextcloud@tcit.fr>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -16,9 +24,10 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
+
 namespace OCA\DAV;
 
 use OCA\DAV\CalDAV\CalDavBackend;
@@ -27,8 +36,7 @@ use OCA\DAV\CardDAV\SyncService;
 use OCP\IUser;
 use OCP\IUserManager;
 use OCP\Util;
-use Symfony\Component\EventDispatcher\EventDispatcher;
-use Symfony\Component\EventDispatcher\GenericEvent;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 class HookManager {
 
@@ -39,7 +47,7 @@ class HookManager {
 	private $syncService;
 
 	/** @var IUser[] */
-	private $usersToDelete;
+	private $usersToDelete = [];
 
 	/** @var CalDavBackend */
 	private $calDav;
@@ -48,19 +56,19 @@ class HookManager {
 	private $cardDav;
 
 	/** @var array */
-	private $calendarsToDelete;
+	private $calendarsToDelete = [];
 
 	/** @var array */
-	private $addressBooksToDelete;
+	private $addressBooksToDelete = [];
 
-	/** @var EventDispatcher */
+	/** @var EventDispatcherInterface */
 	private $eventDispatcher;
 
 	public function __construct(IUserManager $userManager,
 								SyncService $syncService,
 								CalDavBackend $calDav,
 								CardDavBackend $cardDav,
-								EventDispatcher $eventDispatcher) {
+								EventDispatcherInterface $eventDispatcher) {
 		$this->userManager = $userManager;
 		$this->syncService = $syncService;
 		$this->calDav = $calDav;
@@ -73,14 +81,22 @@ class HookManager {
 			'post_createUser',
 			$this,
 			'postCreateUser');
+		\OC::$server->getUserManager()->listen('\OC\User', 'assignedUserId', function ($uid) {
+			$this->postCreateUser(['uid' => $uid]);
+		});
 		Util::connectHook('OC_User',
 			'pre_deleteUser',
 			$this,
 			'preDeleteUser');
+		\OC::$server->getUserManager()->listen('\OC\User', 'preUnassignedUserId', [$this, 'preUnassignedUserId']);
 		Util::connectHook('OC_User',
 			'post_deleteUser',
 			$this,
 			'postDeleteUser');
+		\OC::$server->getUserManager()->listen('\OC\User', 'postUnassignedUserId', function ($uid) {
+			$this->postDeleteUser(['uid' => $uid]);
+		});
+		\OC::$server->getUserManager()->listen('\OC\User', 'postUnassignedUserId', [$this, 'postUnassignedUserId']);
 		Util::connectHook('OC_User',
 			'changeUser',
 			$this,
@@ -89,7 +105,9 @@ class HookManager {
 
 	public function postCreateUser($params) {
 		$user = $this->userManager->get($params['uid']);
-		$this->syncService->updateUser($user);
+		if ($user instanceof IUser) {
+			$this->syncService->updateUser($user);
+		}
 	}
 
 	public function preDeleteUser($params) {
@@ -99,9 +117,13 @@ class HookManager {
 		$this->addressBooksToDelete = $this->cardDav->getUsersOwnAddressBooks('principals/users/' . $uid);
 	}
 
+	public function preUnassignedUserId($uid) {
+		$this->usersToDelete[$uid] = $this->userManager->get($uid);
+	}
+
 	public function postDeleteUser($params) {
 		$uid = $params['uid'];
-		if (isset($this->usersToDelete[$uid])){
+		if (isset($this->usersToDelete[$uid])) {
 			$this->syncService->deleteUser($this->usersToDelete[$uid]);
 		}
 
@@ -112,6 +134,12 @@ class HookManager {
 
 		foreach ($this->addressBooksToDelete as $addressBook) {
 			$this->cardDav->deleteAddressBook($addressBook['id']);
+		}
+	}
+
+	public function postUnassignedUserId($uid) {
+		if (isset($this->usersToDelete[$uid])) {
+			$this->syncService->deleteUser($this->usersToDelete[$uid]);
 		}
 	}
 

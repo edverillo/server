@@ -25,16 +25,16 @@ class PathVerificationTest extends \Test\TestCase {
 	 */
 	private $view;
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 		$this->view = new View();
 	}
 
-	/**
-	 * @expectedException \OCP\Files\InvalidPathException
-	 * @expectedExceptionMessage File name is too long
-	 */
+	
 	public function testPathVerificationFileNameTooLong() {
+		$this->expectException(\OCP\Files\InvalidPathException::class);
+		$this->expectExceptionMessage('File name is too long');
+
 		$fileName = str_repeat('a', 500);
 		$this->view->verifyPath('', $fileName);
 	}
@@ -42,10 +42,11 @@ class PathVerificationTest extends \Test\TestCase {
 
 	/**
 	 * @dataProvider providesEmptyFiles
-	 * @expectedException \OCP\Files\InvalidPathException
-	 * @expectedExceptionMessage Empty filename is not allowed
 	 */
 	public function testPathVerificationEmptyFileName($fileName) {
+		$this->expectException(\OCP\Files\InvalidPathException::class);
+		$this->expectExceptionMessage('Empty filename is not allowed');
+
 		$this->view->verifyPath('', $fileName);
 	}
 
@@ -58,10 +59,11 @@ class PathVerificationTest extends \Test\TestCase {
 
 	/**
 	 * @dataProvider providesDotFiles
-	 * @expectedException \OCP\Files\InvalidPathException
-	 * @expectedExceptionMessage Dot files are not allowed
 	 */
 	public function testPathVerificationDotFiles($fileName) {
+		$this->expectException(\OCP\Files\InvalidPathException::class);
+		$this->expectExceptionMessage('Dot files are not allowed');
+
 		$this->view->verifyPath('', $fileName);
 	}
 
@@ -87,6 +89,8 @@ class PathVerificationTest extends \Test\TestCase {
 		if (!$connection->supports4ByteText()) {
 			$this->expectException(InvalidPathException::class);
 			$this->expectExceptionMessage('File name contains at least one invalid character');
+		} else {
+			$this->addToAssertionCount(1);
 		}
 
 		$this->view->verifyPath('', $fileName);
@@ -105,9 +109,10 @@ class PathVerificationTest extends \Test\TestCase {
 
 	/**
 	 * @dataProvider providesInvalidCharsPosix
-	 * @expectedException \OCP\Files\InvalidCharacterInPathException
 	 */
 	public function testPathVerificationInvalidCharsPosix($fileName) {
+		$this->expectException(\OCP\Files\InvalidCharacterInPathException::class);
+
 		$storage = new Local(['datadir' => '']);
 
 		$fileName = " 123{$fileName}456 ";
@@ -161,7 +166,7 @@ class PathVerificationTest extends \Test\TestCase {
 
 		self::invokePrivate($storage, 'verifyPosixPath', [$fileName]);
 		// nothing thrown
-		$this->assertTrue(true);
+		$this->addToAssertionCount(1);
 	}
 
 	public function providesValidPosixPaths() {

@@ -1,9 +1,13 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Robin Appelman <robin@icewind.nl>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -17,7 +21,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -32,24 +36,24 @@ use OCP\Lock\ILockingProvider;
  */
 class NoopLockingProvider implements ILockingProvider {
 
-    /**
-     * {@inheritdoc}
-     */
-	public function isLocked($path, $type) {
+	/**
+	 * {@inheritdoc}
+	 */
+	public function isLocked(string $path, int $type): bool {
 		return false;
 	}
 
-    /**
-     * {@inheritdoc}
-     */
-	public function acquireLock($path, $type) {
+	/**
+	 * {@inheritdoc}
+	 */
+	public function acquireLock(string $path, int $type, string $readablePath = null) {
 		// do nothing
 	}
 
 	/**
-     * {@inheritdoc}
+	 * {@inheritdoc}
 	 */
-	public function releaseLock($path, $type) {
+	public function releaseLock(string $path, int $type) {
 		// do nothing
 	}
 
@@ -63,7 +67,7 @@ class NoopLockingProvider implements ILockingProvider {
 	/**
 	 * {@inheritdoc}
 	 */
-	public function changeLock($path, $targetType) {
+	public function changeLock(string $path, int $targetType) {
 		// do nothing
 	}
 }

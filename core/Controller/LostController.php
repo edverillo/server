@@ -2,12 +2,18 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
  * @author Bernhard Posselt <dev@bernhard-posselt.com>
- * @author Björn Schießle <bjoern@schiessle.org>
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Daniel Kesselberg <mail@danielkesselberg.de>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Julius Haertl <jus@bitgrid.net>
+ * @author Julius Härtl <jus@bitgrid.net>
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Rémy Jacquin <remy@remyj.fr>
+ * @author Robin Appelman <robin@icewind.nl>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  * @author Victor Dubiniuk <dubiniuk@owncloud.com>
@@ -24,26 +30,36 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\Core\Controller;
 
-use OCA\Encryption\Exceptions\PrivateKeyMissingException;
-use \OCP\AppFramework\Controller;
-use \OCP\AppFramework\Http\TemplateResponse;
+use function array_filter;
+use function count;
+use OC\Authentication\TwoFactorAuth\Manager;
+use OC\Core\Exception\ResetPasswordException;
+use OC\HintException;
+use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\JSONResponse;
+use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\Defaults;
+use OCP\Encryption\IEncryptionModule;
 use OCP\Encryption\IManager;
-use \OCP\IURLGenerator;
-use \OCP\IRequest;
-use \OCP\IL10N;
-use \OCP\IConfig;
+use OCP\IConfig;
+use OCP\IInitialStateService;
+use OCP\IL10N;
+use OCP\ILogger;
+use OCP\IRequest;
+use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserManager;
 use OCP\Mail\IMailer;
 use OCP\Security\ICrypto;
 use OCP\Security\ISecureRandom;
+use function reset;
 
 /**
  * Class LostController
@@ -53,12 +69,11 @@ use OCP\Security\ISecureRandom;
  * @package OC\Core\Controller
  */
 class LostController extends Controller {
-
 	/** @var IURLGenerator */
 	protected $urlGenerator;
 	/** @var IUserManager */
 	protected $userManager;
-	/** @var \OC_Defaults */
+	/** @var Defaults */
 	protected $defaults;
 	/** @var IL10N */
 	protected $l10n;
@@ -76,13 +91,19 @@ class LostController extends Controller {
 	protected $timeFactory;
 	/** @var ICrypto */
 	protected $crypto;
+	/** @var ILogger */
+	private $logger;
+	/** @var Manager */
+	private $twoFactorManager;
+	/** @var IInitialStateService */
+	private $initialStateService;
 
 	/**
 	 * @param string $appName
 	 * @param IRequest $request
 	 * @param IURLGenerator $urlGenerator
 	 * @param IUserManager $userManager
-	 * @param \OC_Defaults $defaults
+	 * @param Defaults $defaults
 	 * @param IL10N $l10n
 	 * @param IConfig $config
 	 * @param ISecureRandom $secureRandom
@@ -96,7 +117,7 @@ class LostController extends Controller {
 								IRequest $request,
 								IURLGenerator $urlGenerator,
 								IUserManager $userManager,
-								\OC_Defaults $defaults,
+								Defaults $defaults,
 								IL10N $l10n,
 								IConfig $config,
 								ISecureRandom $secureRandom,
@@ -104,7 +125,10 @@ class LostController extends Controller {
 								IManager $encryptionManager,
 								IMailer $mailer,
 								ITimeFactory $timeFactory,
-								ICrypto $crypto) {
+								ICrypto $crypto,
+								ILogger $logger,
+								Manager $twoFactorManager,
+								IInitialStateService $initialStateService) {
 		parent::__construct($appName, $request);
 		$this->urlGenerator = $urlGenerator;
 		$this->userManager = $userManager;
@@ -117,6 +141,9 @@ class LostController extends Controller {
 		$this->mailer = $mailer;
 		$this->timeFactory = $timeFactory;
 		$this->crypto = $crypto;
+		$this->logger = $logger;
+		$this->twoFactorManager = $twoFactorManager;
+		$this->initialStateService = $initialStateService;
 	}
 
 	/**
@@ -130,23 +157,33 @@ class LostController extends Controller {
 	 * @return TemplateResponse
 	 */
 	public function resetform($token, $userId) {
+		if ($this->config->getSystemValue('lost_password_link', '') !== '') {
+			return new TemplateResponse('core', 'error', [
+				'errors' => [['error' => $this->l10n->t('Password reset is disabled')]]
+			],
+				'guest'
+			);
+		}
+
 		try {
 			$this->checkPasswordResetToken($token, $userId);
 		} catch (\Exception $e) {
 			return new TemplateResponse(
 				'core', 'error', [
-					"errors" => array(array("error" => $e->getMessage()))
+					"errors" => [["error" => $e->getMessage()]]
 				],
 				'guest'
 			);
 		}
+		$this->initialStateService->provideInitialState('core', 'resetPasswordUser', $userId);
+		$this->initialStateService->provideInitialState('core', 'resetPasswordTarget',
+			$this->urlGenerator->linkToRouteAbsolute('core.lost.setPassword', ['userId' => $userId, 'token' => $token])
+		);
 
 		return new TemplateResponse(
 			'core',
-			'lostpassword/resetpassword',
-			array(
-				'link' => $this->urlGenerator->linkToRouteAbsolute('core.lost.setPassword', array('userId' => $userId, 'token' => $token)),
-			),
+			'login',
+			[],
 			'guest'
 		);
 	}
@@ -158,12 +195,16 @@ class LostController extends Controller {
 	 */
 	protected function checkPasswordResetToken($token, $userId) {
 		$user = $this->userManager->get($userId);
-		if($user === null) {
+		if ($user === null || !$user->isEnabled()) {
+			throw new \Exception($this->l10n->t('Couldn\'t reset password because the token is invalid'));
+		}
+
+		$encryptedToken = $this->config->getUserValue($userId, 'core', 'lostpassword', null);
+		if ($encryptedToken === null) {
 			throw new \Exception($this->l10n->t('Couldn\'t reset password because the token is invalid'));
 		}
 
 		try {
-			$encryptedToken = $this->config->getUserValue($userId, 'core', 'lostpassword', null);
 			$mailAddress = !is_null($user->getEMailAddress()) ? $user->getEMailAddress() : '';
 			$decryptedToken = $this->crypto->decrypt($encryptedToken, $mailAddress.$this->config->getSystemValue('secret'));
 		} catch (\Exception $e) {
@@ -171,11 +212,11 @@ class LostController extends Controller {
 		}
 
 		$splittedToken = explode(':', $decryptedToken);
-		if(count($splittedToken) !== 2) {
+		if (count($splittedToken) !== 2) {
 			throw new \Exception($this->l10n->t('Couldn\'t reset password because the token is invalid'));
 		}
 
-		if ($splittedToken[0] < ($this->timeFactory->getTime() - 60*60*12) ||
+		if ($splittedToken[0] < ($this->timeFactory->getTime() - 60 * 60 * 24 * 7) ||
 			$user->getLastLogin() > $splittedToken[0]) {
 			throw new \Exception($this->l10n->t('Couldn\'t reset password because the token is expired'));
 		}
@@ -190,33 +231,50 @@ class LostController extends Controller {
 	 * @param array $additional
 	 * @return array
 	 */
-	private function error($message, array $additional=array()) {
-		return array_merge(array('status' => 'error', 'msg' => $message), $additional);
+	private function error($message, array $additional = []) {
+		return array_merge(['status' => 'error', 'msg' => $message], $additional);
 	}
 
 	/**
+	 * @param array $data
 	 * @return array
 	 */
-	private function success() {
-		return array('status'=>'success');
+	private function success($data = []) {
+		return array_merge($data, ['status' => 'success']);
 	}
 
 	/**
 	 * @PublicPage
-	 * @BruteForceProtection passwordResetEmail
+	 * @BruteForceProtection(action=passwordResetEmail)
+	 * @AnonRateThrottle(limit=10, period=300)
 	 *
 	 * @param string $user
-	 * @return array
+	 * @return JSONResponse
 	 */
-	public function email($user){
+	public function email($user) {
+		if ($this->config->getSystemValue('lost_password_link', '') !== '') {
+			return new JSONResponse($this->error($this->l10n->t('Password reset is disabled')));
+		}
+
+		\OCP\Util::emitHook(
+			'\OCA\Files_Sharing\API\Server2Server',
+			'preLoginNameUsedAsUserName',
+			['uid' => &$user]
+		);
+
 		// FIXME: use HTTP error codes
 		try {
 			$this->sendEmail($user);
-		} catch (\Exception $e){
-			return $this->error($e->getMessage());
+		} catch (ResetPasswordException $e) {
+			// Ignore the error since we do not want to leak this info
+			$this->logger->warning('Could not send password reset email: ' . $e->getMessage());
+		} catch (\Exception $e) {
+			$this->logger->logException($e);
 		}
 
-		return $this->success();
+		$response = new JSONResponse($this->success());
+		$response->throttle();
+		return $response;
 	}
 
 	/**
@@ -228,43 +286,58 @@ class LostController extends Controller {
 	 * @return array
 	 */
 	public function setPassword($token, $userId, $password, $proceed) {
+		if ($this->config->getSystemValue('lost_password_link', '') !== '') {
+			return $this->error($this->l10n->t('Password reset is disabled'));
+		}
+
 		if ($this->encryptionManager->isEnabled() && !$proceed) {
-			return $this->error('', array('encryption' => true));
+			$encryptionModules = $this->encryptionManager->getEncryptionModules();
+			foreach ($encryptionModules as $module) {
+				/** @var IEncryptionModule $instance */
+				$instance = call_user_func($module['callback']);
+				// this way we can find out whether per-user keys are used or a system wide encryption key
+				if ($instance->needDetailedAccessList()) {
+					return $this->error('', ['encryption' => true]);
+				}
+			}
 		}
 
 		try {
 			$this->checkPasswordResetToken($token, $userId);
 			$user = $this->userManager->get($userId);
 
-			\OC_Hook::emit('\OC\Core\LostPassword\Controller\LostController', 'pre_passwordReset', array('uid' => $userId, 'password' => $password));
+			\OC_Hook::emit('\OC\Core\LostPassword\Controller\LostController', 'pre_passwordReset', ['uid' => $userId, 'password' => $password]);
 
 			if (!$user->setPassword($password)) {
 				throw new \Exception();
 			}
 
-			\OC_Hook::emit('\OC\Core\LostPassword\Controller\LostController', 'post_passwordReset', array('uid' => $userId, 'password' => $password));
+			\OC_Hook::emit('\OC\Core\LostPassword\Controller\LostController', 'post_passwordReset', ['uid' => $userId, 'password' => $password]);
+
+			$this->twoFactorManager->clearTwoFactorPending($userId);
 
 			$this->config->deleteUserValue($userId, 'core', 'lostpassword');
-			@\OC_User::unsetMagicInCookie();
-		} catch (\Exception $e){
+			@\OC::$server->getUserSession()->unsetMagicInCookie();
+		} catch (HintException $e) {
+			return $this->error($e->getHint());
+		} catch (\Exception $e) {
 			return $this->error($e->getMessage());
 		}
 
-		return $this->success();
+		return $this->success(['user' => $userId]);
 	}
 
 	/**
 	 * @param string $input
-	 * @throws \Exception
+	 * @throws ResetPasswordException
+	 * @throws \OCP\PreConditionNotMetException
 	 */
 	protected function sendEmail($input) {
 		$user = $this->findUserByIdOrMail($input);
 		$email = $user->getEMailAddress();
 
 		if (empty($email)) {
-			throw new \Exception(
-				$this->l10n->t('Could not send reset email because there is no email address for this username. Please contact your administrator.')
-			);
+			throw new ResetPasswordException('Could not send reset e-mail since there is no email for username ' . $input);
 		}
 
 		// Generate the token. It is stored encrypted in the database with the
@@ -281,41 +354,63 @@ class LostController extends Controller {
 		$encryptedValue = $this->crypto->encrypt($tokenValue, $email . $this->config->getSystemValue('secret'));
 		$this->config->setUserValue($user->getUID(), 'core', 'lostpassword', $encryptedValue);
 
-		$link = $this->urlGenerator->linkToRouteAbsolute('core.lost.resetform', array('userId' => $user->getUID(), 'token' => $token));
+		$link = $this->urlGenerator->linkToRouteAbsolute('core.lost.resetform', ['userId' => $user->getUID(), 'token' => $token]);
 
-		$tmpl = new \OC_Template('core', 'lostpassword/email');
-		$tmpl->assign('link', $link);
-		$msg = $tmpl->fetchPage();
+		$emailTemplate = $this->mailer->createEMailTemplate('core.ResetPassword', [
+			'link' => $link,
+		]);
+
+		$emailTemplate->setSubject($this->l10n->t('%s password reset', [$this->defaults->getName()]));
+		$emailTemplate->addHeader();
+		$emailTemplate->addHeading($this->l10n->t('Password reset'));
+
+		$emailTemplate->addBodyText(
+			htmlspecialchars($this->l10n->t('Click the following button to reset your password. If you have not requested the password reset, then ignore this email.')),
+			$this->l10n->t('Click the following link to reset your password. If you have not requested the password reset, then ignore this email.')
+		);
+
+		$emailTemplate->addBodyButton(
+			htmlspecialchars($this->l10n->t('Reset your password')),
+			$link,
+			false
+		);
+		$emailTemplate->addFooter();
 
 		try {
 			$message = $this->mailer->createMessage();
 			$message->setTo([$email => $user->getUID()]);
-			$message->setSubject($this->l10n->t('%s password reset', [$this->defaults->getName()]));
-			$message->setPlainBody($msg);
 			$message->setFrom([$this->from => $this->defaults->getName()]);
+			$message->useTemplate($emailTemplate);
 			$this->mailer->send($message);
 		} catch (\Exception $e) {
-			throw new \Exception($this->l10n->t(
-				'Couldn\'t send reset email. Please contact your administrator.'
-			));
+			// Log the exception and continue
+			$this->logger->logException($e);
 		}
 	}
 
 	/**
 	 * @param string $input
 	 * @return IUser
-	 * @throws \Exception
+	 * @throws ResetPasswordException
 	 */
 	protected function findUserByIdOrMail($input) {
 		$user = $this->userManager->get($input);
 		if ($user instanceof IUser) {
+			if (!$user->isEnabled()) {
+				throw new ResetPasswordException('User is disabled');
+			}
+
 			return $user;
 		}
-		$users = $this->userManager->getByEmail($input);
+
+		$users = array_filter($this->userManager->getByEmail($input), function (IUser $user) {
+			return $user->isEnabled();
+		});
+
 		if (count($users) === 1) {
-			return $users[0];
+			return reset($users);
 		}
 
-		throw new \InvalidArgumentException($this->l10n->t('Couldn\'t send reset email. Please make sure your username is correct.'));
+		throw new ResetPasswordException('Could not find user');
 	}
 }

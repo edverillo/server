@@ -18,6 +18,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
+
 namespace Test\Security\Bruteforce;
 
 use OC\AppFramework\Utility\TimeFactory;
@@ -40,10 +41,10 @@ class ThrottlerTest extends TestCase {
 	private $dbConnection;
 	/** @var ILogger */
 	private $logger;
-	/** @var IConfig|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var IConfig|\PHPUnit\Framework\MockObject\MockObject */
 	private $config;
 
-	public function setUp() {
+	protected function setUp(): void {
 		$this->dbConnection = $this->createMock(IDBConnection::class);
 		$this->logger = $this->createMock(ILogger::class);
 		$this->config = $this->createMock(IConfig::class);
@@ -54,19 +55,19 @@ class ThrottlerTest extends TestCase {
 			$this->logger,
 			$this->config
 		);
-		return parent::setUp();
+		parent::setUp();
 	}
 
 	public function testCutoff() {
 		// precisely 31 second shy of 12 hours
-		$cutoff = $this->invokePrivate($this->throttler, 'getCutoff', [43169]);
+		$cutoff = self::invokePrivate($this->throttler, 'getCutoff', [43169]);
 		$this->assertSame(0, $cutoff->y);
 		$this->assertSame(0, $cutoff->m);
 		$this->assertSame(0, $cutoff->d);
 		$this->assertSame(11, $cutoff->h);
 		$this->assertSame(59, $cutoff->i);
 		$this->assertSame(29, $cutoff->s);
-		$cutoff = $this->invokePrivate($this->throttler, 'getCutoff', [86401]);
+		$cutoff = self::invokePrivate($this->throttler, 'getCutoff', [86401]);
 		$this->assertSame(0, $cutoff->y);
 		$this->assertSame(0, $cutoff->m);
 		$this->assertSame(1, $cutoff->d);
@@ -74,51 +75,6 @@ class ThrottlerTest extends TestCase {
 		$this->assertSame(0, $cutoff->i);
 		// Leap second tolerance:
 		$this->assertLessThan(2, $cutoff->s);
-	}
-
-	public function testSubnet() {
-		// IPv4
-		$this->assertSame(
-			'64.233.191.254/32',
-			$this->invokePrivate($this->throttler, 'getIPv4Subnet', ['64.233.191.254', 32])
-		);
-		$this->assertSame(
-			'64.233.191.252/30',
-			$this->invokePrivate($this->throttler, 'getIPv4Subnet', ['64.233.191.254', 30])
-		);
-		$this->assertSame(
-			'64.233.191.240/28',
-			$this->invokePrivate($this->throttler, 'getIPv4Subnet', ['64.233.191.254', 28])
-		);
-		$this->assertSame(
-			'64.233.191.0/24',
-			$this->invokePrivate($this->throttler, 'getIPv4Subnet', ['64.233.191.254', 24])
-		);
-		$this->assertSame(
-			'64.233.188.0/22',
-			$this->invokePrivate($this->throttler, 'getIPv4Subnet', ['64.233.191.254', 22])
-		);
-		// IPv6
-		$this->assertSame(
-			'2001:db8:85a3::8a2e:370:7334/127',
-			$this->invokePrivate($this->throttler, 'getIPv6Subnet', ['2001:0db8:85a3:0000:0000:8a2e:0370:7334', 127])
-		);
-		$this->assertSame(
-			'2001:db8:85a3::8a2e:370:7300/120',
-			$this->invokePrivate($this->throttler, 'getIPv6Subnet', ['2001:0db8:85a3:0000:0000:8a2e:0370:7300', 120])
-		);
-		$this->assertSame(
-			'2001:db8:85a3::/64',
-			$this->invokePrivate($this->throttler, 'getIPv6Subnet', ['2001:0db8:85a3:0000:0000:8a2e:0370:7334', 64])
-		);
-		$this->assertSame(
-			'2001:db8:85a3::/48',
-			$this->invokePrivate($this->throttler, 'getIPv6Subnet', ['2001:0db8:85a3:0000:0000:8a2e:0370:7334', 48])
-		);
-		$this->assertSame(
-			'2001:db8:8500::/40',
-			$this->invokePrivate($this->throttler, 'getIPv6Subnet', ['2001:0db8:85a3:0000:0000:8a2e:0370:7334', 40])
-		);
 	}
 
 	public function dataIsIPWhitelisted() {
@@ -142,6 +98,27 @@ class ThrottlerTest extends TestCase {
 				[
 					'whitelist_0' => '192.168.0.0/16',
 					'whitelist_1' => '10.10.10.0/24',
+				],
+				true,
+			],
+			[
+				'10.10.10.10',
+				[
+					'whitelist_0' => '10.10.10.11/31',
+				],
+				true,
+			],
+			[
+				'10.10.10.10',
+				[
+					'whitelist_0' => '10.10.10.9/31',
+				],
+				false,
+			],
+			[
+				'10.10.10.10',
+				[
+					'whitelist_0' => '10.10.10.15/29',
 				],
 				true,
 			],
@@ -173,11 +150,55 @@ class ThrottlerTest extends TestCase {
 				true,
 			],
 			[
+				'dead:beef:cafe::1111',
+				[
+					'whitelist_0' => 'dead:beef:cafe::1100/123',
+
+				],
+				true,
+			],
+			[
 				'invalid',
 				[],
 				false,
 			],
 		];
+	}
+
+	/**
+	 * @param string $ip
+	 * @param string[] $whitelists
+	 * @param bool $isWhiteListed
+	 * @param bool $enabled
+	 */
+	private function isIpWhiteListedHelper($ip,
+										 $whitelists,
+										 $isWhiteListed,
+										 $enabled) {
+		$this->config->method('getAppKeys')
+			->with($this->equalTo('bruteForce'))
+			->willReturn(array_keys($whitelists));
+		$this->config
+			->expects($this->once())
+			->method('getSystemValue')
+			->with('auth.bruteforce.protection.enabled', true)
+			->willReturn($enabled);
+
+		$this->config->method('getAppValue')
+			->willReturnCallback(function ($app, $key, $default) use ($whitelists) {
+				if ($app !== 'bruteForce') {
+					return $default;
+				}
+				if (isset($whitelists[$key])) {
+					return $whitelists[$key];
+				}
+				return $default;
+			});
+
+		$this->assertSame(
+			($enabled === false) ? true : $isWhiteListed,
+			self::invokePrivate($this->throttler, 'isIPWhitelisted', [$ip])
+		);
 	}
 
 	/**
@@ -187,25 +208,32 @@ class ThrottlerTest extends TestCase {
 	 * @param string[] $whitelists
 	 * @param bool $isWhiteListed
 	 */
-	public function testIsIPWhitelisted($ip, $whitelists, $isWhiteListed) {
-		$this->config->method('getAppKeys')
-			->with($this->equalTo('bruteForce'))
-			->willReturn(array_keys($whitelists));
-
-		$this->config->method('getAppValue')
-			->will($this->returnCallback(function($app, $key, $default) use ($whitelists) {
-				if ($app !== 'bruteForce') {
-					return $default;
-				}
-				if (isset($whitelists[$key])) {
-					return $whitelists[$key];
-				}
-				return $default;
-			}));
-
-		$this->assertSame(
+	public function testIsIpWhiteListedWithEnabledProtection($ip,
+															 $whitelists,
+															 $isWhiteListed) {
+		$this->isIpWhiteListedHelper(
+			$ip,
+			$whitelists,
 			$isWhiteListed,
-			$this->invokePrivate($this->throttler, 'isIPWhitelisted', [$ip])
+			true
+		);
+	}
+
+	/**
+	 * @dataProvider dataIsIPWhitelisted
+	 *
+	 * @param string $ip
+	 * @param string[] $whitelists
+	 * @param bool $isWhiteListed
+	 */
+	public function testIsIpWhiteListedWithDisabledProtection($ip,
+															 $whitelists,
+															 $isWhiteListed) {
+		$this->isIpWhiteListedHelper(
+			$ip,
+			$whitelists,
+			$isWhiteListed,
+			false
 		);
 	}
 }

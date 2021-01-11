@@ -2,6 +2,12 @@
 /**
  * @copyright Copyright (c) 2016 Joas Schilling <coding@schilljs.com>
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author John Molakvoæ (skjnldsv) <skjnldsv@protonmail.com>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Thomas Citharel <nextcloud@tcit.fr>
+ *
  * @license GNU AGPL version 3 or any later version
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,7 +21,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
@@ -24,24 +30,38 @@ namespace OCA\DAV\Tests\unit\CalDAV\Activity\Provider;
 use OCA\DAV\CalDAV\Activity\Provider\Base;
 use OCP\Activity\IEvent;
 use OCP\Activity\IProvider;
+use OCP\IGroupManager;
+use OCP\IL10N;
+use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserManager;
+use PHPUnit\Framework\MockObject\MockObject;
 use Test\TestCase;
 
 class BaseTest extends TestCase {
 
-	/** @var IUserManager|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var IUserManager|MockObject */
 	protected $userManager;
 
-	/** @var IProvider|Base|\PHPUnit_Framework_MockObject_MockObject */
+	/** @var IGroupManager|MockObject */
+	protected $groupManager;
+
+	/** @var IURLGenerator|MockObject */
+	protected $url;
+
+	/** @var IProvider|Base|MockObject */
 	protected $provider;
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 		$this->userManager = $this->createMock(IUserManager::class);
+		$this->groupManager = $this->createMock(IGroupManager::class);
+		$this->url = $this->createMock(IURLGenerator::class);
 		$this->provider = $this->getMockBuilder(Base::class)
 			->setConstructorArgs([
-				$this->userManager
+				$this->userManager,
+				$this->groupManager,
+				$this->url,
 			])
 			->setMethods(['parse'])
 			->getMock();
@@ -60,7 +80,7 @@ class BaseTest extends TestCase {
 	 * @param array $parameters
 	 * @param string $parsedSubject
 	 */
-	public function testSetSubjects($subject, array $parameters, $parsedSubject) {
+	public function testSetSubjects(string $subject, array $parameters, string $parsedSubject) {
 		$event = $this->createMock(IEvent::class);
 		$event->expects($this->once())
 			->method('setRichSubject')
@@ -74,61 +94,53 @@ class BaseTest extends TestCase {
 		$this->invokePrivate($this->provider, 'setSubjects', [$event, $subject, $parameters]);
 	}
 
-	public function dataGenerateObjectParameter() {
-		return [
-			[23, 'c1'],
-			[42, 'c2'],
-		];
-	}
-
-	/**
-	 * @dataProvider dataGenerateObjectParameter
-	 * @param int $id
-	 * @param string $name
-	 */
-	public function testGenerateObjectParameter($id, $name) {
-		$this->assertEquals([
-			'type' => 'calendar-event',
-			'id' => $id,
-			'name' => $name,
-		], $this->invokePrivate($this->provider, 'generateObjectParameter', [['id' => $id, 'name' => $name]]));
-	}
-
-	public function dataGenerateObjectParameterThrows() {
-		return [
-			['event'],
-			[['name' => 'event']],
-			[['id' => 42]],
-		];
-	}
-
-	/**
-	 * @dataProvider dataGenerateObjectParameterThrows
-	 * @expectedException \InvalidArgumentException
-	 * @param mixed $eventData
-	 */
-	public function testGenerateObjectParameterThrows($eventData) {
-		$this->invokePrivate($this->provider, 'generateObjectParameter', [$eventData]);
-	}
-
 	public function dataGenerateCalendarParameter() {
 		return [
-			[23, 'c1'],
-			[42, 'c2'],
+			[['id' => 23, 'uri' => 'foo', 'name' => 'bar'], 'bar'],
+			[['id' => 42, 'uri' => 'foo', 'name' => 'Personal'], 'Personal'],
+			[['id' => 42, 'uri' => 'personal', 'name' => 'bar'], 'bar'],
+			[['id' => 42, 'uri' => 'personal', 'name' => 'Personal'], 't(Personal)'],
 		];
 	}
 
 	/**
 	 * @dataProvider dataGenerateCalendarParameter
+	 * @param array $data
+	 * @param string $name
+	 */
+	public function testGenerateCalendarParameter(array $data, string $name) {
+		$l = $this->createMock(IL10N::class);
+		$l->expects($this->any())
+			->method('t')
+			->willReturnCallback(function ($string, $args) {
+				return 't(' . vsprintf($string, $args) . ')';
+			});
+
+		$this->assertEquals([
+			'type' => 'calendar',
+			'id' => $data['id'],
+			'name' => $name,
+		], $this->invokePrivate($this->provider, 'generateCalendarParameter', [$data, $l]));
+	}
+
+	public function dataGenerateLegacyCalendarParameter() {
+		return [
+			[23, 'c1'],
+			[42, 'c2'],
+		];
+	}
+
+	/**
+	 * @dataProvider dataGenerateLegacyCalendarParameter
 	 * @param int $id
 	 * @param string $name
 	 */
-	public function testGenerateCalendarParameter($id, $name) {
+	public function testGenerateLegacyCalendarParameter(int $id, string $name) {
 		$this->assertEquals([
 			'type' => 'calendar',
 			'id' => $id,
 			'name' => $name,
-		], $this->invokePrivate($this->provider, 'generateCalendarParameter', [$id, $name]));
+		], $this->invokePrivate($this->provider, 'generateLegacyCalendarParameter', [$id, $name]));
 	}
 
 	public function dataGenerateGroupParameter() {
@@ -142,9 +154,9 @@ class BaseTest extends TestCase {
 	 * @dataProvider dataGenerateGroupParameter
 	 * @param string $gid
 	 */
-	public function testGenerateGroupParameter($gid) {
+	public function testGenerateGroupParameter(string $gid) {
 		$this->assertEquals([
-			'type' => 'group',
+			'type' => 'user-group',
 			'id' => $gid,
 			'name' => $gid,
 		], $this->invokePrivate($this->provider, 'generateGroupParameter', [$gid]));
@@ -167,7 +179,7 @@ class BaseTest extends TestCase {
 	 * @param string $displayName
 	 * @param IUser|null $user
 	 */
-	public function testGenerateUserParameter($uid, $displayName, $user) {
+	public function testGenerateUserParameter(string $uid, string $displayName, ?IUser $user) {
 		$this->userManager->expects($this->once())
 			->method('get')
 			->with($uid)

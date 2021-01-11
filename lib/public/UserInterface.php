@@ -5,6 +5,7 @@
  * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
  * @author Jörn Friedrich Dreyer <jfd@butonic.de>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -18,7 +19,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -30,12 +31,12 @@
 
 // use OCP namespace for all classes that are considered public.
 // This means that they should be used by apps instead of the internal ownCloud classes
+
 namespace OCP;
 
 /**
  * TODO actually this is a IUserBackend
  *
- * @package OCP
  * @since 4.5.0
  */
 interface UserInterface {
@@ -46,8 +47,9 @@ interface UserInterface {
 	 * @return boolean
 	 *
 	 * Returns the supported actions as int to be
-	 * compared with \OC_User_Backend::CREATE_USER etc.
+	 * compared with \OC\User\Backend::CREATE_USER etc.
 	 * @since 4.5.0
+	 * @deprecated 14.0.0 Switch to the interfaces from OCP\User\Backend
 	 */
 	public function implementsActions($actions);
 
@@ -103,5 +105,4 @@ interface UserInterface {
 	 * @since 4.5.0
 	 */
 	public function hasUserListings();
-
 }

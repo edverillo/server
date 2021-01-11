@@ -17,7 +17,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -25,12 +25,15 @@ namespace OC\OCS;
 
 class Exception extends \Exception {
 
+	/** @var Result */
+	private $result;
+
 	public function __construct(Result $result) {
+		parent::__construct();
 		$this->result = $result;
 	}
 
 	public function getResult() {
 		return $this->result;
 	}
-
 }

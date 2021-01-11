@@ -31,6 +31,16 @@
 				Files.updateMaxUploadFilesize(response);
 			});
 		},
+		// update quota
+		updateStorageQuotas: function() {
+			Files._updateStorageQuotasThrottled();
+		},
+		_updateStorageQuotas: function() {
+			var state = Files.updateStorageQuotas;
+			state.call = $.getJSON(OC.filePath('files','ajax','getstoragestats.php'),function(response) {
+				Files.updateQuota(response);
+			});
+		},
 		/**
 		 * Update storage statistics such as free space, max upload,
 		 * etc based on the given directory.
@@ -62,9 +72,12 @@
 				$('#free_space').val(response.data.freeSpace);
 				$('#upload.button').attr('data-original-title', response.data.maxHumanFilesize);
 				$('#usedSpacePercent').val(response.data.usedSpacePercent);
+				$('#usedSpacePercent').data('mount-type', response.data.mountType);
+				$('#usedSpacePercent').data('mount-point', response.data.mountPoint);
 				$('#owner').val(response.data.owner);
 				$('#ownerDisplayName').val(response.data.ownerDisplayName);
 				Files.displayStorageWarnings();
+				OCA.Files.App.fileList._updateDirectoryPermissions();
 			}
 			if (response[0] === undefined) {
 				return;
@@ -73,6 +86,32 @@
 				$('#upload.button').attr('data-original-title', response[0].maxHumanFilesize);
 				$('#usedSpacePercent').val(response[0].usedSpacePercent);
 				Files.displayStorageWarnings();
+			}
+
+		},
+
+		updateQuota:function(response) {
+			if (response === undefined) {
+				return;
+			}
+			if (response.data !== undefined
+			 && response.data.quota !== undefined
+			 && response.data.used !== undefined
+			 && response.data.usedSpacePercent !== undefined) {
+				var humanUsed = OC.Util.humanFileSize(response.data.used, true);
+				var humanQuota = OC.Util.humanFileSize(response.data.quota, true);
+				if (response.data.quota > 0) {
+					$('#quota').attr('data-original-title', Math.floor(response.data.used/response.data.quota*1000)/10 + '%');
+					$('#quota progress').val(response.data.usedSpacePercent);
+					$('#quotatext').text(t('files', '{used} of {quota} used', {used: humanUsed, quota: humanQuota}));
+				} else {
+					$('#quotatext').text(t('files', '{used} used', {used: humanUsed}));
+				}
+				if (response.data.usedSpacePercent > 80) {
+					$('#quota progress').addClass('warn');
+				} else {
+					$('#quota progress').removeClass('warn');
+				}
 			}
 
 		},
@@ -93,15 +132,19 @@
 		 * @return true if the file name is valid.
 		 * Throws a string exception with an error message if
 		 * the file name is not valid
+		 *
+		 * NOTE: This function is duplicated in the filepicker inside core/src/OC/dialogs.js
 		 */
 		isFileNameValid: function (name) {
 			var trimmedName = name.trim();
-			if (trimmedName === '.'	|| trimmedName === '..')
+			if (trimmedName === '.' || trimmedName === '..')
 			{
 				throw t('files', '"{name}" is an invalid file name.', {name: name});
 			} else if (trimmedName.length === 0) {
 				throw t('files', 'File name cannot be empty.');
-			} else if (OC.fileIsBlacklisted(trimmedName)) {
+			} else if (trimmedName.indexOf('/') !== -1) {
+				throw t('files', '"/" is not allowed inside a file name.');
+			} else if (!!(trimmedName.match(OC.config.blacklist_files_regex))) {
 				throw t('files', '"{name}" is not an allowed filetype', {name: name});
 			}
 
@@ -114,37 +157,61 @@
 
 			var usedSpacePercent = $('#usedSpacePercent').val(),
 				owner = $('#owner').val(),
-				ownerDisplayName = $('#ownerDisplayName').val();
+				ownerDisplayName = $('#ownerDisplayName').val(),
+				mountType = $('#usedSpacePercent').data('mount-type'),
+				mountPoint = $('#usedSpacePercent').data('mount-point');
 			if (usedSpacePercent > 98) {
-				if (owner !== oc_current_user) {
-					OC.Notification.show(t('files', 'Storage of {owner} is full, files can not be updated or synced anymore!', 
+				if (owner !== OC.getCurrentUser().uid) {
+					OC.Notification.show(t('files', 'Storage of {owner} is full, files can not be updated or synced anymore!',
 						{owner: ownerDisplayName}), {type: 'error'}
 					);
-					return;
+				} else if (mountType === 'group') {
+					OC.Notification.show(t('files',
+						'Group folder "{mountPoint}" is full, files can not be updated or synced anymore!',
+						{mountPoint: mountPoint}),
+						{type: 'error'}
+					);
+				} else if (mountType === 'external') {
+					OC.Notification.show(t('files',
+						'External storage "{mountPoint}" is full, files can not be updated or synced anymore!',
+						{mountPoint: mountPoint}),
+						{type : 'error'}
+					);
+				} else {
+					OC.Notification.show(t('files',
+						'Your storage is full, files can not be updated or synced anymore!'),
+						{type: 'error'}
+					);
 				}
-				OC.Notification.show(t('files', 
-					'Your storage is full, files can not be updated or synced anymore!'), 
-					{type : 'error'}
-				);
-				return;
-			}
-			if (usedSpacePercent > 90) {
-				if (owner !== oc_current_user) {
-					OC.Notification.show(t('files', 'Storage of {owner} is almost full ({usedSpacePercent}%)', 
+			} else if (usedSpacePercent > 90) {
+				if (owner !== OC.getCurrentUser().uid) {
+					OC.Notification.show(t('files', 'Storage of {owner} is almost full ({usedSpacePercent}%).',
 						{
-							usedSpacePercent: usedSpacePercent,  
+							usedSpacePercent: usedSpacePercent,
 							owner: ownerDisplayName
 						}),
-						{  
+						{
 							type: 'error'
 						}
 					);
-					return;
+				} else if (mountType === 'group') {
+					OC.Notification.show(t('files',
+						'Group folder "{mountPoint}" is almost full ({usedSpacePercent}%).',
+						{mountPoint: mountPoint, usedSpacePercent: usedSpacePercent}),
+						{type : 'error'}
+					);
+				} else if (mountType === 'external') {
+					OC.Notification.show(t('files',
+						'External storage "{mountPoint}" is almost full ({usedSpacePercent}%).',
+						{mountPoint: mountPoint, usedSpacePercent: usedSpacePercent}),
+						{type : 'error'}
+					);
+				} else {
+					OC.Notification.show(t('files', 'Your storage is almost full ({usedSpacePercent}%).',
+						{usedSpacePercent: usedSpacePercent}),
+						{type : 'error'}
+					);
 				}
-				OC.Notification.show(t('files', 'Your storage is almost full ({usedSpacePercent}%)',
-					{usedSpacePercent: usedSpacePercent}), 
-					{type : 'error'}
-				);
 			}
 		},
 
@@ -250,7 +317,7 @@
 			setTimeout(Files.displayStorageWarnings, 100);
 
 			// only possible at the moment if user is logged in or the files app is loaded
-			if (OC.currentUser && OCA.Files.App) {
+			if (OC.currentUser && OCA.Files.App && OC.config.session_keepalive) {
 				// start on load - we ask the server every 5 minutes
 				var func = _.bind(OCA.Files.App.fileList.updateStorageStatistics, OCA.Files.App.fileList);
 				var updateStorageStatisticsInterval = 5*60*1000;
@@ -297,7 +364,7 @@
 		 * - JS periodically checks for this cookie and then knows when the download has started to call the callback
 		 *
 		 * @param {string} url download URL
-		 * @param {function} callback function to call once the download has started
+		 * @param {Function} callback function to call once the download has started
 		 */
 		handleDownload: function(url, callback) {
 			var randomToken = Math.random().toString(36).substring(2),
@@ -321,6 +388,7 @@
 	};
 
 	Files._updateStorageStatisticsDebounced = _.debounce(Files._updateStorageStatistics, 250);
+	Files._updateStorageQuotasThrottled = _.throttle(Files._updateStorageQuotas, 30000);
 	OCA.Files.Files = Files;
 })();
 
@@ -363,7 +431,7 @@ var createDragShadow = function(event) {
 		tbody.append(newtr);
 		if (elem.type === 'dir') {
 			newtr.find('td.filename')
-				.css('background-image', 'url(' + OC.imagePath('core', 'filetypes/folder.svg') + ')');
+				.css('background-image', 'url(' + OC.MimeType.getIconUrl('folder') + ')');
 		} else {
 			var path = dir + '/' + elem.name;
 			Files.lazyLoadPreview(path, elem.mimetype, function(previewpath) {
@@ -383,7 +451,6 @@ var dragOptions={
 	revert: 'invalid',
 	revertDuration: 300,
 	opacity: 0.7,
-	zIndex: 100,
 	appendTo: 'body',
 	cursorAt: { left: 24, top: 18 },
 	helper: createDragShadow,
@@ -396,6 +463,8 @@ var dragOptions={
 		}
 		$selectedFiles.closest('tr').addClass('animate-opacity dragging');
 		$selectedFiles.closest('tr').filter('.ui-droppable').droppable( 'disable' );
+		// Show breadcrumbs menu
+		$('.crumbmenu').addClass('canDropChildren');
 
 	},
 	stop: function(event, ui) {
@@ -411,23 +480,24 @@ var dragOptions={
 		setTimeout(function() {
 			$tr.removeClass('animate-opacity');
 		}, 300);
+		// Hide breadcrumbs menu
+		$('.crumbmenu').removeClass('canDropChildren');
 	},
 	drag: function(event, ui) {
-		var scrollingArea = FileList.$container;
+		var scrollingArea = window;
 		var currentScrollTop = $(scrollingArea).scrollTop();
 		var scrollArea = Math.min(Math.floor($(window).innerHeight() / 2), 100);
 
 		var bottom = $(window).innerHeight() - scrollArea;
 		var top = $(window).scrollTop() + scrollArea;
 		if (event.pageY < top) {
-			$('html, body').animate({
-
-				scrollTop: $(scrollingArea).scrollTop(currentScrollTop - 10)
+			$(scrollingArea).animate({
+				scrollTop: currentScrollTop - 10
 			}, 400);
 
 		} else if (event.pageY > bottom) {
-			$('html, body').animate({
-				scrollTop: $(scrollingArea).scrollTop(currentScrollTop + 10)
+			$(scrollingArea).animate({
+				scrollTop: currentScrollTop + 10
 			}, 400);
 		}
 
@@ -467,11 +537,6 @@ var folderDropOptions = {
 	},
 	tolerance: 'pointer'
 };
-
-// override core's fileDownloadPath (legacy)
-function fileDownloadPath(dir, file) {
-	return OCA.Files.Files.getDownloadUrl(file, dir);
-}
 
 // for backward compatibility
 window.Files = OCA.Files.Files;

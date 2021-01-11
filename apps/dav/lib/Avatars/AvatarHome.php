@@ -1,8 +1,12 @@
 <?php
 /**
+ * @copyright Copyright (c) 2016, ownCloud GmbH
+ *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
- * @copyright Copyright (c) 2016, ownCloud GmbH
  * @license AGPL-3.0
  *
  * This code is free software: you can redistribute it and/or modify
@@ -15,13 +19,11 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
-
 namespace OCA\DAV\Avatars;
-
 
 use OCP\IAvatarManager;
 use Sabre\DAV\Exception\Forbidden;
@@ -67,7 +69,7 @@ class AvatarHome implements ICollection {
 			throw new MethodNotAllowed('Invalid image size');
 		}
 		$avatar = $this->avatarManager->getAvatar($this->getName());
-		if ($avatar === null || !$avatar->exists()) {
+		if (!$avatar->exists()) {
 			throw new NotFound();
 		}
 		return new AvatarNode($size, $ext, $avatar);
@@ -78,7 +80,7 @@ class AvatarHome implements ICollection {
 			return [
 				$this->getChild('96.jpeg')
 			];
-		} catch(NotFound $exception) {
+		} catch (NotFound $exception) {
 			return [];
 		}
 	}
@@ -115,6 +117,4 @@ class AvatarHome implements ICollection {
 	public function getLastModified() {
 		return null;
 	}
-
-
 }

@@ -2,7 +2,12 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
  * @author Björn Schießle <bjoern@schiessle.org>
+ * @author Joas Schilling <coding@schilljs.com>
+ * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -16,20 +21,16 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
-
 namespace OCA\FederatedFileSharing\BackgroundJob;
 
-
-use OC\BackgroundJob\Job;
-use OC\BackgroundJob\JobList;
-use OCA\FederatedFileSharing\AddressHandler;
-use OCA\FederatedFileSharing\DiscoveryManager;
 use OCA\FederatedFileSharing\Notifications;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
+use OCP\BackgroundJob\Job;
 use OCP\ILogger;
 
 /**
@@ -54,42 +55,20 @@ class RetryJob extends Job {
 	/** @var int how much time should be between two tries (10 minutes) */
 	private $interval = 600;
 
-	/**
-	 * UnShare constructor.
-	 *
-	 * @param Notifications $notifications
-	 */
-	public function __construct(Notifications $notifications = null) {
-		if ($notifications) {
-			$this->notifications = $notifications;
-		} else {
-			$addressHandler = new AddressHandler(
-				\OC::$server->getURLGenerator(),
-				\OC::$server->getL10N('federatedfilesharing'),
-				\OC::$server->getCloudIdManager()
-			);
-			$discoveryManager = new DiscoveryManager(
-				\OC::$server->getMemCacheFactory(),
-				\OC::$server->getHTTPClientService()
-			);
-			$this->notifications = new Notifications(
-				$addressHandler,
-				\OC::$server->getHTTPClientService(),
-				$discoveryManager,
-				\OC::$server->getJobList()
-			);
-		}
 
+	public function __construct(Notifications $notifications,
+								ITimeFactory $timeFactory) {
+		parent::__construct($timeFactory);
+		$this->notifications = $notifications;
 	}
 
 	/**
 	 * run the job, then remove it from the jobList
 	 *
-	 * @param JobList $jobList
-	 * @param ILogger $logger
+	 * @param IJobList $jobList
+	 * @param ILogger|null $logger
 	 */
-	public function execute($jobList, ILogger $logger = null) {
-
+	public function execute(IJobList $jobList, ILogger $logger = null) {
 		if ($this->shouldRun($this->argument)) {
 			parent::execute($jobList, $logger);
 			$jobList->remove($this, $this->argument);
@@ -108,7 +87,7 @@ class RetryJob extends Job {
 		$try = (int)$argument['try'] + 1;
 
 		$result = $this->notifications->sendUpdateToRemote($remote, $remoteId, $token, $action, $data, $try);
-		
+
 		if ($result === true || $try > $this->maxTry) {
 			$this->retainJob = false;
 		}
@@ -121,7 +100,7 @@ class RetryJob extends Job {
 	 * @param array $argument
 	 */
 	protected function reAddJob(IJobList $jobList, array $argument) {
-		$jobList->add('OCA\FederatedFileSharing\BackgroundJob\RetryJob',
+		$jobList->add(RetryJob::class,
 			[
 				'remote' => $argument['remote'],
 				'remoteId' => $argument['remoteId'],
@@ -129,7 +108,7 @@ class RetryJob extends Job {
 				'data' => $argument['data'],
 				'action' => $argument['action'],
 				'try' => (int)$argument['try'] + 1,
-				'lastRun' => time()
+				'lastRun' => $this->time->getTime()
 			]
 		);
 	}
@@ -142,7 +121,6 @@ class RetryJob extends Job {
 	 */
 	protected function shouldRun(array $argument) {
 		$lastRun = (int)$argument['lastRun'];
-		return ((time() - $lastRun) > $this->interval);
+		return (($this->time->getTime() - $lastRun) > $this->interval);
 	}
-
 }

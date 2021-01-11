@@ -2,9 +2,12 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
  * @author Björn Schießle <bjoern@schiessle.org>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @license AGPL-3.0
@@ -19,16 +22,15 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
-
 namespace OCA\Federation\Tests;
-
 
 use OCA\Federation\DbHandler;
 use OCA\Federation\TrustedServers;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
@@ -41,37 +43,40 @@ use Test\TestCase;
 
 class TrustedServersTest extends TestCase {
 
-	/** @var \PHPUnit_Framework_MockObject_MockObject | TrustedServers */
+	/** @var \PHPUnit\Framework\MockObject\MockObject | TrustedServers */
 	private $trustedServers;
 
-	/** @var  \PHPUnit_Framework_MockObject_MockObject | DbHandler */
+	/** @var  \PHPUnit\Framework\MockObject\MockObject | DbHandler */
 	private $dbHandler;
 
-	/** @var \PHPUnit_Framework_MockObject_MockObject | IClientService */
+	/** @var \PHPUnit\Framework\MockObject\MockObject | IClientService */
 	private $httpClientService;
 
-	/** @var  \PHPUnit_Framework_MockObject_MockObject | IClient */
+	/** @var  \PHPUnit\Framework\MockObject\MockObject | IClient */
 	private $httpClient;
 
-	/** @var  \PHPUnit_Framework_MockObject_MockObject | IResponse */
+	/** @var  \PHPUnit\Framework\MockObject\MockObject | IResponse */
 	private $response;
 
-	/** @var  \PHPUnit_Framework_MockObject_MockObject | ILogger */
+	/** @var  \PHPUnit\Framework\MockObject\MockObject | ILogger */
 	private $logger;
 
-	/** @var  \PHPUnit_Framework_MockObject_MockObject | IJobList */
+	/** @var  \PHPUnit\Framework\MockObject\MockObject | IJobList */
 	private $jobList;
 
-	/** @var  \PHPUnit_Framework_MockObject_MockObject | ISecureRandom */
+	/** @var  \PHPUnit\Framework\MockObject\MockObject | ISecureRandom */
 	private $secureRandom;
 
-	/** @var  \PHPUnit_Framework_MockObject_MockObject | IConfig */
+	/** @var  \PHPUnit\Framework\MockObject\MockObject | IConfig */
 	private $config;
 
-	/** @var  \PHPUnit_Framework_MockObject_MockObject | EventDispatcherInterface */
+	/** @var  \PHPUnit\Framework\MockObject\MockObject | EventDispatcherInterface */
 	private $dispatcher;
 
-	public function setUp() {
+	/** @var \PHPUnit\Framework\MockObject\MockObject|ITimeFactory */
+	private $timeFactory;
+
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->dbHandler = $this->getMockBuilder(DbHandler::class)
@@ -85,6 +90,7 @@ class TrustedServersTest extends TestCase {
 		$this->jobList = $this->getMockBuilder(IJobList::class)->getMock();
 		$this->secureRandom = $this->getMockBuilder(ISecureRandom::class)->getMock();
 		$this->config = $this->getMockBuilder(IConfig::class)->getMock();
+		$this->timeFactory = $this->createMock(ITimeFactory::class);
 
 		$this->trustedServers = new TrustedServers(
 			$this->dbHandler,
@@ -93,9 +99,9 @@ class TrustedServersTest extends TestCase {
 			$this->jobList,
 			$this->secureRandom,
 			$this->config,
-			$this->dispatcher
+			$this->dispatcher,
+			$this->timeFactory
 		);
-
 	}
 
 	/**
@@ -104,7 +110,7 @@ class TrustedServersTest extends TestCase {
 	 * @param bool $success
 	 */
 	public function testAddServer($success) {
-		/** @var \PHPUnit_Framework_MockObject_MockObject|TrustedServers $trustedServers */
+		/** @var \PHPUnit\Framework\MockObject\MockObject|TrustedServers $trustedServers */
 		$trustedServers = $this->getMockBuilder('OCA\Federation\TrustedServers')
 			->setConstructorArgs(
 				[
@@ -114,13 +120,16 @@ class TrustedServersTest extends TestCase {
 					$this->jobList,
 					$this->secureRandom,
 					$this->config,
-					$this->dispatcher
+					$this->dispatcher,
+					$this->timeFactory
 				]
 			)
 			->setMethods(['normalizeUrl', 'updateProtocol'])
 			->getMock();
 		$trustedServers->expects($this->once())->method('updateProtocol')
 				->with('url')->willReturn('https://url');
+		$this->timeFactory->method('getTime')
+			->willReturn(1234567);
 		$this->dbHandler->expects($this->once())->method('addServer')->with('https://url')
 			->willReturn($success);
 
@@ -130,7 +139,7 @@ class TrustedServersTest extends TestCase {
 			$this->dbHandler->expects($this->once())->method('addToken')->with('https://url', 'token');
 			$this->jobList->expects($this->once())->method('add')
 				->with('OCA\Federation\BackgroundJob\RequestSharedSecret',
-						['url' => 'https://url', 'token' => 'token']);
+						['url' => 'https://url', 'token' => 'token', 'created' => 1234567]);
 		} else {
 			$this->jobList->expects($this->never())->method('add');
 		}
@@ -208,7 +217,7 @@ class TrustedServersTest extends TestCase {
 			->willReturn($server);
 		$this->dispatcher->expects($this->once())->method('dispatch')
 			->willReturnCallback(
-				function($eventId, $event) {
+				function ($eventId, $event) {
 					$this->assertSame($eventId, 'OCP\Federation\TrustedServerEvent::remove');
 					$this->assertInstanceOf('Symfony\Component\EventDispatcher\GenericEvent', $event);
 					/** @var \Symfony\Component\EventDispatcher\GenericEvent $event */
@@ -259,10 +268,9 @@ class TrustedServersTest extends TestCase {
 	 * @param bool $expected
 	 */
 	public function testIsOwnCloudServer($statusCode, $isValidOwnCloudVersion, $expected) {
-
 		$server = 'server1';
 
-		/** @var \PHPUnit_Framework_MockObject_MockObject | TrustedServers $trustedServers */
+		/** @var \PHPUnit\Framework\MockObject\MockObject | TrustedServers $trustedServers */
 		$trustedServers = $this->getMockBuilder('OCA\Federation\TrustedServers')
 			->setConstructorArgs(
 				[
@@ -272,7 +280,8 @@ class TrustedServersTest extends TestCase {
 					$this->jobList,
 					$this->secureRandom,
 					$this->config,
-					$this->dispatcher
+					$this->dispatcher,
+					$this->timeFactory
 				]
 			)
 			->setMethods(['checkOwnCloudVersion'])
@@ -297,7 +306,6 @@ class TrustedServersTest extends TestCase {
 		$this->assertSame($expected,
 			$trustedServers->isOwnCloudServer($server)
 		);
-
 	}
 
 	public function dataTestIsOwnCloudServer() {
@@ -341,10 +349,11 @@ class TrustedServersTest extends TestCase {
 
 	/**
 	 * @dataProvider dataTestCheckOwnCloudVersionTooLow
-	 * @expectedException \OC\HintException
-	 * @expectedExceptionMessage Remote server version is too low. 9.0 is required.
 	 */
 	public function testCheckOwnCloudVersionTooLow($status) {
+		$this->expectException(\OC\HintException::class);
+		$this->expectExceptionMessage('Remote server version is too low. 9.0 is required.');
+
 		$this->invokePrivate($this->trustedServers, 'checkOwnCloudVersion', [$status]);
 	}
 

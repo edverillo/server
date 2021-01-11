@@ -1,7 +1,11 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright 2016 Roeland Jago Douma <roeland@famdouma.nl>
  *
+ * @author Robin Appelman <robin@icewind.nl>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license GNU AGPL version 3 or any later version
@@ -17,9 +21,10 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
+
 namespace OC\Files\AppData;
 
 use OC\SystemConfig;
@@ -33,9 +38,10 @@ class Factory {
 	/** @var SystemConfig */
 	private $config;
 
+	private $folders = [];
+
 	public function __construct(IRootFolder $rootFolder,
 								SystemConfig $systemConfig) {
-
 		$this->rootFolder = $rootFolder;
 		$this->config = $systemConfig;
 	}
@@ -44,7 +50,10 @@ class Factory {
 	 * @param string $appId
 	 * @return AppData
 	 */
-	public function get($appId) {
-		return new AppData($this->rootFolder, $this->config, $appId);
+	public function get(string $appId): AppData {
+		if (!isset($this->folders[$appId])) {
+			$this->folders[$appId] = new AppData($this->rootFolder, $this->config, $appId);
+		}
+		return $this->folders[$appId];
 	}
 }

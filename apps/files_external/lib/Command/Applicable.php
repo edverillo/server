@@ -2,8 +2,10 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Robin Appelman <robin@icewind.nl>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -17,7 +19,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -50,7 +52,7 @@ class Applicable extends Base {
 	 */
 	private $groupManager;
 
-	function __construct(
+	public function __construct(
 		GlobalStoragesService $globalService,
 		IUserManager $userManager,
 		IGroupManager $groupManager
@@ -71,34 +73,34 @@ class Applicable extends Base {
 				'The id of the mount to edit'
 			)->addOption(
 				'add-user',
-				null,
+				'',
 				InputOption::VALUE_IS_ARRAY | InputOption::VALUE_REQUIRED,
 				'user to add as applicable'
 			)->addOption(
 				'remove-user',
-				null,
+				'',
 				InputOption::VALUE_IS_ARRAY | InputOption::VALUE_REQUIRED,
 				'user to remove as applicable'
 			)->addOption(
 				'add-group',
-				null,
+				'',
 				InputOption::VALUE_IS_ARRAY | InputOption::VALUE_REQUIRED,
 				'group to add as applicable'
 			)->addOption(
 				'remove-group',
-				null,
+				'',
 				InputOption::VALUE_IS_ARRAY | InputOption::VALUE_REQUIRED,
 				'group to remove as applicable'
 			)->addOption(
 				'remove-all',
-				null,
+				'',
 				InputOption::VALUE_NONE,
 				'Set the mount to be globally applicable'
 			);
 		parent::configure();
 	}
 
-	protected function execute(InputInterface $input, OutputInterface $output) {
+	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$mountId = $input->getArgument('mount_id');
 		try {
 			$mount = $this->globalService->getStorage($mountId);
@@ -152,5 +154,6 @@ class Applicable extends Base {
 			'users' => $applicableUsers,
 			'groups' => $applicableGroups
 		]);
+		return 0;
 	}
 }

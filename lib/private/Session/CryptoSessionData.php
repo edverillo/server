@@ -1,10 +1,16 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
- * @author Christoph Wurst <christoph@owncloud.com>
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Victor Dubiniuk <dubiniuk@owncloud.com>
  *
  * @license AGPL-3.0
  *
@@ -18,7 +24,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -44,7 +50,7 @@ class CryptoSessionData implements \ArrayAccess, ISession {
 	protected $sessionValues;
 	/** @var bool */
 	protected $isModified = false;
-	CONST encryptedSessionName = 'encrypted_session_data';
+	public const encryptedSessionName = 'encrypted_session_data';
 
 	/**
 	 * @param ISession $session
@@ -53,7 +59,7 @@ class CryptoSessionData implements \ArrayAccess, ISession {
 	 */
 	public function __construct(ISession $session,
 								ICrypto $crypto,
-								$passphrase) {
+								string $passphrase) {
 		$this->crypto = $crypto;
 		$this->session = $session;
 		$this->passphrase = $passphrase;
@@ -64,11 +70,16 @@ class CryptoSessionData implements \ArrayAccess, ISession {
 	 * Close session if class gets destructed
 	 */
 	public function __destruct() {
-		$this->close();
+		try {
+			$this->close();
+		} catch (SessionNotAvailableException $e) {
+			// This exception can occur if session is already closed
+			// So it is safe to ignore it and let the garbage collector to proceed
+		}
 	}
 
 	protected function initializeSession() {
-		$encryptedSessionData = $this->session->get(self::encryptedSessionName);
+		$encryptedSessionData = $this->session->get(self::encryptedSessionName) ?: '';
 		try {
 			$this->sessionValues = json_decode(
 				$this->crypto->decrypt($encryptedSessionData, $this->passphrase),
@@ -76,6 +87,7 @@ class CryptoSessionData implements \ArrayAccess, ISession {
 			);
 		} catch (\Exception $e) {
 			$this->sessionValues = [];
+			$this->regenerateId(true, false);
 		}
 	}
 
@@ -85,7 +97,7 @@ class CryptoSessionData implements \ArrayAccess, ISession {
 	 * @param string $key
 	 * @param mixed $value
 	 */
-	public function set($key, $value) {
+	public function set(string $key, $value) {
 		$this->sessionValues[$key] = $value;
 		$this->isModified = true;
 	}
@@ -96,8 +108,8 @@ class CryptoSessionData implements \ArrayAccess, ISession {
 	 * @param string $key
 	 * @return string|null Either the value or null
 	 */
-	public function get($key) {
-		if(isset($this->sessionValues[$key])) {
+	public function get(string $key) {
+		if (isset($this->sessionValues[$key])) {
 			return $this->sessionValues[$key];
 		}
 
@@ -110,7 +122,7 @@ class CryptoSessionData implements \ArrayAccess, ISession {
 	 * @param string $key
 	 * @return bool
 	 */
-	public function exists($key) {
+	public function exists(string $key): bool {
 		return isset($this->sessionValues[$key]);
 	}
 
@@ -119,7 +131,7 @@ class CryptoSessionData implements \ArrayAccess, ISession {
 	 *
 	 * @param string $key
 	 */
-	public function remove($key) {
+	public function remove(string $key) {
 		$this->isModified = true;
 		unset($this->sessionValues[$key]);
 		$this->session->remove(self::encryptedSessionName);
@@ -142,10 +154,11 @@ class CryptoSessionData implements \ArrayAccess, ISession {
 	 * Wrapper around session_regenerate_id
 	 *
 	 * @param bool $deleteOldSession Whether to delete the old associated session file or not.
+	 * @param bool $updateToken Wheater to update the associated auth token
 	 * @return void
 	 */
-	public function regenerateId($deleteOldSession = true) {
-		$this->session->regenerateId($deleteOldSession);
+	public function regenerateId(bool $deleteOldSession = true, bool $updateToken = false) {
+		$this->session->regenerateId($deleteOldSession, $updateToken);
 	}
 
 	/**
@@ -155,7 +168,7 @@ class CryptoSessionData implements \ArrayAccess, ISession {
 	 * @throws SessionNotAvailableException
 	 * @since 9.1.0
 	 */
-	public function getId() {
+	public function getId(): string {
 		return $this->session->getId();
 	}
 
@@ -163,7 +176,7 @@ class CryptoSessionData implements \ArrayAccess, ISession {
 	 * Close the session and release the lock, also writes all changed data in batch
 	 */
 	public function close() {
-		if($this->isModified) {
+		if ($this->isModified) {
 			$encryptedValue = $this->crypto->encrypt(json_encode($this->sessionValues), $this->passphrase);
 			$this->session->set(self::encryptedSessionName, $encryptedValue);
 			$this->isModified = false;
@@ -175,7 +188,7 @@ class CryptoSessionData implements \ArrayAccess, ISession {
 	 * @param mixed $offset
 	 * @return bool
 	 */
-	public function offsetExists($offset) {
+	public function offsetExists($offset): bool {
 		return $this->exists($offset);
 	}
 

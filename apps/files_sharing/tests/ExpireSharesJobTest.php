@@ -2,6 +2,8 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Joas Schilling <coding@schilljs.com>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
@@ -17,13 +19,16 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\Files_Sharing\Tests;
 
 use OCA\Files_Sharing\ExpireSharesJob;
+use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\Share\IManager;
+use OCP\Share\IShare;
 
 /**
  * Class ExpireSharesJobTest
@@ -34,27 +39,19 @@ use OCA\Files_Sharing\ExpireSharesJob;
  */
 class ExpireSharesJobTest extends \Test\TestCase {
 
-	/**
-	 * @var ExpireSharesJob
-	 */
+	/** @var ExpireSharesJob */
 	private $job;
 
-	/**
-	 * @var \OCP\IDBConnection
-	 */
+	/** @var \OCP\IDBConnection */
 	private $connection;
 
-	/**
-	 * @var string
-	 */
+	/** @var string */
 	private $user1;
 
-	/**
-	 * @var string
-	 */
+	/** @var string */
 	private $user2;
 
-	protected function setup() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->connection = \OC::$server->getDatabaseConnection();
@@ -65,24 +62,24 @@ class ExpireSharesJobTest extends \Test\TestCase {
 		$this->user2 = $this->getUniqueID('user2_');
 
 		$userManager = \OC::$server->getUserManager();
-		$userManager->createUser($this->user1, 'pass');
-		$userManager->createUser($this->user2, 'pass');
+		$userManager->createUser($this->user1, 'longrandompassword');
+		$userManager->createUser($this->user2, 'longrandompassword');
 
 		\OC::registerShareHooks();
 
-		$this->job = new ExpireSharesJob();
+		$this->job = new ExpireSharesJob(\OC::$server->get(ITimeFactory::class), \OC::$server->get(IManager::class), $this->connection);
 	}
 
-	protected function tearDown() {
+	protected function tearDown(): void {
 		$this->connection->executeUpdate('DELETE FROM `*PREFIX*share`');
 
 		$userManager = \OC::$server->getUserManager();
 		$user1 = $userManager->get($this->user1);
-		if($user1) {
+		if ($user1) {
 			$user1->delete();
 		}
 		$user2 = $userManager->get($this->user2);
-		if($user2) {
+		if ($user2) {
 			$user2->delete();
 		}
 
@@ -132,15 +129,18 @@ class ExpireSharesJobTest extends \Test\TestCase {
 	public function testExpireLinkShare($addExpiration, $interval, $addInterval, $shouldExpire) {
 		$this->loginAsUser($this->user1);
 
-		$view = new \OC\Files\View('/' . $this->user1 . '/');
-		$view->mkdir('files/test');
+		$user1Folder = \OC::$server->getUserFolder($this->user1);
+		$testFolder = $user1Folder->newFolder('test');
 
-		$fileInfo = $view->getFileInfo('files/test');
+		$shareManager = \OC::$server->getShareManager();
+		$share = $shareManager->newShare();
 
-		$this->assertNotNull(
-			\OCP\Share::shareItem('folder', $fileInfo->getId(), \OCP\Share::SHARE_TYPE_LINK, null, \OCP\Constants::PERMISSION_READ),
-			'Failed asserting that user 1 successfully shared "test" by link.'
-		);
+		$share->setNode($testFolder)
+			->setShareType(IShare::TYPE_LINK)
+			->setPermissions(\OCP\Constants::PERMISSION_READ)
+			->setSharedBy($this->user1);
+
+		$shareManager->createShare($share);
 
 		$shares = $this->getShares();
 		$this->assertCount(1, $shares);
@@ -186,20 +186,22 @@ class ExpireSharesJobTest extends \Test\TestCase {
 	public function testDoNotExpireOtherShares() {
 		$this->loginAsUser($this->user1);
 
-		$view = new \OC\Files\View('/' . $this->user1 . '/');
-		$view->mkdir('files/test');
+		$user1Folder = \OC::$server->getUserFolder($this->user1);
+		$testFolder = $user1Folder->newFolder('test');
 
-		$fileInfo = $view->getFileInfo('files/test');
+		$shareManager = \OC::$server->getShareManager();
+		$share = $shareManager->newShare();
 
-		$this->assertNotNull(
-			\OCP\Share::shareItem('folder', $fileInfo->getId(), \OCP\Share::SHARE_TYPE_USER, $this->user2, \OCP\Constants::PERMISSION_READ),
-			'Failed asserting that user 1 successfully shared "test" by link with user2.'
-		);
+		$share->setNode($testFolder)
+			->setShareType(IShare::TYPE_USER)
+			->setPermissions(\OCP\Constants::PERMISSION_READ)
+			->setSharedBy($this->user1)
+			->setSharedWith($this->user2);
+
+		$shareManager->createShare($share);
 
 		$shares = $this->getShares();
 		$this->assertCount(1, $shares);
-		reset($shares);
-		$share = current($shares);
 
 		$this->logout();
 
@@ -208,6 +210,4 @@ class ExpireSharesJobTest extends \Test\TestCase {
 		$shares = $this->getShares();
 		$this->assertCount(1, $shares);
 	}
-
 }
-

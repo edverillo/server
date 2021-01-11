@@ -2,7 +2,10 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
  * @author Björn Schießle <bjoern@schiessle.org>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -16,59 +19,73 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
-
 namespace OCA\FederatedFileSharing\Tests;
 
-
 use OCA\FederatedFileSharing\AddressHandler;
-use OCA\FederatedFileSharing\DiscoveryManager;
 use OCA\FederatedFileSharing\Notifications;
 use OCP\BackgroundJob\IJobList;
+use OCP\EventDispatcher\IEventDispatcher;
+use OCP\Federation\ICloudFederationFactory;
+use OCP\Federation\ICloudFederationProviderManager;
 use OCP\Http\Client\IClientService;
+use OCP\OCS\IDiscoveryService;
 
 class NotificationsTest extends \Test\TestCase {
 
-	/** @var  AddressHandler | \PHPUnit_Framework_MockObject_MockObject */
+	/** @var  AddressHandler | \PHPUnit\Framework\MockObject\MockObject */
 	private $addressHandler;
 
-	/** @var  IClientService | \PHPUnit_Framework_MockObject_MockObject*/
+	/** @var  IClientService | \PHPUnit\Framework\MockObject\MockObject*/
 	private $httpClientService;
 
-	/** @var  DiscoveryManager | \PHPUnit_Framework_MockObject_MockObject */
-	private $discoveryManager;
+	/** @var  IDiscoveryService | \PHPUnit\Framework\MockObject\MockObject */
+	private $discoveryService;
 
-	/** @var  IJobList | \PHPUnit_Framework_MockObject_MockObject */
+	/** @var  IJobList | \PHPUnit\Framework\MockObject\MockObject */
 	private $jobList;
 
-	public function setUp() {
+	/** @var ICloudFederationProviderManager|\PHPUnit\Framework\MockObject\MockObject */
+	private $cloudFederationProviderManager;
+
+	/** @var ICloudFederationFactory|\PHPUnit\Framework\MockObject\MockObject */
+	private $cloudFederationFactory;
+
+	/** @var IEventDispatcher|\PHPUnit\Framework\MockObject\MockObject */
+	private $eventDispatcher;
+
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->jobList = $this->getMockBuilder('OCP\BackgroundJob\IJobList')->getMock();
-		$this->discoveryManager = $this->getMockBuilder('OCA\FederatedFileSharing\DiscoveryManager')
-			->disableOriginalConstructor()->getMock();
+		$this->discoveryService = $this->getMockBuilder(IDiscoveryService::class)->getMock();
 		$this->httpClientService = $this->getMockBuilder('OCP\Http\Client\IClientService')->getMock();
 		$this->addressHandler = $this->getMockBuilder('OCA\FederatedFileSharing\AddressHandler')
 			->disableOriginalConstructor()->getMock();
-
+		$this->cloudFederationProviderManager = $this->createMock(ICloudFederationProviderManager::class);
+		$this->cloudFederationFactory = $this->createMock(ICloudFederationFactory::class);
+		$this->eventDispatcher = $this->createMock(IEventDispatcher::class);
 	}
 
 	/**
 	 * get instance of Notifications class
 	 *
 	 * @param array $mockedMethods methods which should be mocked
-	 * @return Notifications | \PHPUnit_Framework_MockObject_MockObject
+	 * @return Notifications | \PHPUnit\Framework\MockObject\MockObject
 	 */
 	private function getInstance(array $mockedMethods = []) {
 		if (empty($mockedMethods)) {
 			$instance = new Notifications(
 				$this->addressHandler,
 				$this->httpClientService,
-				$this->discoveryManager,
-				$this->jobList
+				$this->discoveryService,
+				$this->jobList,
+				$this->cloudFederationProviderManager,
+				$this->cloudFederationFactory,
+				$this->eventDispatcher
 			);
 		} else {
 			$instance = $this->getMockBuilder('OCA\FederatedFileSharing\Notifications')
@@ -76,8 +93,11 @@ class NotificationsTest extends \Test\TestCase {
 					[
 						$this->addressHandler,
 						$this->httpClientService,
-						$this->discoveryManager,
-						$this->jobList
+						$this->discoveryService,
+						$this->jobList,
+						$this->cloudFederationProviderManager,
+						$this->cloudFederationFactory,
+						$this->eventDispatcher
 					]
 				)->setMethods($mockedMethods)->getMock();
 		}
@@ -98,12 +118,13 @@ class NotificationsTest extends \Test\TestCase {
 		$id = 42;
 		$timestamp = 63576;
 		$token = 'token';
+		$action = 'unshare';
 		$instance = $this->getInstance(['tryHttpPostToShareEndpoint', 'getTimestamp']);
 
 		$instance->expects($this->any())->method('getTimestamp')->willReturn($timestamp);
 
 		$instance->expects($this->once())->method('tryHttpPostToShareEndpoint')
-			->with($remote, '/'.$id.'/unshare', ['token' => $token, 'data1Key' => 'data1Value'])
+			->with($remote, '/'.$id.'/unshare', ['token' => $token, 'data1Key' => 'data1Value', 'remoteId' => $id], $action)
 			->willReturn($httpRequestResult);
 
 		// only add background job on first try
@@ -126,9 +147,8 @@ class NotificationsTest extends \Test\TestCase {
 		}
 
 		$this->assertSame($expected,
-			$instance->sendUpdateToRemote($remote, $id, $token, 'unshare', ['data1Key' => 'data1Value'], $try)
+			$instance->sendUpdateToRemote($remote, $id, $token, $action, ['data1Key' => 'data1Value'], $try)
 		);
-
 	}
 
 
@@ -148,5 +168,4 @@ class NotificationsTest extends \Test\TestCase {
 			[0, ['success' => false, 'result' => json_encode(['ocs' => ['meta' => ['statuscode' => 400]]])], false],
 		];
 	}
-
 }

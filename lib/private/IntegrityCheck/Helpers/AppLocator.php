@@ -1,8 +1,13 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -16,7 +21,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -37,10 +42,9 @@ class AppLocator {
 	 * @return string
 	 * @throws \Exception If the app cannot be found
 	 */
-	public function getAppPath($appId) {
+	public function getAppPath(string $appId): string {
 		$path = \OC_App::getAppPath($appId);
-		if($path === false) {
-
+		if ($path === false) {
 			throw new \Exception('App not found');
 		}
 		return $path;
@@ -51,7 +55,7 @@ class AppLocator {
 	 *
 	 * @return array
 	 */
-	public function getAllApps() {
+	public function getAllApps(): array {
 		return \OC_App::getAllApps();
 	}
 }

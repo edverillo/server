@@ -5,7 +5,7 @@ Feature: provisioning
 	Scenario: Getting an not existing user
 		Given As an "admin"
 		When sending "GET" to "/cloud/users/test"
-		Then the OCS status code should be "998"
+		Then the OCS status code should be "404"
 		And the HTTP status code should be "200"
 
 	Scenario: Listing all users
@@ -32,6 +32,14 @@ Feature: provisioning
 			| password | 123456 |
 		Then the OCS status code should be "102"
 		And the HTTP status code should be "200"
+		And user "brand-new-user" has
+			| id | brand-new-user |
+			| displayname | brand-new-user |
+			| email |  |
+			| phone |  |
+			| address |  |
+			| website |  |
+			| twitter |  |
 
 	Scenario: Get an existing user
 		Given As an "admin"
@@ -52,13 +60,65 @@ Feature: provisioning
 		Given As an "admin"
 		And user "brand-new-user" exists
 		When sending "PUT" to "/cloud/users/brand-new-user" with
+			| key | displayname |
+			| value | Brand New User |
+		And the OCS status code should be "100"
+		And the HTTP status code should be "200"
+		And sending "PUT" to "/cloud/users/brand-new-user" with
 			| key | quota |
 			| value | 12MB |
-			| key | email |
-			| value | brand-new-user@gmail.com |
-		Then the OCS status code should be "100"
+		And the OCS status code should be "100"
 		And the HTTP status code should be "200"
-		And user "brand-new-user" exists
+		And sending "PUT" to "/cloud/users/brand-new-user" with
+			| key | email |
+			| value | no-reply@nextcloud.com |
+		And the OCS status code should be "100"
+		And the HTTP status code should be "200"
+		And sending "PUT" to "/cloud/users/brand-new-user" with
+			| key | phone |
+			| value | +49 711 / 25 24 28-90 |
+		And the OCS status code should be "100"
+		And the HTTP status code should be "200"
+		And sending "PUT" to "/cloud/users/brand-new-user" with
+			| key | address |
+			| value | Foo Bar Town |
+		And the OCS status code should be "100"
+		And the HTTP status code should be "200"
+		And sending "PUT" to "/cloud/users/brand-new-user" with
+			| key | website |
+			| value | https://nextcloud.com |
+		And the OCS status code should be "100"
+		And the HTTP status code should be "200"
+		And sending "PUT" to "/cloud/users/brand-new-user" with
+			| key | twitter |
+			| value | Nextcloud |
+		And the OCS status code should be "100"
+		And the HTTP status code should be "200"
+		Then user "brand-new-user" has
+			| id | brand-new-user |
+			| displayname | Brand New User |
+			| email | no-reply@nextcloud.com |
+			| phone | +4971125242890 |
+			| address | Foo Bar Town |
+			| website | https://nextcloud.com |
+			| twitter | Nextcloud |
+
+	Scenario: Search by phone number
+		Given As an "admin"
+		And user "phone-user" exists
+		And sending "PUT" to "/cloud/users/phone-user" with
+			| key | phone |
+			| value | +49 711 / 25 24 28-90 |
+		And the OCS status code should be "100"
+		And the HTTP status code should be "200"
+		Then search users by phone for region "DE" with
+			| random-string1 | 0711 / 123 456 78 |
+			| random-string1 | 0711 / 252 428-90 |
+			| random-string2 | 0711 / 90-824 252 |
+		And the OCS status code should be "100"
+		And the HTTP status code should be "200"
+		Then phone matches returned are
+			| random-string1 | phone-user@localhost:8080 |
 
 	Scenario: Create a group
 		Given As an "admin"
@@ -221,7 +281,7 @@ Feature: provisioning
 		And user "not-user" does not exist
 		And group "new-group" exists
 		When sending "GET" to "/cloud/users/not-user/subadmins"
-		Then the OCS status code should be "101"
+		Then the OCS status code should be "404"
 		And the HTTP status code should be "200"
 
 	Scenario: Getting subadmin users of a group
@@ -282,7 +342,11 @@ Feature: provisioning
 		Then the OCS status code should be "100"
 		And the HTTP status code should be "200"
 		And apps returned are
+			| accessibility |
+			| cloud_federation_api |
 			| comments |
+			| contactsinteraction |
+			| dashboard |
 			| dav |
 			| federatedfilesharing |
 			| federation |
@@ -292,13 +356,19 @@ Feature: provisioning
 			| files_versions |
 			| lookup_server_connector |
 			| provisioning_api |
+			| settings |
 			| sharebymail |
 			| systemtags |
 			| theming |
 			| twofactor_backupcodes |
 			| updatenotification |
+			| user_ldap |
+			| user_status |
+			| viewer |
 			| workflowengine |
+			| weather_status |
 			| files_external |
+			| oauth2 |
 
 	Scenario: get app info
 		Given As an "admin"

@@ -20,8 +20,8 @@
 */
 
 // start worker once page has loaded
-$(document).ready(function(){
-	$.get( OC.webroot+'/cron.php' );
+window.addEventListener('DOMContentLoaded', function(){
+	$.get( OC.getRootPath()+'/cron.php' );
 
 	$('.section .icon-info').tooltip({
 		placement: 'right'

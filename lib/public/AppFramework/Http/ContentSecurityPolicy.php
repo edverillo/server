@@ -4,7 +4,9 @@
  *
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  * @author sualko <klaus@jsxc.org>
+ * @author Thomas Citharel <nextcloud@tcit.fr>
  *
  * @license AGPL-3.0
  *
@@ -18,7 +20,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -26,26 +28,23 @@ namespace OCP\AppFramework\Http;
 
 /**
  * Class ContentSecurityPolicy is a simple helper which allows applications to
- * modify the Content-Security-Policy sent by ownCloud. Per default only JavaScript,
+ * modify the Content-Security-Policy sent by Nextcloud. Per default only JavaScript,
  * stylesheets, images, fonts, media and connections from the same domain
  * ('self') are allowed.
  *
  * Even if a value gets modified above defaults will still get appended. Please
- * notice that ownCloud ships already with sensible defaults and those policies
+ * notice that Nextcloud ships already with sensible defaults and those policies
  * should require no modification at all for most use-cases.
  *
- * @package OCP\AppFramework\Http
+ * This class allows unsafe-inline of CSS.
+ *
  * @since 8.1.0
  */
 class ContentSecurityPolicy extends EmptyContentSecurityPolicy {
 	/** @var bool Whether inline JS snippets are allowed */
 	protected $inlineScriptAllowed = false;
-	/**
-	 * @var bool Whether eval in JS scripts is allowed
-	 * TODO: Disallow per default
-	 * @link https://github.com/owncloud/core/issues/11925
-	 */
-	protected $evalScriptAllowed = true;
+	/** @var bool Whether eval in JS scripts is allowed */
+	protected $evalScriptAllowed = false;
 	/** @var array Domains from which scripts can get loaded */
 	protected $allowedScriptDomains = [
 		'\'self\'',
@@ -81,7 +80,24 @@ class ContentSecurityPolicy extends EmptyContentSecurityPolicy {
 	/** @var array Domains from which fonts can be loaded */
 	protected $allowedFontDomains = [
 		'\'self\'',
+		'data:',
 	];
 	/** @var array Domains from which web-workers and nested browsing content can load elements */
 	protected $allowedChildSrcDomains = [];
+
+	/** @var array Domains which can embed this Nextcloud instance */
+	protected $allowedFrameAncestors = [
+		'\'self\'',
+	];
+
+	/** @var array Domains from which web-workers can be loaded */
+	protected $allowedWorkerSrcDomains = [];
+
+	/** @var array Domains which can be used as target for forms */
+	protected $allowedFormActionDomains = [
+		'\'self\'',
+	];
+
+	/** @var array Locations to report violations to */
+	protected $reportTo = [];
 }

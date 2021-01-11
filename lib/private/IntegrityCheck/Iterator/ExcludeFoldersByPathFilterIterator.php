@@ -1,9 +1,14 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Lukas Reschke <lukas@statuscode.ch>
  * @author RealRancor <Fisch.666@gmx.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license AGPL-3.0
  *
@@ -17,20 +22,20 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OC\IntegrityCheck\Iterator;
 
 class ExcludeFoldersByPathFilterIterator extends \RecursiveFilterIterator {
-	private $excludedFolders = [];
+	private $excludedFolders;
 
 	public function __construct(\RecursiveIterator $iterator, $root = '') {
 		parent::__construct($iterator);
 
 		$appFolders = \OC::$APPSROOTS;
-		foreach($appFolders as $key => $appFolder) {
+		foreach ($appFolders as $key => $appFolder) {
 			$appFolders[$key] = rtrim($appFolder['path'], '/');
 		}
 
@@ -48,7 +53,7 @@ class ExcludeFoldersByPathFilterIterator extends \RecursiveFilterIterator {
 			rtrim($root . '/_oc_upgrade', '/'),
 		];
 		$customDataDir = \OC::$server->getConfig()->getSystemValue('datadirectory', '');
-		if($customDataDir !== '') {
+		if ($customDataDir !== '') {
 			$excludedFolders[] = rtrim($customDataDir, '/');
 		}
 
@@ -59,7 +64,7 @@ class ExcludeFoldersByPathFilterIterator extends \RecursiveFilterIterator {
 	 * @return bool
 	 */
 	public function accept() {
-		return !in_array(
+		return !\in_array(
 			$this->current()->getPathName(),
 			$this->excludedFolders,
 			true

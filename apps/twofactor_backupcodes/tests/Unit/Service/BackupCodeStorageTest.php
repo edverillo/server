@@ -1,7 +1,10 @@
 <?php
-
 /**
+ *
+ *
  * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -16,7 +19,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
@@ -24,64 +27,54 @@ namespace OCA\TwoFactorBackupCodes\Tests\Unit\Service;
 
 use OCA\TwoFactorBackupCodes\Db\BackupCode;
 use OCA\TwoFactorBackupCodes\Db\BackupCodeMapper;
+use OCA\TwoFactorBackupCodes\Event\CodesGenerated;
 use OCA\TwoFactorBackupCodes\Service\BackupCodeStorage;
-use OCP\Activity\IEvent;
-use OCP\Activity\IManager;
-use OCP\ILogger;
+use OCP\EventDispatcher\IEventDispatcher;
 use OCP\IUser;
 use OCP\Security\IHasher;
 use OCP\Security\ISecureRandom;
-use PHPUnit_Framework_MockObject_MockObject;
 use Test\TestCase;
 
 class BackupCodeStorageTest extends TestCase {
 
-	/** @var BackupCodeMapper|PHPUnit_Framework_MockObject_MockObject */
+	/** @var BackupCodeMapper|\PHPUnit\Framework\MockObject\MockObject */
 	private $mapper;
 
-	/** @var ISecureRandom|PHPUnit_Framework_MockObject_MockObject */
+	/** @var ISecureRandom|\PHPUnit\Framework\MockObject\MockObject */
 	private $random;
 
-	/** @var IHasher|PHPUnit_Framework_MockObject_MockObject */
+	/** @var IHasher|\PHPUnit\Framework\MockObject\MockObject */
 	private $hasher;
 
-	/** @var IManager|PHPUnit_Framework_MockObject_MockObject */
-	private $activityManager;
-
-	/** @var ILogger|PHPUnit_Framework_MockObject_MockObject */
-	private $logger;
+	/** @var IEventDispatcher|\PHPUnit\Framework\MockObject\MockObject */
+	private $eventDispatcher;
 
 	/** @var BackupCodeStorage */
 	private $storage;
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		$this->mapper = $this->createMock(BackupCodeMapper::class);
 		$this->random = $this->createMock(ISecureRandom::class);
 		$this->hasher = $this->createMock(IHasher::class);
-		$this->activityManager = $this->createMock(IManager::class);
-		$this->logger = $this->createMock(ILogger::class);
+		$this->eventDispatcher = $this->createMock(IEventDispatcher::class);
 
-		$this->storage = new BackupCodeStorage($this->mapper, $this->random, $this->hasher, $this->activityManager, $this->logger);
+		$this->storage = new BackupCodeStorage($this->mapper, $this->random, $this->hasher, $this->eventDispatcher);
 	}
 
 	public function testCreateCodes() {
 		$user = $this->createMock(IUser::class);
 		$number = 5;
-		$event = $this->createMock(IEvent::class);
-
-		$user->expects($this->any())
-			->method('getUID')
-			->will($this->returnValue('fritz'));
+		$user->method('getUID')->willReturn('fritz');
 		$this->random->expects($this->exactly($number))
 			->method('generate')
-			->with(16, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
-			->will($this->returnValue('CODEABCDEF'));
+			->with(16, ISecureRandom::CHAR_HUMAN_READABLE)
+			->willReturn('CODEABCDEF');
 		$this->hasher->expects($this->exactly($number))
 			->method('hash')
 			->with('CODEABCDEF')
-			->will($this->returnValue('HASHEDCODE'));
+			->willReturn('HASHEDCODE');
 		$row = new BackupCode();
 		$row->setUserId('fritz');
 		$row->setCode('HASHEDCODE');
@@ -89,28 +82,11 @@ class BackupCodeStorageTest extends TestCase {
 		$this->mapper->expects($this->exactly($number))
 			->method('insert')
 			->with($this->equalTo($row));
-		$this->activityManager->expects($this->once())
-			->method('generateEvent')
-			->will($this->returnValue($event));
-		$event->expects($this->once())
-			->method('setApp')
-			->with('twofactor_backupcodes')
-			->will($this->returnSelf());
-		$event->expects($this->once())
-			->method('setType')
-			->with('twofactor')
-			->will($this->returnSelf());
-		$event->expects($this->once())
-			->method('setAuthor')
-			->with('fritz')
-			->will($this->returnSelf());
-		$event->expects($this->once())
-			->method('setAffectedUser')
-			->with('fritz')
-			->will($this->returnSelf());
-		$this->activityManager->expects($this->once())
-			->method('publish')
-			->will($this->returnValue($event));
+		$this->eventDispatcher->expects($this->once())
+			->method('dispatchTyped')
+			->with(
+				$this->equalTo(new CodesGenerated($user))
+			);
 
 		$codes = $this->storage->createCodes($user, $number);
 		$this->assertCount($number, $codes);
@@ -129,7 +105,7 @@ class BackupCodeStorageTest extends TestCase {
 		$this->mapper->expects($this->once())
 			->method('getBackupCodes')
 			->with($user)
-			->will($this->returnValue($codes));
+			->willReturn($codes);
 
 		$this->assertTrue($this->storage->hasBackupCodes($user));
 	}
@@ -141,7 +117,7 @@ class BackupCodeStorageTest extends TestCase {
 		$this->mapper->expects($this->once())
 			->method('getBackupCodes')
 			->with($user)
-			->will($this->returnValue($codes));
+			->willReturn($codes);
 
 		$this->assertFalse($this->storage->hasBackupCodes($user));
 	}
@@ -161,7 +137,7 @@ class BackupCodeStorageTest extends TestCase {
 		$this->mapper->expects($this->once())
 			->method('getBackupCodes')
 			->with($user)
-			->will($this->returnValue($codes));
+			->willReturn($codes);
 
 		$expected = [
 			'enabled' => true,
@@ -179,7 +155,7 @@ class BackupCodeStorageTest extends TestCase {
 		$this->mapper->expects($this->once())
 			->method('getBackupCodes')
 			->with($user)
-			->will($this->returnValue($codes));
+			->willReturn($codes);
 
 		$expected = [
 			'enabled' => false,
@@ -201,11 +177,11 @@ class BackupCodeStorageTest extends TestCase {
 		$this->mapper->expects($this->once())
 			->method('getBackupCodes')
 			->with($user)
-			->will($this->returnValue($codes));
+			->willReturn($codes);
 		$this->hasher->expects($this->once())
 			->method('verify')
 			->with('CHALLENGE', 'HASHEDVALUE', $this->anything())
-			->will($this->returnValue(true));
+			->willReturn(true);
 		$this->mapper->expects($this->once())
 			->method('update')
 			->with($code);
@@ -227,7 +203,7 @@ class BackupCodeStorageTest extends TestCase {
 		$this->mapper->expects($this->once())
 			->method('getBackupCodes')
 			->with($user)
-			->will($this->returnValue($codes));
+			->willReturn($codes);
 		$this->hasher->expects($this->never())
 			->method('verify');
 		$this->mapper->expects($this->never())
@@ -248,15 +224,14 @@ class BackupCodeStorageTest extends TestCase {
 		$this->mapper->expects($this->once())
 			->method('getBackupCodes')
 			->with($user)
-			->will($this->returnValue($codes));
+			->willReturn($codes);
 		$this->hasher->expects($this->once())
 			->method('verify')
 			->with('CHALLENGE', 'HASHEDVALUE')
-			->will($this->returnValue(false));
+			->willReturn(false);
 		$this->mapper->expects($this->never())
 			->method('update');
 
 		$this->assertFalse($this->storage->validateCode($user, 'CHALLENGE'));
 	}
-
 }

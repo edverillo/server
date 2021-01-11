@@ -3,6 +3,7 @@
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Lukas Reschke <lukas@statuscode.ch>
  * @author Morris Jobke <hey@morrisjobke.de>
  *
  * @license AGPL-3.0
@@ -17,7 +18,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
 
@@ -26,7 +27,6 @@ namespace OCP;
 /**
  * Interface IDateTimeFormatter
  *
- * @package OCP
  * @since 8.0.0
  */
 interface IDateTimeFormatter {
@@ -40,8 +40,8 @@ interface IDateTimeFormatter {
 	 * 				medium:	e.g. 'MMM d, y'			=> 'Aug 20, 2014'
 	 * 				short:	e.g. 'M/d/yy'			=> '8/20/14'
 	 * 				The exact format is dependent on the language
-	 * @param \DateTimeZone	$timeZone	The timezone to use
-	 * @param \OCP\IL10N	$l			The locale to use
+	 * @param \DateTimeZone|null	$timeZone	The timezone to use
+	 * @param \OCP\IL10N|null	$l			The locale to use
 	 * @return string Formatted date string
 	 * @since 8.0.0
 	 */
@@ -58,8 +58,8 @@ interface IDateTimeFormatter {
 	 * 				short:	e.g. 'M/d/yy'			=> '8/20/14'
 	 * 				The exact format is dependent on the language
 	 * 					Uses 'Today', 'Yesterday' and 'Tomorrow' when applicable
-	 * @param \DateTimeZone	$timeZone	The timezone to use
-	 * @param \OCP\IL10N	$l			The locale to use
+	 * @param \DateTimeZone|null	$timeZone	The timezone to use
+	 * @param \OCP\IL10N|null	$l			The locale to use
 	 * @return string Formatted relative date string
 	 * @since 8.0.0
 	 */
@@ -70,13 +70,12 @@ interface IDateTimeFormatter {
 	 * Only works for past dates
 	 *
 	 * @param int|\DateTime	$timestamp
-	 * @param int|\DateTime	$baseTimestamp	Timestamp to compare $timestamp against, defaults to current time
+	 * @param int|\DateTime|null	$baseTimestamp	Timestamp to compare $timestamp against, defaults to current time
+	 * @param \OCP\IL10N|null		$l			The locale to use
 	 * @return string	Dates returned are:
 	 * 				<  1 month	=> Today, Yesterday, n days ago
 	 * 				< 13 month	=> last month, n months ago
 	 * 				>= 13 month	=> last year, n years ago
-	 * @param \OCP\IL10N		$l			The locale to use
-	 * @return string Formatted date span
 	 * @since 8.0.0
 	 */
 	public function formatDateSpan($timestamp, $baseTimestamp = null, \OCP\IL10N $l = null);
@@ -91,8 +90,8 @@ interface IDateTimeFormatter {
 	 * 				medium:	e.g. 'h:mm:ss a'		=> '11:42:13 AM'
 	 * 				short:	e.g. 'h:mm a'			=> '11:42 AM'
 	 * 				The exact format is dependent on the language
-	 * @param \DateTimeZone	$timeZone	The timezone to use
-	 * @param \OCP\IL10N		$l			The locale to use
+	 * @param \DateTimeZone|null	$timeZone	The timezone to use
+	 * @param \OCP\IL10N|null		$l			The locale to use
 	 * @return string Formatted time string
 	 * @since 8.0.0
 	 */
@@ -102,7 +101,8 @@ interface IDateTimeFormatter {
 	 * Gives the relative past time of the timestamp
 	 *
 	 * @param int|\DateTime	$timestamp
-	 * @param int|\DateTime	$baseTimestamp	Timestamp to compare $timestamp against, defaults to current time
+	 * @param int|\DateTime|null	$baseTimestamp	Timestamp to compare $timestamp against, defaults to current time
+	 * @param \OCP\IL10N|null		$l			The locale to use
 	 * @return string	Dates returned are:
 	 * 				< 60 sec	=> seconds ago
 	 * 				<  1 hour	=> n minutes ago
@@ -110,8 +110,6 @@ interface IDateTimeFormatter {
 	 * 				<  1 month	=> Yesterday, n days ago
 	 * 				< 13 month	=> last month, n months ago
 	 * 				>= 13 month	=> last year, n years ago
-	 * @param \OCP\IL10N		$l			The locale to use
-	 * @return string Formatted time span
 	 * @since 8.0.0
 	 */
 	public function formatTimeSpan($timestamp, $baseTimestamp = null, \OCP\IL10N $l = null);
@@ -122,8 +120,8 @@ interface IDateTimeFormatter {
 	 * @param int|\DateTime $timestamp
 	 * @param string	$formatDate		See formatDate() for description
 	 * @param string	$formatTime		See formatTime() for description
-	 * @param \DateTimeZone	$timeZone	The timezone to use
-	 * @param \OCP\IL10N		$l			The locale to use
+	 * @param \DateTimeZone|null	$timeZone	The timezone to use
+	 * @param \OCP\IL10N|null		$l			The locale to use
 	 * @return string Formatted date and time string
 	 * @since 8.0.0
 	 */
@@ -136,8 +134,8 @@ interface IDateTimeFormatter {
 	 * @param string	$formatDate		See formatDate() for description
 	 * 					Uses 'Today', 'Yesterday' and 'Tomorrow' when applicable
 	 * @param string	$formatTime		See formatTime() for description
-	 * @param \DateTimeZone	$timeZone	The timezone to use
-	 * @param \OCP\IL10N		$l			The locale to use
+	 * @param \DateTimeZone|null	$timeZone	The timezone to use
+	 * @param \OCP\IL10N|null		$l			The locale to use
 	 * @return string Formatted relative date and time string
 	 * @since 8.0.0
 	 */

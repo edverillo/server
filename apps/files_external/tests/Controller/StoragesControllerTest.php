@@ -2,9 +2,13 @@
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Robin Appelman <robin@icewind.nl>
  * @author Robin McCorkell <robin@mccorkell.me.uk>
- * @author Vincent Petry <pvince81@owncloud.com>
+ * @author Roeland Jago Douma <roeland@famdouma.nl>
+ * @author Vincent Petry <vincent@nextcloud.com>
  *
  * @license AGPL-3.0
  *
@@ -18,17 +22,20 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * along with this program. If not, see <http://www.gnu.org/licenses/>
  *
  */
+
 namespace OCA\Files_External\Tests\Controller;
 
-use \OCP\AppFramework\Http;
+use OCA\Files_External\Controller\GlobalStoragesController;
+use OCA\Files_External\Lib\Auth\AuthMechanism;
+use OCA\Files_External\Lib\Backend\Backend;
 
-use \OCA\Files_External\Controller\GlobalStoragesController;
-use \OCA\Files_External\Service\GlobalStoragesService;
 use OCA\Files_External\Lib\StorageConfig;
 use OCA\Files_External\NotFoundException;
+use OCA\Files_External\Service\GlobalStoragesService;
+use OCP\AppFramework\Http;
 
 abstract class StoragesControllerTest extends \Test\TestCase {
 
@@ -42,25 +49,27 @@ abstract class StoragesControllerTest extends \Test\TestCase {
 	 */
 	protected $service;
 
-	public function setUp() {
-		\OC_Mount_Config::$skipTest = true;
+	protected function setUp(): void {
+		\OCA\Files_External\MountConfig::$skipTest = true;
 	}
 
-	public function tearDown() {
-		\OC_Mount_Config::$skipTest = false;
+	protected function tearDown(): void {
+		\OCA\Files_External\MountConfig::$skipTest = false;
 	}
 
 	/**
 	 * @return \OCA\Files_External\Lib\Backend\Backend
 	 */
 	protected function getBackendMock($class = '\OCA\Files_External\Lib\Backend\SMB', $storageClass = '\OCA\Files_External\Lib\Storage\SMB') {
-		$backend = $this->getMockBuilder('\OCA\Files_External\Lib\Backend\Backend')
+		$backend = $this->getMockBuilder(Backend::class)
 			->disableOriginalConstructor()
 			->getMock();
 		$backend->method('getStorageClass')
 			->willReturn($storageClass);
 		$backend->method('getIdentifier')
 			->willReturn('identifier:'.$class);
+		$backend->method('getParameters')
+			->willReturn([]);
 		return $backend;
 	}
 
@@ -68,13 +77,15 @@ abstract class StoragesControllerTest extends \Test\TestCase {
 	 * @return \OCA\Files_External\Lib\Auth\AuthMechanism
 	 */
 	protected function getAuthMechMock($scheme = 'null', $class = '\OCA\Files_External\Lib\Auth\NullMechanism') {
-		$authMech = $this->getMockBuilder('\OCA\Files_External\Lib\Auth\AuthMechanism')
+		$authMech = $this->getMockBuilder(AuthMechanism::class)
 			->disableOriginalConstructor()
 			->getMock();
 		$authMech->method('getScheme')
 			->willReturn($scheme);
 		$authMech->method('getIdentifier')
 			->willReturn('identifier:'.$class);
+		$authMech->method('getParameters')
+			->willReturn([]);
 
 		return $authMech;
 	}
@@ -99,16 +110,16 @@ abstract class StoragesControllerTest extends \Test\TestCase {
 
 		$this->service->expects($this->once())
 			->method('createStorage')
-			->will($this->returnValue($storageConfig));
+			->willReturn($storageConfig);
 		$this->service->expects($this->once())
 			->method('addStorage')
-			->will($this->returnValue($storageConfig));
+			->willReturn($storageConfig);
 
 		$response = $this->controller->create(
 			'mount',
 			'\OCA\Files_External\Lib\Storage\SMB',
 			'\OCA\Files_External\Lib\Auth\NullMechanism',
-			array(),
+			[],
 			[],
 			[],
 			[],
@@ -140,17 +151,17 @@ abstract class StoragesControllerTest extends \Test\TestCase {
 
 		$this->service->expects($this->once())
 			->method('createStorage')
-			->will($this->returnValue($storageConfig));
+			->willReturn($storageConfig);
 		$this->service->expects($this->once())
 			->method('updateStorage')
-			->will($this->returnValue($storageConfig));
+			->willReturn($storageConfig);
 
 		$response = $this->controller->update(
 			1,
 			'mount',
 			'\OCA\Files_External\Lib\Storage\SMB',
 			'\OCA\Files_External\Lib\Auth\NullMechanism',
-			array(),
+			[],
 			[],
 			[],
 			[],
@@ -162,12 +173,12 @@ abstract class StoragesControllerTest extends \Test\TestCase {
 		$this->assertEquals($storageConfig, $data);
 	}
 
-	function mountPointNamesProvider() {
-		return array(
-			array(''),
-			array('/'),
-			array('//'),
-		);
+	public function mountPointNamesProvider() {
+		return [
+			[''],
+			['/'],
+			['//'],
+		];
 	}
 
 	/**
@@ -182,7 +193,7 @@ abstract class StoragesControllerTest extends \Test\TestCase {
 
 		$this->service->expects($this->exactly(2))
 			->method('createStorage')
-			->will($this->returnValue($storageConfig));
+			->willReturn($storageConfig);
 		$this->service->expects($this->never())
 			->method('addStorage');
 		$this->service->expects($this->never())
@@ -192,7 +203,7 @@ abstract class StoragesControllerTest extends \Test\TestCase {
 			$mountPoint,
 			'\OCA\Files_External\Lib\Storage\SMB',
 			'\OCA\Files_External\Lib\Auth\NullMechanism',
-			array(),
+			[],
 			[],
 			[],
 			[],
@@ -206,7 +217,7 @@ abstract class StoragesControllerTest extends \Test\TestCase {
 			$mountPoint,
 			'\OCA\Files_External\Lib\Storage\SMB',
 			'\OCA\Files_External\Lib\Auth\NullMechanism',
-			array(),
+			[],
 			[],
 			[],
 			[],
@@ -229,7 +240,7 @@ abstract class StoragesControllerTest extends \Test\TestCase {
 			'mount',
 			'\OC\Files\Storage\InvalidStorage',
 			'\OCA\Files_External\Lib\Auth\NullMechanism',
-			array(),
+			[],
 			[],
 			[],
 			[],
@@ -243,7 +254,7 @@ abstract class StoragesControllerTest extends \Test\TestCase {
 			'mount',
 			'\OC\Files\Storage\InvalidStorage',
 			'\OCA\Files_External\Lib\Auth\NullMechanism',
-			array(),
+			[],
 			[],
 			[],
 			[],
@@ -273,7 +284,7 @@ abstract class StoragesControllerTest extends \Test\TestCase {
 
 		$this->service->expects($this->once())
 			->method('createStorage')
-			->will($this->returnValue($storageConfig));
+			->willReturn($storageConfig);
 		$this->service->expects($this->once())
 			->method('updateStorage')
 			->will($this->throwException(new NotFoundException()));
@@ -283,7 +294,7 @@ abstract class StoragesControllerTest extends \Test\TestCase {
 			'mount',
 			'\OCA\Files_External\Lib\Storage\SMB',
 			'\OCA\Files_External\Lib\Auth\NullMechanism',
-			array(),
+			[],
 			[],
 			[],
 			[],
@@ -323,11 +334,13 @@ abstract class StoragesControllerTest extends \Test\TestCase {
 		$this->service->expects($this->once())
 			->method('getStorage')
 			->with(1)
-			->will($this->returnValue($storageConfig));
+			->willReturn($storageConfig);
 		$response = $this->controller->show(1);
 
 		$this->assertEquals(Http::STATUS_OK, $response->getStatus());
-		$this->assertEquals($storageConfig, $response->getData());
+		$expected = $storageConfig->jsonSerialize();
+		$expected['can_edit'] = false;
+		$this->assertEquals($expected, $response->getData());
 	}
 
 	public function validateStorageProvider() {
@@ -351,7 +364,7 @@ abstract class StoragesControllerTest extends \Test\TestCase {
 
 		$authMech = $this->getAuthMechMock();
 		$authMech->method('validateStorage')
-			->will($this->returnValue($authMechValidate));
+			->willReturn($authMechValidate);
 		$authMech->method('isVisibleFor')
 			->willReturn(true);
 
@@ -363,13 +376,13 @@ abstract class StoragesControllerTest extends \Test\TestCase {
 
 		$this->service->expects($this->once())
 			->method('createStorage')
-			->will($this->returnValue($storageConfig));
+			->willReturn($storageConfig);
 
 		if ($expectSuccess) {
 			$this->service->expects($this->once())
 				->method('addStorage')
 				->with($storageConfig)
-				->will($this->returnValue($storageConfig));
+				->willReturn($storageConfig);
 		} else {
 			$this->service->expects($this->never())
 				->method('addStorage');
@@ -379,7 +392,7 @@ abstract class StoragesControllerTest extends \Test\TestCase {
 			'mount',
 			'\OCA\Files_External\Lib\Storage\SMB',
 			'\OCA\Files_External\Lib\Auth\NullMechanism',
-			array(),
+			[],
 			[],
 			[],
 			[],
@@ -392,5 +405,4 @@ abstract class StoragesControllerTest extends \Test\TestCase {
 			$this->assertEquals(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
 		}
 	}
-
 }

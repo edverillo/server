@@ -3,6 +3,8 @@
  * @copyright Copyright (c) 2016 Arthur Schiwon <blizzz@arthur-schiwon.de>
  *
  * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
+ * @author Bjoern Schiessle <bjoern@schiessle.org>
+ * @author Lukas Reschke <lukas@statuscode.ch>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -17,7 +19,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
@@ -25,6 +27,7 @@ namespace OCA\FederatedFileSharing\Settings;
 
 use OCA\FederatedFileSharing\FederatedShareProvider;
 use OCP\AppFramework\Http\TemplateResponse;
+use OCP\GlobalScale\IConfig;
 use OCP\Settings\ISettings;
 
 class Admin implements ISettings {
@@ -32,8 +35,18 @@ class Admin implements ISettings {
 	/** @var FederatedShareProvider */
 	private $fedShareProvider;
 
-	public function __construct(FederatedShareProvider $fedShareProvider) {
+	/** @var IConfig */
+	private $gsConfig;
+
+	/**
+	 * Admin constructor.
+	 *
+	 * @param FederatedShareProvider $fedShareProvider
+	 * @param IConfig $globalScaleConfig
+	 */
+	public function __construct(FederatedShareProvider $fedShareProvider, IConfig $globalScaleConfig) {
 		$this->fedShareProvider = $fedShareProvider;
+		$this->gsConfig = $globalScaleConfig;
 	}
 
 	/**
@@ -41,9 +54,14 @@ class Admin implements ISettings {
 	 */
 	public function getForm() {
 		$parameters = [
+			'internalOnly' => $this->gsConfig->onlyInternalFederation(),
 			'outgoingServer2serverShareEnabled' => $this->fedShareProvider->isOutgoingServer2serverShareEnabled(),
 			'incomingServer2serverShareEnabled' => $this->fedShareProvider->isIncomingServer2serverShareEnabled(),
+			'federatedGroupSharingSupported' => $this->fedShareProvider->isFederatedGroupSharingSupported(),
+			'outgoingServer2serverGroupShareEnabled' => $this->fedShareProvider->isOutgoingServer2serverGroupShareEnabled(),
+			'incomingServer2serverGroupShareEnabled' => $this->fedShareProvider->isIncomingServer2serverGroupShareEnabled(),
 			'lookupServerEnabled' => $this->fedShareProvider->isLookupServerQueriesEnabled(),
+			'lookupServerUploadEnabled' => $this->fedShareProvider->isLookupServerUploadEnabled(),
 		];
 
 		return new TemplateResponse('federatedfilesharing', 'settings-admin', $parameters, '');
@@ -66,5 +84,4 @@ class Admin implements ISettings {
 	public function getPriority() {
 		return 20;
 	}
-
 }

@@ -13,8 +13,8 @@ namespace Test\AppFramework\Http;
 use OC\AppFramework\Http\Request;
 use OC\Security\CSRF\CsrfToken;
 use OC\Security\CSRF\CsrfTokenManager;
-use OCP\Security\ISecureRandom;
 use OCP\IConfig;
+use OCP\Security\ISecureRandom;
 
 /**
  * Class RequestTest
@@ -31,7 +31,7 @@ class RequestTest extends \Test\TestCase {
 	/** @var CsrfTokenManager */
 	protected $csrfTokenManager;
 
-	protected function setUp() {
+	protected function setUp(): void {
 		parent::setUp();
 
 		if (in_array('fakeinput', stream_get_wrappers())) {
@@ -40,21 +40,21 @@ class RequestTest extends \Test\TestCase {
 		stream_wrapper_register('fakeinput', 'Test\AppFramework\Http\RequestStream');
 
 		$this->secureRandom = $this->getMockBuilder('\OCP\Security\ISecureRandom')->getMock();
-		$this->config = $this->getMockBuilder('\OCP\IConfig')->getMock();
+		$this->config = $this->getMockBuilder(IConfig::class)->getMock();
 		$this->csrfTokenManager = $this->getMockBuilder('\OC\Security\CSRF\CsrfTokenManager')
 			->disableOriginalConstructor()->getMock();
 	}
 
-	protected function tearDown() {
+	protected function tearDown(): void {
 		stream_wrapper_unregister('fakeinput');
 		parent::tearDown();
 	}
 
 	public function testRequestAccessors() {
-		$vars = array(
-			'get' => array('name' => 'John Q. Public', 'nickname' => 'Joey'),
+		$vars = [
+			'get' => ['name' => 'John Q. Public', 'nickname' => 'Joey'],
 			'method' => 'GET',
-		);
+		];
 
 		$request = new Request(
 			$vars,
@@ -77,17 +77,16 @@ class RequestTest extends \Test\TestCase {
 		$this->assertSame('Joey', $request->get['nickname']);
 		// Always returns null if variable not set.
 		$this->assertSame(null, $request->{'flickname'});
-
 	}
 
 	// urlParams has precedence over POST which has precedence over GET
 	public function testPrecedence() {
-		$vars = array(
-			'get' => array('name' => 'John Q. Public', 'nickname' => 'Joey'),
-			'post' => array('name' => 'Jane Doe', 'nickname' => 'Janey'),
-			'urlParams' => array('user' => 'jw', 'name' => 'Johnny Weissmüller'),
+		$vars = [
+			'get' => ['name' => 'John Q. Public', 'nickname' => 'Joey'],
+			'post' => ['name' => 'Jane Doe', 'nickname' => 'Janey'],
+			'urlParams' => ['user' => 'jw', 'name' => 'Johnny Weissmüller'],
 			'method' => 'GET'
-		);
+		];
 
 		$request = new Request(
 			$vars,
@@ -103,14 +102,14 @@ class RequestTest extends \Test\TestCase {
 	}
 
 
-	/**
-	 * @expectedException \RuntimeException
-	 */
+
 	public function testImmutableArrayAccess() {
-		$vars = array(
-			'get' => array('name' => 'John Q. Public', 'nickname' => 'Joey'),
+		$this->expectException(\RuntimeException::class);
+
+		$vars = [
+			'get' => ['name' => 'John Q. Public', 'nickname' => 'Joey'],
 			'method' => 'GET'
-		);
+		];
 
 		$request = new Request(
 			$vars,
@@ -123,14 +122,14 @@ class RequestTest extends \Test\TestCase {
 		$request['nickname'] = 'Janey';
 	}
 
-	/**
-	 * @expectedException \RuntimeException
-	 */
+
 	public function testImmutableMagicAccess() {
-		$vars = array(
-			'get' => array('name' => 'John Q. Public', 'nickname' => 'Joey'),
+		$this->expectException(\RuntimeException::class);
+
+		$vars = [
+			'get' => ['name' => 'John Q. Public', 'nickname' => 'Joey'],
 			'method' => 'GET'
-		);
+		];
 
 		$request = new Request(
 			$vars,
@@ -143,14 +142,14 @@ class RequestTest extends \Test\TestCase {
 		$request->{'nickname'} = 'Janey';
 	}
 
-	/**
-	 * @expectedException \LogicException
-	 */
+
 	public function testGetTheMethodRight() {
-		$vars = array(
-			'get' => array('name' => 'John Q. Public', 'nickname' => 'Joey'),
+		$this->expectException(\LogicException::class);
+
+		$vars = [
+			'get' => ['name' => 'John Q. Public', 'nickname' => 'Joey'],
 			'method' => 'GET',
-		);
+		];
 
 		$request = new Request(
 			$vars,
@@ -164,10 +163,10 @@ class RequestTest extends \Test\TestCase {
 	}
 
 	public function testTheMethodIsRight() {
-		$vars = array(
-			'get' => array('name' => 'John Q. Public', 'nickname' => 'Joey'),
+		$vars = [
+			'get' => ['name' => 'John Q. Public', 'nickname' => 'Joey'],
 			'method' => 'GET',
-		);
+		];
 
 		$request = new Request(
 			$vars,
@@ -186,10 +185,10 @@ class RequestTest extends \Test\TestCase {
 	public function testJsonPost() {
 		global $data;
 		$data = '{"name": "John Q. Public", "nickname": "Joey"}';
-		$vars = array(
+		$vars = [
 			'method' => 'POST',
-			'server' => array('CONTENT_TYPE' => 'application/json; utf-8')
-		);
+			'server' => ['CONTENT_TYPE' => 'application/json; utf-8']
+		];
 
 		$request = new Request(
 			$vars,
@@ -210,10 +209,10 @@ class RequestTest extends \Test\TestCase {
 	public function testNotJsonPost() {
 		global $data;
 		$data = 'this is not valid json';
-		$vars = array(
+		$vars = [
 			'method' => 'POST',
-			'server' => array('CONTENT_TYPE' => 'application/json; utf-8')
-		);
+			'server' => ['CONTENT_TYPE' => 'application/json; utf-8']
+		];
 
 		$request = new Request(
 			$vars,
@@ -230,12 +229,12 @@ class RequestTest extends \Test\TestCase {
 
 	public function testPatch() {
 		global $data;
-		$data = http_build_query(array('name' => 'John Q. Public', 'nickname' => 'Joey'), '', '&');
+		$data = http_build_query(['name' => 'John Q. Public', 'nickname' => 'Joey'], '', '&');
 
-		$vars = array(
+		$vars = [
 			'method' => 'PATCH',
-			'server' => array('CONTENT_TYPE' => 'application/x-www-form-urlencoded'),
-		);
+			'server' => ['CONTENT_TYPE' => 'application/x-www-form-urlencoded'],
+		];
 
 		$request = new Request(
 			$vars,
@@ -257,10 +256,10 @@ class RequestTest extends \Test\TestCase {
 
 		// PUT content
 		$data = '{"name": "John Q. Public", "nickname": "Joey"}';
-		$vars = array(
+		$vars = [
 			'method' => 'PUT',
-			'server' => array('CONTENT_TYPE' => 'application/json; utf-8'),
-		);
+			'server' => ['CONTENT_TYPE' => 'application/json; utf-8'],
+		];
 
 		$request = new Request(
 			$vars,
@@ -278,10 +277,10 @@ class RequestTest extends \Test\TestCase {
 
 		// PATCH content
 		$data = '{"name": "John Q. Public", "nickname": null}';
-		$vars = array(
+		$vars = [
 			'method' => 'PATCH',
-			'server' => array('CONTENT_TYPE' => 'application/json; utf-8'),
-		);
+			'server' => ['CONTENT_TYPE' => 'application/json; utf-8'],
+		];
 
 		$request = new Request(
 			$vars,
@@ -302,14 +301,14 @@ class RequestTest extends \Test\TestCase {
 		global $data;
 		$data = file_get_contents(__DIR__ . '/../../../data/testimage.png');
 
-		$vars = array(
+		$vars = [
 			'put' => $data,
 			'method' => 'PUT',
 			'server' => [
 				'CONTENT_TYPE' => 'image/png',
-				'CONTENT_LENGTH' => strlen($data)
+				'CONTENT_LENGTH' => (string)strlen($data)
 			],
-		);
+		];
 
 		$request = new Request(
 			$vars,
@@ -326,20 +325,19 @@ class RequestTest extends \Test\TestCase {
 
 		try {
 			$resource = $request->put;
-		} catch(\LogicException $e) {
+		} catch (\LogicException $e) {
 			return;
 		}
 		$this->fail('Expected LogicException.');
-
 	}
 
 
 	public function testSetUrlParameters() {
-		$vars = array(
-			'post' => array(),
+		$vars = [
+			'post' => [],
 			'method' => 'POST',
-			'urlParams' => array('id' => '2'),
-		);
+			'urlParams' => ['id' => '2'],
+		];
 
 		$request = new Request(
 			$vars,
@@ -349,7 +347,7 @@ class RequestTest extends \Test\TestCase {
 			$this->stream
 		);
 
-		$newParams = array('id' => '3', 'test' => 'test2');
+		$newParams = ['id' => '3', 'test' => 'test2'];
 		$request->setUrlParameters($newParams);
 		$this->assertSame('test2', $request->getParam('test'));
 		$this->assertEquals('3', $request->getParam('id'));
@@ -378,7 +376,7 @@ class RequestTest extends \Test\TestCase {
 		$this->secureRandom->expects($this->once())
 			->method('generate')
 			->with('20')
-			->will($this->returnValue('GeneratedByOwnCloudItself'));
+			->willReturn('GeneratedByOwnCloudItself');
 
 		$request = new Request(
 			[],
@@ -409,7 +407,7 @@ class RequestTest extends \Test\TestCase {
 			->expects($this->once())
 			->method('getSystemValue')
 			->with('trusted_proxies')
-			->will($this->returnValue([]));
+			->willReturn([]);
 
 		$request = new Request(
 			[
@@ -433,12 +431,12 @@ class RequestTest extends \Test\TestCase {
 			->expects($this->at(0))
 			->method('getSystemValue')
 			->with('trusted_proxies')
-			->will($this->returnValue(['10.0.0.2']));
+			->willReturn(['10.0.0.2']);
 		$this->config
 			->expects($this->at(1))
 			->method('getSystemValue')
 			->with('forwarded_for_headers')
-			->will($this->returnValue([]));
+			->willReturn([]);
 
 		$request = new Request(
 			[
@@ -462,12 +460,12 @@ class RequestTest extends \Test\TestCase {
 			->expects($this->at(0))
 			->method('getSystemValue')
 			->with('trusted_proxies')
-			->will($this->returnValue(['10.0.0.2']));
+			->willReturn(['10.0.0.2']);
 		$this->config
 			->expects($this->at(1))
 			->method('getSystemValue')
 			->with('forwarded_for_headers')
-			->will($this->returnValue(['HTTP_X_FORWARDED']));
+			->willReturn(['HTTP_X_FORWARDED']);
 
 		$request = new Request(
 			[
@@ -486,21 +484,50 @@ class RequestTest extends \Test\TestCase {
 		$this->assertSame('10.4.0.5', $request->getRemoteAddress());
 	}
 
+	public function testGetRemoteAddressIPv6WithSingleTrustedRemote() {
+		$this->config
+			->expects($this->at(0))
+			->method('getSystemValue')
+			->with('trusted_proxies')
+			->willReturn(['2001:db8:85a3:8d3:1319:8a2e:370:7348']);
+		$this->config
+			->expects($this->at(1))
+			->method('getSystemValue')
+			->with('forwarded_for_headers')
+			->willReturn(['HTTP_X_FORWARDED']);
+
+		$request = new Request(
+			[
+				'server' => [
+					'REMOTE_ADDR' => '2001:db8:85a3:8d3:1319:8a2e:370:7348',
+					'HTTP_X_FORWARDED' => '10.4.0.5, 10.4.0.4',
+					'HTTP_X_FORWARDED_FOR' => '192.168.0.233'
+				],
+			],
+			$this->secureRandom,
+			$this->config,
+			$this->csrfTokenManager,
+			$this->stream
+		);
+
+		$this->assertSame('10.4.0.5', $request->getRemoteAddress());
+	}
+
 	public function testGetRemoteAddressVerifyPriorityHeader() {
 		$this->config
 			->expects($this->at(0))
 			->method('getSystemValue')
 			->with('trusted_proxies')
-			->will($this->returnValue(['10.0.0.2']));
+			->willReturn(['10.0.0.2']);
 		$this->config
 			->expects($this->at(1))
 			->method('getSystemValue')
 			->with('forwarded_for_headers')
-			->will($this->returnValue([
+			->willReturn([
 				'HTTP_CLIENT_IP',
 				'HTTP_X_FORWARDED_FOR',
 				'HTTP_X_FORWARDED'
-			]));
+			]);
 
 		$request = new Request(
 			[
@@ -517,6 +544,120 @@ class RequestTest extends \Test\TestCase {
 		);
 
 		$this->assertSame('192.168.0.233', $request->getRemoteAddress());
+	}
+
+	public function testGetRemoteAddressIPv6VerifyPriorityHeader() {
+		$this->config
+			->expects($this->at(0))
+			->method('getSystemValue')
+			->with('trusted_proxies')
+			->willReturn(['2001:db8:85a3:8d3:1319:8a2e:370:7348']);
+		$this->config
+			->expects($this->at(1))
+			->method('getSystemValue')
+			->with('forwarded_for_headers')
+			->willReturn([
+				'HTTP_CLIENT_IP',
+				'HTTP_X_FORWARDED_FOR',
+				'HTTP_X_FORWARDED'
+			]);
+
+		$request = new Request(
+			[
+				'server' => [
+					'REMOTE_ADDR' => '2001:db8:85a3:8d3:1319:8a2e:370:7348',
+					'HTTP_X_FORWARDED' => '10.4.0.5, 10.4.0.4',
+					'HTTP_X_FORWARDED_FOR' => '192.168.0.233'
+				],
+			],
+			$this->secureRandom,
+			$this->config,
+			$this->csrfTokenManager,
+			$this->stream
+		);
+
+		$this->assertSame('192.168.0.233', $request->getRemoteAddress());
+	}
+
+	public function testGetRemoteAddressWithMatchingCidrTrustedRemote() {
+		$this->config
+			->expects($this->at(0))
+			->method('getSystemValue')
+			->with('trusted_proxies')
+			->willReturn(['192.168.2.0/24']);
+		$this->config
+			->expects($this->at(1))
+			->method('getSystemValue')
+			->with('forwarded_for_headers')
+			->willReturn(['HTTP_X_FORWARDED_FOR']);
+
+		$request = new Request(
+			[
+				'server' => [
+					'REMOTE_ADDR' => '192.168.2.99',
+					'HTTP_X_FORWARDED' => '10.4.0.5, 10.4.0.4',
+					'HTTP_X_FORWARDED_FOR' => '192.168.0.233'
+				],
+			],
+			$this->secureRandom,
+			$this->config,
+			$this->csrfTokenManager,
+			$this->stream
+		);
+
+		$this->assertSame('192.168.0.233', $request->getRemoteAddress());
+	}
+
+	public function testGetRemoteAddressWithNotMatchingCidrTrustedRemote() {
+		$this->config
+			->expects($this->once())
+			->method('getSystemValue')
+			->with('trusted_proxies')
+			->willReturn(['192.168.2.0/24']);
+
+		$request = new Request(
+			[
+				'server' => [
+					'REMOTE_ADDR' => '192.168.3.99',
+					'HTTP_X_FORWARDED' => '10.4.0.5, 10.4.0.4',
+					'HTTP_X_FORWARDED_FOR' => '192.168.0.233'
+				],
+			],
+			$this->secureRandom,
+			$this->config,
+			$this->csrfTokenManager,
+			$this->stream
+		);
+
+		$this->assertSame('192.168.3.99', $request->getRemoteAddress());
+	}
+
+	public function testGetRemoteAddressWithXForwardedForIPv6() {
+		$this->config
+			->expects($this->at(0))
+			->method('getSystemValue')
+			->with('trusted_proxies')
+			->willReturn(['192.168.2.0/24']);
+		$this->config
+			->expects($this->at(1))
+			->method('getSystemValue')
+			->with('forwarded_for_headers')
+			->willReturn(['HTTP_X_FORWARDED_FOR']);
+
+		$request = new Request(
+			[
+				'server' => [
+					'REMOTE_ADDR' => '192.168.2.99',
+					'HTTP_X_FORWARDED_FOR' => '[2001:db8:85a3:8d3:1319:8a2e:370:7348]',
+				],
+			],
+			$this->secureRandom,
+			$this->config,
+			$this->csrfTokenManager,
+			$this->stream
+		);
+
+		$this->assertSame('2001:db8:85a3:8d3:1319:8a2e:370:7348', $request->getRemoteAddress());
 	}
 
 	/**
@@ -575,17 +716,17 @@ class RequestTest extends \Test\TestCase {
 			->expects($this->at(0))
 			->method('getSystemValue')
 			->with('overwriteprotocol')
-			->will($this->returnValue('customProtocol'));
+			->willReturn('customProtocol');
 		$this->config
 			->expects($this->at(1))
 			->method('getSystemValue')
 			->with('overwritecondaddr')
-			->will($this->returnValue(''));
+			->willReturn('');
 		$this->config
 			->expects($this->at(2))
 			->method('getSystemValue')
 			->with('overwriteprotocol')
-			->will($this->returnValue('customProtocol'));
+			->willReturn('customProtocol');
 
 		$request = new Request(
 			[],
@@ -600,15 +741,20 @@ class RequestTest extends \Test\TestCase {
 
 	public function testGetServerProtocolWithProtoValid() {
 		$this->config
-			->expects($this->exactly(2))
 			->method('getSystemValue')
-			->with('overwriteprotocol')
-			->will($this->returnValue(''));
+			->willReturnCallback(function ($key, $default) {
+				if ($key === 'trusted_proxies') {
+					return ['1.2.3.4'];
+				}
+
+				return $default;
+			});
 
 		$requestHttps = new Request(
 			[
 				'server' => [
-					'HTTP_X_FORWARDED_PROTO' => 'HtTpS'
+					'HTTP_X_FORWARDED_PROTO' => 'HtTpS',
+					'REMOTE_ADDR' => '1.2.3.4',
 				],
 			],
 			$this->secureRandom,
@@ -619,7 +765,8 @@ class RequestTest extends \Test\TestCase {
 		$requestHttp = new Request(
 			[
 				'server' => [
-					'HTTP_X_FORWARDED_PROTO' => 'HTTp'
+					'HTTP_X_FORWARDED_PROTO' => 'HTTp',
+					'REMOTE_ADDR' => '1.2.3.4',
 				],
 			],
 			$this->secureRandom,
@@ -635,10 +782,10 @@ class RequestTest extends \Test\TestCase {
 
 	public function testGetServerProtocolWithHttpsServerValueOn() {
 		$this->config
-			->expects($this->once())
 			->method('getSystemValue')
-			->with('overwriteprotocol')
-			->will($this->returnValue(''));
+			->willReturnCallback(function ($key, $default) {
+				return $default;
+			});
 
 		$request = new Request(
 			[
@@ -656,10 +803,10 @@ class RequestTest extends \Test\TestCase {
 
 	public function testGetServerProtocolWithHttpsServerValueOff() {
 		$this->config
-			->expects($this->once())
 			->method('getSystemValue')
-			->with('overwriteprotocol')
-			->will($this->returnValue(''));
+			->willReturnCallback(function ($key, $default) {
+				return $default;
+			});
 
 		$request = new Request(
 			[
@@ -677,10 +824,10 @@ class RequestTest extends \Test\TestCase {
 
 	public function testGetServerProtocolWithHttpsServerValueEmpty() {
 		$this->config
-			->expects($this->once())
 			->method('getSystemValue')
-			->with('overwriteprotocol')
-			->will($this->returnValue(''));
+			->willReturnCallback(function ($key, $default) {
+				return $default;
+			});
 
 		$request = new Request(
 			[
@@ -698,10 +845,10 @@ class RequestTest extends \Test\TestCase {
 
 	public function testGetServerProtocolDefault() {
 		$this->config
-			->expects($this->once())
 			->method('getSystemValue')
-			->with('overwriteprotocol')
-			->will($this->returnValue(''));
+			->willReturnCallback(function ($key, $default) {
+				return $default;
+			});
 
 		$request = new Request(
 			[],
@@ -715,15 +862,20 @@ class RequestTest extends \Test\TestCase {
 
 	public function testGetServerProtocolBehindLoadBalancers() {
 		$this->config
-			->expects($this->once())
 			->method('getSystemValue')
-			->with('overwriteprotocol')
-			->will($this->returnValue(''));
+			->willReturnCallback(function ($key, $default) {
+				if ($key === 'trusted_proxies') {
+					return ['1.2.3.4'];
+				}
+
+				return $default;
+			});
 
 		$request = new Request(
 			[
 				'server' => [
-					'HTTP_X_FORWARDED_PROTO' => 'https,http,http'
+					'HTTP_X_FORWARDED_PROTO' => 'https,http,http',
+					'REMOTE_ADDR' => '1.2.3.4',
 				],
 			],
 			$this->secureRandom,
@@ -778,7 +930,7 @@ class RequestTest extends \Test\TestCase {
 	/**
 	 * @return array
 	 */
-	function userAgentProvider() {
+	public function userAgentProvider() {
 		return [
 			[
 				'Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 5.1; Trident/4.0)',
@@ -859,6 +1011,41 @@ class RequestTest extends \Test\TestCase {
 				],
 				false,
 			],
+			[
+				'Mozilla/5.0 (Android) ownCloud-android/2.0.0',
+				[
+					Request::USER_AGENT_CLIENT_ANDROID
+				],
+				true,
+			],
+			[
+				'Mozilla/5.0 (Android) Nextcloud-android/2.0.0',
+				[
+					Request::USER_AGENT_CLIENT_ANDROID
+				],
+				true,
+			],
+			[
+				'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.99 Safari/537.36 Vivaldi/2.9.1705.41',
+				[
+					Request::USER_AGENT_CHROME
+				],
+				true
+			],
+			[
+				'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.38 Safari/537.36 Brave/75',
+				[
+					Request::USER_AGENT_CHROME
+				],
+				true
+			],
+			[
+				'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36 OPR/50.0.2762.67',
+				[
+					Request::USER_AGENT_CHROME
+				],
+				true
+			]
 		];
 	}
 
@@ -896,12 +1083,23 @@ class RequestTest extends \Test\TestCase {
 	}
 
 	public function testInsecureServerHostHttpFromForwardedHeaderSingle() {
+		$this->config
+			->method('getSystemValue')
+			->willReturnCallback(function ($key, $default) {
+				if ($key === 'trusted_proxies') {
+					return ['1.2.3.4'];
+				}
+
+				return $default;
+			});
+
 		$request = new Request(
 			[
 				'server' => [
 					'SERVER_NAME' => 'from.server.name:8080',
 					'HTTP_HOST' => 'from.host.header:8080',
 					'HTTP_X_FORWARDED_HOST' => 'from.forwarded.host:8080',
+					'REMOTE_ADDR' => '1.2.3.4',
 				]
 			],
 			$this->secureRandom,
@@ -914,12 +1112,23 @@ class RequestTest extends \Test\TestCase {
 	}
 
 	public function testInsecureServerHostHttpFromForwardedHeaderStacked() {
+		$this->config
+			->method('getSystemValue')
+			->willReturnCallback(function ($key, $default) {
+				if ($key === 'trusted_proxies') {
+					return ['1.2.3.4'];
+				}
+
+				return $default;
+			});
+
 		$request = new Request(
 			[
 				'server' => [
 					'SERVER_NAME' => 'from.server.name:8080',
 					'HTTP_HOST' => 'from.host.header:8080',
 					'HTTP_X_FORWARDED_HOST' => 'from.forwarded.host2:8080,another.one:9000',
+					'REMOTE_ADDR' => '1.2.3.4',
 				]
 			],
 			$this->secureRandom,
@@ -933,20 +1142,16 @@ class RequestTest extends \Test\TestCase {
 
 	public function testGetServerHostWithOverwriteHost() {
 		$this->config
-			->expects($this->at(0))
 			->method('getSystemValue')
-			->with('overwritehost')
-			->will($this->returnValue('my.overwritten.host'));
-		$this->config
-			->expects($this->at(1))
-			->method('getSystemValue')
-			->with('overwritecondaddr')
-			->will($this->returnValue(''));
-		$this->config
-			->expects($this->at(2))
-			->method('getSystemValue')
-			->with('overwritehost')
-			->will($this->returnValue('my.overwritten.host'));
+			->willReturnCallback(function ($key, $default) {
+				if ($key === 'overwritecondaddr') {
+					return '';
+				} elseif ($key === 'overwritehost') {
+					return 'my.overwritten.host';
+				}
+
+				return $default;
+			});
 
 		$request = new Request(
 			[],
@@ -961,15 +1166,22 @@ class RequestTest extends \Test\TestCase {
 
 	public function testGetServerHostWithTrustedDomain() {
 		$this->config
-			->expects($this->at(3))
 			->method('getSystemValue')
-			->with('trusted_domains')
-			->will($this->returnValue(['my.trusted.host']));
+			->willReturnCallback(function ($key, $default) {
+				if ($key === 'trusted_proxies') {
+					return ['1.2.3.4'];
+				} elseif ($key === 'trusted_domains') {
+					return ['my.trusted.host'];
+				}
+
+				return $default;
+			});
 
 		$request = new Request(
 			[
 				'server' => [
 					'HTTP_X_FORWARDED_HOST' => 'my.trusted.host',
+					'REMOTE_ADDR' => '1.2.3.4',
 				],
 			],
 			$this->secureRandom,
@@ -983,20 +1195,22 @@ class RequestTest extends \Test\TestCase {
 
 	public function testGetServerHostWithUntrustedDomain() {
 		$this->config
-			->expects($this->at(3))
 			->method('getSystemValue')
-			->with('trusted_domains')
-			->will($this->returnValue(['my.trusted.host']));
-		$this->config
-			->expects($this->at(4))
-			->method('getSystemValue')
-			->with('trusted_domains')
-			->will($this->returnValue(['my.trusted.host']));
+			->willReturnCallback(function ($key, $default) {
+				if ($key === 'trusted_proxies') {
+					return ['1.2.3.4'];
+				} elseif ($key === 'trusted_domains') {
+					return ['my.trusted.host'];
+				}
+
+				return $default;
+			});
 
 		$request = new Request(
 			[
 				'server' => [
 					'HTTP_X_FORWARDED_HOST' => 'my.untrusted.host',
+					'REMOTE_ADDR' => '1.2.3.4',
 				],
 			],
 			$this->secureRandom,
@@ -1010,20 +1224,19 @@ class RequestTest extends \Test\TestCase {
 
 	public function testGetServerHostWithNoTrustedDomain() {
 		$this->config
-			->expects($this->at(3))
 			->method('getSystemValue')
-			->with('trusted_domains')
-			->will($this->returnValue([]));
-		$this->config
-			->expects($this->at(4))
-			->method('getSystemValue')
-			->with('trusted_domains')
-			->will($this->returnValue([]));
+			->willReturnCallback(function ($key, $default) {
+				if ($key === 'trusted_proxies') {
+					return ['1.2.3.4'];
+				}
+				return $default;
+			});
 
 		$request = new Request(
 			[
 				'server' => [
 					'HTTP_X_FORWARDED_HOST' => 'my.untrusted.host',
+					'REMOTE_ADDR' => '1.2.3.4',
 				],
 			],
 			$this->secureRandom,
@@ -1035,12 +1248,58 @@ class RequestTest extends \Test\TestCase {
 		$this->assertSame('',  $request->getServerHost());
 	}
 
+	/**
+	 * @return array
+	 */
+	public function dataGetServerHostTrustedDomain() {
+		return [
+			'is array' => ['my.trusted.host', ['my.trusted.host']],
+			'is array but undefined index 0' => ['my.trusted.host', [2 => 'my.trusted.host']],
+			'is string' => ['my.trusted.host', 'my.trusted.host'],
+			'is null' => ['', null],
+		];
+	}
+
+	/**
+	 * @dataProvider dataGetServerHostTrustedDomain
+	 * @param $expected
+	 * @param $trustedDomain
+	 */
+	public function testGetServerHostTrustedDomain($expected, $trustedDomain) {
+		$this->config
+			->method('getSystemValue')
+			->willReturnCallback(function ($key, $default) use ($trustedDomain) {
+				if ($key === 'trusted_proxies') {
+					return ['1.2.3.4'];
+				}
+				if ($key === 'trusted_domains') {
+					return $trustedDomain;
+				}
+				return $default;
+			});
+
+		$request = new Request(
+			[
+				'server' => [
+					'HTTP_X_FORWARDED_HOST' => 'my.untrusted.host',
+					'REMOTE_ADDR' => '1.2.3.4',
+				],
+			],
+			$this->secureRandom,
+			$this->config,
+			$this->csrfTokenManager,
+			$this->stream
+		);
+
+		$this->assertSame($expected, $request->getServerHost());
+	}
+
 	public function testGetOverwriteHostDefaultNull() {
 		$this->config
 			->expects($this->once())
 			->method('getSystemValue')
 			->with('overwritehost')
-			->will($this->returnValue(''));
+			->willReturn('');
 		$request = new Request(
 			[],
 			$this->secureRandom,
@@ -1057,17 +1316,17 @@ class RequestTest extends \Test\TestCase {
 			->expects($this->at(0))
 			->method('getSystemValue')
 			->with('overwritehost')
-			->will($this->returnValue('www.owncloud.org'));
+			->willReturn('www.owncloud.org');
 		$this->config
 			->expects($this->at(1))
 			->method('getSystemValue')
 			->with('overwritecondaddr')
-			->will($this->returnValue(''));
+			->willReturn('');
 		$this->config
 			->expects($this->at(2))
 			->method('getSystemValue')
 			->with('overwritehost')
-			->will($this->returnValue('www.owncloud.org'));
+			->willReturn('www.owncloud.org');
 
 		$request = new Request(
 			[],
@@ -1080,11 +1339,11 @@ class RequestTest extends \Test\TestCase {
 		$this->assertSame('www.owncloud.org', self::invokePrivate($request, 'getOverwriteHost'));
 	}
 
-	/**
-	 * @expectedException \Exception
-	 * @expectedExceptionMessage The requested uri(/foo.php) cannot be processed by the script '/var/www/index.php')
-	 */
+
 	public function testGetPathInfoNotProcessible() {
+		$this->expectException(\Exception::class);
+		$this->expectExceptionMessage('The requested uri(/foo.php) cannot be processed by the script \'/var/www/index.php\')');
+
 		$request = new Request(
 			[
 				'server' => [
@@ -1101,11 +1360,11 @@ class RequestTest extends \Test\TestCase {
 		$request->getPathInfo();
 	}
 
-	/**
-	 * @expectedException \Exception
-	 * @expectedExceptionMessage The requested uri(/foo.php) cannot be processed by the script '/var/www/index.php')
-	 */
+
 	public function testGetRawPathInfoNotProcessible() {
+		$this->expectException(\Exception::class);
+		$this->expectExceptionMessage('The requested uri(/foo.php) cannot be processed by the script \'/var/www/index.php\')');
+
 		$request = new Request(
 			[
 				'server' => [
@@ -1252,7 +1511,7 @@ class RequestTest extends \Test\TestCase {
 			->expects($this->once())
 			->method('getSystemValue')
 			->with('overwritewebroot')
-			->will($this->returnValue(''));
+			->willReturn('');
 
 		$request = new Request(
 			[
@@ -1284,12 +1543,12 @@ class RequestTest extends \Test\TestCase {
 			->expects($this->at(0))
 			->method('getSystemValue')
 			->with('overwritewebroot')
-			->will($this->returnValue($overwriteWebRoot));
+			->willReturn($overwriteWebRoot);
 		$this->config
 			->expects($this->at(1))
 			->method('getSystemValue')
 			->with('overwritecondaddr')
-			->will($this->returnValue($overwriteCondAddr));
+			->willReturn($overwriteCondAddr);
 
 		$request = $this->getMockBuilder('\OC\AppFramework\Http\Request')
 			->setMethods(['getScriptName'])
@@ -1309,7 +1568,7 @@ class RequestTest extends \Test\TestCase {
 		$request
 			->expects($this->once())
 			->method('getScriptName')
-			->will($this->returnValue('/scriptname.php'));
+			->willReturn('/scriptname.php');
 
 		$this->assertSame($expectedUri, $request->getRequestUri());
 	}
@@ -1568,8 +1827,18 @@ class RequestTest extends \Test\TestCase {
 	}
 
 	public function testGetCookieParams() {
-		$request = $this->createMock(Request::class);
-		$actual = $this->invokePrivate($request, 'getCookieParams');
+		/** @var Request $request */
+		$request = $this->getMockBuilder(Request::class)
+			->setMethods(['getScriptName'])
+			->setConstructorArgs([
+				[],
+				$this->secureRandom,
+				$this->config,
+				$this->csrfTokenManager,
+				$this->stream
+			])
+			->getMock();
+		$actual = $request->getCookieParams();
 		$this->assertSame(session_get_cookie_params(), $actual);
 	}
 
@@ -1822,7 +2091,6 @@ class RequestTest extends \Test\TestCase {
 		return [
 			['InvalidSentToken'],
 			['InvalidSentToken:InvalidSecret'],
-			[null],
 			[''],
 		];
 	}

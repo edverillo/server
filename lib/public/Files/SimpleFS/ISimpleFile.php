@@ -2,6 +2,8 @@
 /**
  * @copyright Copyright (c) 2016 Roeland Jago Douma <roeland@famdouma.nl>
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Julius Härtl <jus@bitgrid.net>
  * @author Roeland Jago Douma <roeland@famdouma.nl>
  *
  * @license GNU AGPL version 3 or any later version
@@ -17,19 +19,19 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
+
 namespace OCP\Files\SimpleFS;
 
+use OCP\Files\NotFoundException;
 use OCP\Files\NotPermittedException;
 
 /**
  * Interface ISimpleFile
  *
- * @package OCP\Files\SimpleFS
  * @since 11.0.0
- * @internal This interface is experimental and might change for NC12
  */
 interface ISimpleFile {
 
@@ -68,6 +70,8 @@ interface ISimpleFile {
 	/**
 	 * Get the content
 	 *
+	 * @throws NotPermittedException
+	 * @throws NotFoundException
 	 * @return string
 	 * @since 11.0.0
 	 */
@@ -76,8 +80,9 @@ interface ISimpleFile {
 	/**
 	 * Overwrite the file
 	 *
-	 * @param string $data
+	 * @param string|resource $data
 	 * @throws NotPermittedException
+	 * @throws NotFoundException
 	 * @since 11.0.0
 	 */
 	public function putContent($data);
@@ -97,4 +102,22 @@ interface ISimpleFile {
 	 * @since 11.0.0
 	 */
 	public function getMimeType();
+
+	/**
+	 * Open the file as stream for reading, resulting resource can be operated as stream like the result from php's own fopen
+	 *
+	 * @return resource
+	 * @throws \OCP\Files\NotPermittedException
+	 * @since 14.0.0
+	 */
+	public function read();
+
+	/**
+	 * Open the file as stream for writing, resulting resource can be operated as stream like the result from php's own fopen
+	 *
+	 * @return resource|bool
+	 * @throws \OCP\Files\NotPermittedException
+	 * @since 14.0.0
+	 */
+	public function write();
 }

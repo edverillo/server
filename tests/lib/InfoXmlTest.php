@@ -21,7 +21,6 @@
 
 namespace Test;
 
-
 /**
  * Class InfoXmlTest
  *
@@ -29,7 +28,6 @@ namespace Test;
  * @package Test
  */
 class InfoXmlTest extends TestCase {
-
 	public function dataApps() {
 		return [
 			['admin_audit'],
@@ -46,6 +44,7 @@ class InfoXmlTest extends TestCase {
 			['provisioning_api'],
 			['systemtags'],
 			['theming'],
+			['settings'],
 			['twofactor_backupcodes'],
 			['updatenotification'],
 			['user_ldap'],
@@ -67,8 +66,10 @@ class InfoXmlTest extends TestCase {
 		$applicationClassName = \OCP\AppFramework\App::buildAppNamespace($app) . '\\AppInfo\\Application';
 		if (class_exists($applicationClassName)) {
 			$application = new $applicationClassName();
+			$this->addToAssertionCount(1);
 		} else {
 			$application = new \OCP\AppFramework\App($app);
+			$this->addToAssertionCount(1);
 		}
 
 		if (isset($appInfo['background-jobs'])) {

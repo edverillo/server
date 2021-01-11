@@ -2,22 +2,25 @@
 /**
  * @copyright Copyright (c) 2016 Julius Härtl <jus@bitgrid.net>
  *
+ * @author Christoph Wurst <christoph@winzerhof-wurst.at>
+ * @author Jan-Christoph Borchardt <hey@jancborchardt.net>
+ * @author Julius Haertl <jus@bitgrid.net>
  * @author Julius Härtl <jus@bitgrid.net>
  *
  * @license GNU AGPL version 3 or any later version
  *
- *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU Affero General Public License as
- *  published by the Free Software Foundation, either version 3 of the
- *  License, or (at your option) any later version.
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU Affero General Public License for more details.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
  *
- *  You should have received a copy of the GNU Affero General Public License
- *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
@@ -26,25 +29,31 @@ namespace OCA\Theming;
 use Imagick;
 use ImagickPixel;
 use OCP\App\AppPathNotFoundException;
+use OCP\Files\SimpleFS\ISimpleFile;
 
 class IconBuilder {
 	/** @var ThemingDefaults */
 	private $themingDefaults;
 	/** @var Util */
 	private $util;
+	/** @var ImageManager */
+	private $imageManager;
 
 	/**
 	 * IconBuilder constructor.
 	 *
 	 * @param ThemingDefaults $themingDefaults
 	 * @param Util $util
+	 * @param ImageManager $imageManager
 	 */
 	public function __construct(
 		ThemingDefaults $themingDefaults,
-		Util $util
+		Util $util,
+		ImageManager $imageManager
 	) {
 		$this->themingDefaults = $themingDefaults;
 		$this->util = $util;
+		$this->imageManager = $imageManager;
 	}
 
 	/**
@@ -52,14 +61,42 @@ class IconBuilder {
 	 * @return string|false image blob
 	 */
 	public function getFavicon($app) {
-		$icon = $this->renderAppIcon($app, 32);
-		if($icon === false) {
+		if (!$this->imageManager->shouldReplaceIcons()) {
 			return false;
 		}
-		$icon->setImageFormat("png24");
-		$data = $icon->getImageBlob();
-		$icon->destroy();
-		return $data;
+		try {
+			$favicon = new Imagick();
+			$favicon->setFormat("ico");
+			$icon = $this->renderAppIcon($app, 128);
+			if ($icon === false) {
+				return false;
+			}
+			$icon->setImageFormat("png32");
+
+			$clone = clone $icon;
+			$clone->scaleImage(16,0);
+			$favicon->addImage($clone);
+
+			$clone = clone $icon;
+			$clone->scaleImage(32,0);
+			$favicon->addImage($clone);
+
+			$clone = clone $icon;
+			$clone->scaleImage(64,0);
+			$favicon->addImage($clone);
+
+			$clone = clone $icon;
+			$clone->scaleImage(128,0);
+			$favicon->addImage($clone);
+
+			$data = $favicon->getImagesBlob();
+			$favicon->destroy();
+			$icon->destroy();
+			$clone->destroy();
+			return $data;
+		} catch (\ImagickException $e) {
+			return false;
+		}
 	}
 
 	/**
@@ -67,14 +104,18 @@ class IconBuilder {
 	 * @return string|false image blob
 	 */
 	public function getTouchIcon($app) {
-		$icon = $this->renderAppIcon($app, 512);
-		if($icon === false) {
+		try {
+			$icon = $this->renderAppIcon($app, 512);
+			if ($icon === false) {
+				return false;
+			}
+			$icon->setImageFormat("png32");
+			$data = $icon->getImageBlob();
+			$icon->destroy();
+			return $data;
+		} catch (\ImagickException $e) {
 			return false;
 		}
-		$icon->setImageFormat("png24");
-		$data = $icon->getImageBlob();
-		$icon->destroy();
-		return $data;
 	}
 
 	/**
@@ -86,19 +127,23 @@ class IconBuilder {
 	 * @return Imagick|false
 	 */
 	public function renderAppIcon($app, $size) {
-		try {
-			$appIcon = $this->util->getAppIcon($app);
-			$appIconContent = file_get_contents($appIcon);
-		} catch (AppPathNotFoundException $e) {
+		$appIcon = $this->util->getAppIcon($app);
+		if ($appIcon === false) {
 			return false;
 		}
+		if ($appIcon instanceof ISimpleFile) {
+			$appIconContent = $appIcon->getContent();
+			$mime = $appIcon->getMimeType();
+		} else {
+			$appIconContent = file_get_contents($appIcon);
+			$mime = mime_content_type($appIcon);
+		}
 
-		if($appIconContent === false) {
+		if ($appIconContent === false || $appIconContent === "") {
 			return false;
 		}
 
 		$color = $this->themingDefaults->getColorPrimary();
-		$mime = mime_content_type($appIcon);
 
 		// generate background image with rounded corners
 		$background = '<?xml version="1.0" encoding="UTF-8"?>' .
@@ -106,8 +151,8 @@ class IconBuilder {
 			'<rect x="0" y="0" rx="100" ry="100" width="512" height="512" style="fill:' . $color . ';" />' .
 			'</svg>';
 		// resize svg magic as this seems broken in Imagemagick
-		if($mime === "image/svg+xml" || substr($appIconContent, 0, 4) === "<svg") {
-			if(substr($appIconContent, 0, 5) !== "<?xml") {
+		if ($mime === "image/svg+xml" || substr($appIconContent, 0, 4) === "<svg") {
+			if (substr($appIconContent, 0, 5) !== "<?xml") {
 				$svg = "<?xml version=\"1.0\"?>".$appIconContent;
 			} else {
 				$svg = $appIconContent;
@@ -119,7 +164,7 @@ class IconBuilder {
 			$res = $tmp->getImageResolution();
 			$tmp->destroy();
 
-			if($x>$y) {
+			if ($x > $y) {
 				$max = $x;
 			} else {
 				$max = $y;
@@ -132,25 +177,33 @@ class IconBuilder {
 			$appIconFile->setResolution($resX, $resY);
 			$appIconFile->setBackgroundColor(new ImagickPixel('transparent'));
 			$appIconFile->readImageBlob($svg);
+
+			/**
+			 * invert app icons for bright primary colors
+			 * the default nextcloud logo will not be inverted to black
+			 */
+			if ($this->util->invertTextColor($color)
+				&& !$appIcon instanceof ISimpleFile
+				&& $app !== "core"
+			) {
+				$appIconFile->negateImage(false);
+			}
 			$appIconFile->scaleImage(512, 512, true);
 		} else {
 			$appIconFile = new Imagick();
 			$appIconFile->setBackgroundColor(new ImagickPixel('transparent'));
-			$appIconFile->readImageBlob(file_get_contents($appIcon));
+			$appIconFile->readImageBlob($appIconContent);
 			$appIconFile->scaleImage(512, 512, true);
 		}
-
 		// offset for icon positioning
 		$border_w = (int)($appIconFile->getImageWidth() * 0.05);
 		$border_h = (int)($appIconFile->getImageHeight() * 0.05);
-		$innerWidth = (int)($appIconFile->getImageWidth() - $border_w * 2);
-		$innerHeight = (int)($appIconFile->getImageHeight() - $border_h * 2);
+		$innerWidth = ($appIconFile->getImageWidth() - $border_w * 2);
+		$innerHeight = ($appIconFile->getImageHeight() - $border_h * 2);
 		$appIconFile->adaptiveResizeImage($innerWidth, $innerHeight);
 		// center icon
 		$offset_w = 512 / 2 - $innerWidth / 2;
 		$offset_h = 512 / 2 - $innerHeight / 2;
-
-		$appIconFile->setImageFormat("png24");
 
 		$finalIconFile = new Imagick();
 		$finalIconFile->setBackgroundColor(new ImagickPixel('transparent'));
@@ -185,5 +238,4 @@ class IconBuilder {
 			return false;
 		}
 	}
-
 }
